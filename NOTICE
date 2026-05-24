@@ -1,0 +1,8 @@
+ModuDoc
+
+Copyright (c) 2026 ModuDoc contributors
+
+This project is distributed under the MIT License. See [LICENSE](./LICENSE).
+
+Generated third-party notices live in [THIRD_PARTY_NOTICES.txt](./THIRD_PARTY_NOTICES.txt).
+Regenerate that file with `npm run notice:write` after dependency changes.

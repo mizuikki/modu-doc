@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml.tmp
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Tauri / Rust
+src-tauri/target/
+target/
+
+# Lockfiles
+# Keep app lockfiles committed for reproducible desktop builds.
+!package-lock.json
+!src-tauri/Cargo.lock
+
+# Test outputs
+coverage/
+test-results/
+playwright-report/
+e2e-tests/allure-results/
+e2e-tests/.wdio/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local app data and generated files
+tmp/
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.agentpack
