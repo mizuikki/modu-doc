@@ -109,13 +109,44 @@ ensureTauriDriverPortsAssigned();
 
 const tauriDriverPort = resolveNumberEnv("MODUDOC_E2E_WD_PORT") ?? 4444;
 const tauriNativePort = resolveNumberEnv("MODUDOC_E2E_WD_NATIVE_PORT") ?? 4445;
-const application = path.resolve(
-  projectRoot,
-  "src-tauri",
-  "target",
-  e2eMode === "dev" ? "debug" : "release",
-  appBinary,
-);
+
+function resolveConfiguredAppBinaryPath(): string {
+  const override = process.env.MODUDOC_E2E_APP_PATH?.trim();
+  if (override) {
+    return override;
+  }
+
+  const profileDir = e2eMode === "dev" ? "debug" : "release";
+  return path.resolve(projectRoot, "src-tauri", "target", profileDir, appBinary);
+}
+
+function findBuiltAppBinaryPath(): string {
+  const configured = resolveConfiguredAppBinaryPath();
+  if (existsSync(configured)) {
+    return configured;
+  }
+
+  const profileDir = e2eMode === "dev" ? "debug" : "release";
+  const baseDir = path.resolve(projectRoot, "src-tauri", "target");
+
+  try {
+    for (const entry of readdirSync(baseDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const candidate = path.join(baseDir, entry.name, profileDir, appBinary);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  } catch {
+    // ignore discovery failures
+  }
+
+  return configured;
+}
+
+const application = resolveConfiguredAppBinaryPath();
 
 function buildE2eDataDir() {
   if (process.env.MODUDOC_E2E_RUN_DIR) {
@@ -301,7 +332,7 @@ export const config: Options.WebdriverIO = {
       },
     },
   ],
-  onPrepare: () => {
+  onPrepare: (_config, capabilities) => {
     registerCleanupHandlers();
 
     // Ensure the output directory exists (WDIO doesn't create it automatically).
@@ -384,6 +415,21 @@ export const config: Options.WebdriverIO = {
         stdio: "inherit",
         shell: false,
       });
+    }
+
+    const builtApp = findBuiltAppBinaryPath();
+    process.env.MODUDOC_E2E_APP_PATH = builtApp;
+    for (const cap of capabilities) {
+      if (cap && typeof cap === "object" && "tauri:options" in cap) {
+        const opts = (cap as Record<string, unknown>)["tauri:options"];
+        if (opts && typeof opts === "object") {
+          (opts as Record<string, unknown>).application = builtApp;
+        }
+      }
+    }
+
+    if (!existsSync(builtApp)) {
+      throw new Error(`Built app binary not found at ${JSON.stringify(builtApp)}`);
     }
   },
   beforeSession: () => {
