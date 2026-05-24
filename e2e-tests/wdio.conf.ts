@@ -293,8 +293,11 @@ export const config: Options.WebdriverIO = {
   capabilities: [
     {
       maxInstances: 1,
+      browserName: "wry",
+      "wdio:enforceWebDriverClassic": true,
       "tauri:options": {
         application,
+        webviewOptions: {},
       },
     },
   ],
