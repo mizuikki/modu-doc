@@ -29,7 +29,8 @@
       "!**/src-tauri/gen",
       "!**/dist",
       "!**/node_modules",
-      "!**/tmp"
+      "!**/tmp",
+      "!**/tools"
     ]
   }
 }
