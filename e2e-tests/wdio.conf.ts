@@ -293,7 +293,7 @@ export const config: Options.WebdriverIO = {
   capabilities: [
     {
       maxInstances: 1,
-      browserName: "wry",
+      browserName: process.platform === "win32" ? "webview2" : "wry",
       "wdio:enforceWebDriverClassic": true,
       "tauri:options": {
         application,
