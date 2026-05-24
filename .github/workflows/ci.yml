@@ -70,7 +70,30 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Install frontend dependencies
-        run: npm ci
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          # Avoid flaky/locked global cache paths on Windows runners.
+          $env:npm_config_cache = Join-Path $env:RUNNER_TEMP "npm-cache"
+          New-Item -ItemType Directory -Force -Path $env:npm_config_cache | Out-Null
+
+          $maxAttempts = 3
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "npm ci (attempt $attempt/$maxAttempts)"
+            npm ci --no-audit --no-fund
+            if ($LASTEXITCODE -eq 0) {
+              break
+            }
+
+            if ($attempt -eq $maxAttempts) {
+              throw "npm ci failed after $maxAttempts attempts (exit=$LASTEXITCODE)"
+            }
+
+            Write-Host "npm ci failed (exit=$LASTEXITCODE); cleaning cache and retrying."
+            npm cache clean --force
+            Start-Sleep -Seconds 3
+          }
 
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked
