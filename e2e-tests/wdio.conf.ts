@@ -114,6 +114,16 @@ const windowsDriverStrategy: WindowsDriverStrategy =
 let windowsEdgeDriverPort: number | undefined;
 let windowsWebViewDebugPort: number | undefined;
 
+const windowsAttachEnabled = process.platform === "win32" && windowsDriverStrategy === "attach";
+if (windowsAttachEnabled) {
+  windowsEdgeDriverPort =
+    resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT") ?? resolveAvailablePort();
+  windowsWebViewDebugPort =
+    resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT") ?? resolveAvailablePort();
+  process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
+  process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
+}
+
 function ensureTauriDriverPortsAssigned() {
   if (process.env.MODUDOC_E2E_WD_PORT && process.env.MODUDOC_E2E_WD_NATIVE_PORT) {
     return;
@@ -388,7 +398,7 @@ function resolveTauriDriverBin() {
 export const config: Options.WebdriverIO = {
   runner: "local",
   hostname: "127.0.0.1",
-  port: tauriDriverPort,
+  port: windowsAttachEnabled && windowsEdgeDriverPort ? windowsEdgeDriverPort : tauriDriverPort,
   path: "/",
   specs: ["./test/specs/**/*.ts"],
   maxInstances: 1,
@@ -414,18 +424,30 @@ export const config: Options.WebdriverIO = {
     ui: "bdd",
     timeout: 120000,
   },
-  capabilities: [
-    {
-      maxInstances: 1,
-      browserName: process.platform === "win32" ? "webview2" : "wry",
-      "wdio:enforceWebDriverClassic": true,
-      "tauri:options": {
-        application,
-        webviewOptions: {},
-      },
-    },
-  ],
-  onPrepare: (wdioConfig, capabilities) => {
+  capabilities:
+    windowsAttachEnabled && windowsWebViewDebugPort
+      ? [
+          {
+            maxInstances: 1,
+            browserName: "webview2",
+            "wdio:enforceWebDriverClassic": true,
+            "ms:edgeOptions": {
+              debuggerAddress: `127.0.0.1:${windowsWebViewDebugPort}`,
+            },
+          },
+        ]
+      : [
+          {
+            maxInstances: 1,
+            browserName: process.platform === "win32" ? "webview2" : "wry",
+            "wdio:enforceWebDriverClassic": true,
+            "tauri:options": {
+              application,
+              webviewOptions: {},
+            },
+          },
+        ],
+  onPrepare: (_wdioConfig, capabilities) => {
     registerCleanupHandlers();
     // eslint-disable-next-line no-console
     console.log(
@@ -549,37 +571,15 @@ export const config: Options.WebdriverIO = {
         // eslint-disable-next-line no-console
         console.log("[MODUDOC_E2E] Windows attach mode enabled; starting app and EdgeDriver.");
 
-        windowsEdgeDriverPort =
-          resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT") ?? resolveAvailablePort();
-        windowsWebViewDebugPort =
-          resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT") ?? resolveAvailablePort();
-        process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
-        process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
+        if (!windowsEdgeDriverPort || !windowsWebViewDebugPort) {
+          throw new Error(
+            "Windows attach mode requires MODUDOC_E2E_EDGE_DRIVER_PORT and MODUDOC_E2E_WEBVIEW_DEBUG_PORT",
+          );
+        }
         // eslint-disable-next-line no-console
         console.log(
           `[MODUDOC_E2E] edgeDriverPort=${windowsEdgeDriverPort} webviewDebugPort=${windowsWebViewDebugPort} app=${builtApp}`,
         );
-
-        wdioConfig.hostname = "127.0.0.1";
-        wdioConfig.port = windowsEdgeDriverPort;
-        wdioConfig.path = "/";
-
-        const capsArray = Array.isArray(capabilities)
-          ? capabilities
-          : capabilities && typeof capabilities === "object"
-            ? Object.values(capabilities as Record<string, unknown>)
-            : [];
-        for (const cap of capsArray) {
-          if (!cap || typeof cap !== "object") {
-            continue;
-          }
-          delete (cap as Record<string, unknown>)["tauri:options"];
-          (cap as Record<string, unknown>).browserName = "webview2";
-          (cap as Record<string, unknown>)["ms:edgeOptions"] = {
-            debuggerAddress: `127.0.0.1:${windowsWebViewDebugPort}`,
-          };
-          (cap as Record<string, unknown>)["wdio:enforceWebDriverClassic"] = true;
-        }
 
         // Launch the application with WebView2 remote debugging enabled so EdgeDriver can attach.
         const webviewArgs = `--remote-debugging-port=${windowsWebViewDebugPort} --remote-allow-origins=*`;
