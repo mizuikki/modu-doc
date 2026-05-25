@@ -65,6 +65,7 @@ impl TauriOptions {
     map.insert("ms:edgeChromium".into(), json!(true));
     map.insert("browserName".into(), json!("webview2"));
     map.insert("ms:edgeOptions".into(), ms_edge_options.into());
+    map.insert("ms:useWebView".into(), json!(true));
     map
   }
 }
