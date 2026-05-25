@@ -433,204 +433,217 @@ export const config: Options.WebdriverIO = {
         process.env.CI,
       )}`,
     );
-
-    // Ensure the output directory exists (WDIO doesn't create it automatically).
     try {
-      if (process.env.MODUDOC_E2E_OUTPUT_DIR) {
-        mkdirSync(process.env.MODUDOC_E2E_OUTPUT_DIR, { recursive: true });
-      }
-    } catch {
-      // ignore
-    }
-
-    if (process.env.MODUDOC_E2E_DIAG === "1") {
-      const diag = {
-        ts: new Date().toISOString(),
-        mode: e2eMode,
-        tauriDriverPort,
-        tauriNativePort,
-        display: process.env.DISPLAY ?? "",
-        waylandDisplay: process.env.WAYLAND_DISPLAY ?? "",
-        xdgSessionType: process.env.XDG_SESSION_TYPE ?? "",
-        gdkBackend: process.env.GDK_BACKEND ?? "",
-        dataDir: process.env.MODUDOC_DATA_DIR,
-        outputDir: process.env.MODUDOC_E2E_OUTPUT_DIR,
-      };
-
-      // 1) Write to a small file so you can inspect it without scrolling logs.
+      // Ensure the output directory exists (WDIO doesn't create it automatically).
       try {
-        mkdirSync(process.env.MODUDOC_DATA_DIR, { recursive: true });
-        writeFileSync(
-          path.join(process.env.MODUDOC_DATA_DIR, "e2e-diag.json"),
-          `${JSON.stringify(diag, null, 2)}\n`,
-          "utf8",
-        );
+        if (process.env.MODUDOC_E2E_OUTPUT_DIR) {
+          mkdirSync(process.env.MODUDOC_E2E_OUTPUT_DIR, { recursive: true });
+        }
       } catch {
-        // ignore diagnostics failures
+        // ignore
       }
 
-      // 2) Print a single grep-friendly line.
-      // eslint-disable-next-line no-console
-      console.log(
-        "[MODUDOC_E2E_DIAG] MODE=%s WD_PORT=%s WD_NATIVE_PORT=%s DISPLAY=%s WAYLAND_DISPLAY=%s XDG_SESSION_TYPE=%s GDK_BACKEND=%s DATA_DIR=%s OUTPUT_DIR=%s",
-        diag.mode,
-        diag.tauriDriverPort,
-        diag.tauriNativePort,
-        diag.display,
-        diag.waylandDisplay,
-        diag.xdgSessionType,
-        diag.gdkBackend,
-        diag.dataDir,
-        diag.outputDir,
-      );
-    }
+      if (process.env.MODUDOC_E2E_DIAG === "1") {
+        const diag = {
+          ts: new Date().toISOString(),
+          mode: e2eMode,
+          tauriDriverPort,
+          tauriNativePort,
+          display: process.env.DISPLAY ?? "",
+          waylandDisplay: process.env.WAYLAND_DISPLAY ?? "",
+          xdgSessionType: process.env.XDG_SESSION_TYPE ?? "",
+          gdkBackend: process.env.GDK_BACKEND ?? "",
+          dataDir: process.env.MODUDOC_DATA_DIR,
+          outputDir: process.env.MODUDOC_E2E_OUTPUT_DIR,
+        };
 
-    if (e2eMode === "dev") {
-      const viteBin = path.resolve(projectRoot, "node_modules", "vite", "bin", "vite.js");
-      viteServer = spawn(
-        process.execPath,
-        [viteBin, "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
-        {
-          cwd: projectRoot,
-          stdio: ["ignore", "pipe", "pipe"],
-          shell: false,
-        },
-      );
-      if (process.env.MODUDOC_E2E_OUTPUT_DIR) {
-        teeChildOutput(viteServer, process.env.MODUDOC_E2E_OUTPUT_DIR, "vite.log");
+        // 1) Write to a small file so you can inspect it without scrolling logs.
+        try {
+          mkdirSync(process.env.MODUDOC_DATA_DIR, { recursive: true });
+          writeFileSync(
+            path.join(process.env.MODUDOC_DATA_DIR, "e2e-diag.json"),
+            `${JSON.stringify(diag, null, 2)}\n`,
+            "utf8",
+          );
+        } catch {
+          // ignore diagnostics failures
+        }
+
+        // 2) Print a single grep-friendly line.
+        // eslint-disable-next-line no-console
+        console.log(
+          "[MODUDOC_E2E_DIAG] MODE=%s WD_PORT=%s WD_NATIVE_PORT=%s DISPLAY=%s WAYLAND_DISPLAY=%s XDG_SESSION_TYPE=%s GDK_BACKEND=%s DATA_DIR=%s OUTPUT_DIR=%s",
+          diag.mode,
+          diag.tauriDriverPort,
+          diag.tauriNativePort,
+          diag.display,
+          diag.waylandDisplay,
+          diag.xdgSessionType,
+          diag.gdkBackend,
+          diag.dataDir,
+          diag.outputDir,
+        );
       }
-      spawnSync(
-        "cargo",
-        ["build", "--manifest-path", path.join(projectRoot, "src-tauri", "Cargo.toml")],
-        {
+
+      if (e2eMode === "dev") {
+        const viteBin = path.resolve(projectRoot, "node_modules", "vite", "bin", "vite.js");
+        viteServer = spawn(
+          process.execPath,
+          [viteBin, "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
+          {
+            cwd: projectRoot,
+            stdio: ["ignore", "pipe", "pipe"],
+            shell: false,
+          },
+        );
+        if (process.env.MODUDOC_E2E_OUTPUT_DIR) {
+          teeChildOutput(viteServer, process.env.MODUDOC_E2E_OUTPUT_DIR, "vite.log");
+        }
+        spawnSync(
+          "cargo",
+          ["build", "--manifest-path", path.join(projectRoot, "src-tauri", "Cargo.toml")],
+          {
+            cwd: projectRoot,
+            stdio: "inherit",
+            shell: false,
+          },
+        );
+      } else {
+        const build = spawnSync(npxCommand, ["--no-install", "tauri", "build", "--no-bundle"], {
           cwd: projectRoot,
           stdio: "inherit",
           shell: false,
-        },
-      );
-    } else {
-      const build = spawnSync(npxCommand, ["--no-install", "tauri", "build", "--no-bundle"], {
-        cwd: projectRoot,
-        stdio: "inherit",
-        shell: false,
-      });
-      if (build.status !== 0) {
-        throw new Error(`tauri build failed (exit=${build.status ?? "null"})`);
+        });
+        // eslint-disable-next-line no-console
+        console.log(
+          `[MODUDOC_E2E] tauri build exit=${build.status ?? "null"} error=${build.error ? String(build.error) : ""}`,
+        );
+        if (build.status !== 0) {
+          throw new Error(`tauri build failed (exit=${build.status ?? "null"})`);
+        }
       }
-    }
 
-    const builtApp = findBuiltAppBinaryPath();
-    process.env.MODUDOC_E2E_APP_PATH = builtApp;
-    {
-      const capsArray = Array.isArray(capabilities)
-        ? capabilities
-        : capabilities && typeof capabilities === "object"
-          ? Object.values(capabilities as Record<string, unknown>)
-          : [];
-      for (const cap of capsArray) {
-        if (cap && typeof cap === "object" && "tauri:options" in cap) {
-          const opts = (cap as Record<string, unknown>)["tauri:options"];
-          if (opts && typeof opts === "object") {
-            (opts as Record<string, unknown>).application = builtApp;
+      const builtApp = findBuiltAppBinaryPath();
+      process.env.MODUDOC_E2E_APP_PATH = builtApp;
+      {
+        const capsArray = Array.isArray(capabilities)
+          ? capabilities
+          : capabilities && typeof capabilities === "object"
+            ? Object.values(capabilities as Record<string, unknown>)
+            : [];
+        for (const cap of capsArray) {
+          if (cap && typeof cap === "object" && "tauri:options" in cap) {
+            const opts = (cap as Record<string, unknown>)["tauri:options"];
+            if (opts && typeof opts === "object") {
+              (opts as Record<string, unknown>).application = builtApp;
+            }
           }
         }
       }
-    }
 
-    if (!existsSync(builtApp)) {
-      throw new Error(`Built app binary not found at ${JSON.stringify(builtApp)}`);
-    }
+      if (!existsSync(builtApp)) {
+        throw new Error(`Built app binary not found at ${JSON.stringify(builtApp)}`);
+      }
 
-    if (windowsDriverStrategy === "attach") {
-      // eslint-disable-next-line no-console
-      console.log("[MODUDOC_E2E] Windows attach mode enabled; starting app and EdgeDriver.");
+      if (windowsDriverStrategy === "attach") {
+        // eslint-disable-next-line no-console
+        console.log("[MODUDOC_E2E] Windows attach mode enabled; starting app and EdgeDriver.");
 
-      windowsEdgeDriverPort =
-        resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT") ?? resolveAvailablePort();
-      windowsWebViewDebugPort =
-        resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT") ?? resolveAvailablePort();
-      process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
-      process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
-      // eslint-disable-next-line no-console
-      console.log(
-        `[MODUDOC_E2E] edgeDriverPort=${windowsEdgeDriverPort} webviewDebugPort=${windowsWebViewDebugPort} app=${builtApp}`,
-      );
+        windowsEdgeDriverPort =
+          resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT") ?? resolveAvailablePort();
+        windowsWebViewDebugPort =
+          resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT") ?? resolveAvailablePort();
+        process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
+        process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
+        // eslint-disable-next-line no-console
+        console.log(
+          `[MODUDOC_E2E] edgeDriverPort=${windowsEdgeDriverPort} webviewDebugPort=${windowsWebViewDebugPort} app=${builtApp}`,
+        );
 
-      wdioConfig.hostname = "127.0.0.1";
-      wdioConfig.port = windowsEdgeDriverPort;
-      wdioConfig.path = "/";
+        wdioConfig.hostname = "127.0.0.1";
+        wdioConfig.port = windowsEdgeDriverPort;
+        wdioConfig.path = "/";
 
-      const capsArray = Array.isArray(capabilities)
-        ? capabilities
-        : capabilities && typeof capabilities === "object"
-          ? Object.values(capabilities as Record<string, unknown>)
-          : [];
-      for (const cap of capsArray) {
-        if (!cap || typeof cap !== "object") {
-          continue;
+        const capsArray = Array.isArray(capabilities)
+          ? capabilities
+          : capabilities && typeof capabilities === "object"
+            ? Object.values(capabilities as Record<string, unknown>)
+            : [];
+        for (const cap of capsArray) {
+          if (!cap || typeof cap !== "object") {
+            continue;
+          }
+          delete (cap as Record<string, unknown>)["tauri:options"];
+          (cap as Record<string, unknown>).browserName = "webview2";
+          (cap as Record<string, unknown>)["ms:edgeOptions"] = {
+            debuggerAddress: `127.0.0.1:${windowsWebViewDebugPort}`,
+          };
+          (cap as Record<string, unknown>)["wdio:enforceWebDriverClassic"] = true;
         }
-        delete (cap as Record<string, unknown>)["tauri:options"];
-        (cap as Record<string, unknown>).browserName = "webview2";
-        (cap as Record<string, unknown>)["ms:edgeOptions"] = {
-          debuggerAddress: `127.0.0.1:${windowsWebViewDebugPort}`,
-        };
-        (cap as Record<string, unknown>)["wdio:enforceWebDriverClassic"] = true;
-      }
 
-      // Launch the application with WebView2 remote debugging enabled so EdgeDriver can attach.
-      const webviewArgs = `--remote-debugging-port=${windowsWebViewDebugPort} --remote-allow-origins=*`;
+        // Launch the application with WebView2 remote debugging enabled so EdgeDriver can attach.
+        const webviewArgs = `--remote-debugging-port=${windowsWebViewDebugPort} --remote-allow-origins=*`;
 
-      windowsApp = spawn(builtApp, [], {
-        cwd: projectRoot,
-        stdio: ["ignore", "pipe", "pipe"],
-        shell: false,
-        env: {
-          ...process.env,
-          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webviewArgs,
-        } as NodeJS.ProcessEnv,
-      });
-      if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsApp) {
-        teeChildOutput(windowsApp, process.env.MODUDOC_E2E_OUTPUT_DIR, "modudoc.log");
-      }
-      windowsApp.on("exit", (code, signal) => {
-        // eslint-disable-next-line no-console
-        console.log(`[modudoc] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-      });
-      windowsApp.on("error", (err) => {
-        // eslint-disable-next-line no-console
-        console.log(`[modudoc] error: ${String(err)}`);
-      });
-
-      // Wait for the WebView2 runtime to open the CDP port.
-      waitForTcpPort("127.0.0.1", windowsWebViewDebugPort, 60000);
-
-      // Start EdgeDriver once and let all workers attach to the same WebView2 instance.
-      const msEdgeDriver = resolveMsEdgeDriverBin();
-      windowsWebDriver = spawn(
-        msEdgeDriver,
-        ["--verbose", `--port=${windowsEdgeDriverPort}`, "--host=127.0.0.1"],
-        {
+        windowsApp = spawn(builtApp, [], {
           cwd: projectRoot,
           stdio: ["ignore", "pipe", "pipe"],
           shell: false,
-        },
-      );
-      if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsWebDriver) {
-        teeChildOutput(windowsWebDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "msedgedriver.log");
-      }
-      windowsWebDriver.on("exit", (code, signal) => {
-        // eslint-disable-next-line no-console
-        console.log(`[msedgedriver] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-      });
-      windowsWebDriver.on("error", (err) => {
-        // eslint-disable-next-line no-console
-        console.log(`[msedgedriver] error: ${String(err)}`);
-      });
+          env: {
+            ...process.env,
+            WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webviewArgs,
+          } as NodeJS.ProcessEnv,
+        });
+        if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsApp) {
+          teeChildOutput(windowsApp, process.env.MODUDOC_E2E_OUTPUT_DIR, "modudoc.log");
+        }
+        windowsApp.on("exit", (code, signal) => {
+          // eslint-disable-next-line no-console
+          console.log(`[modudoc] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
+        });
+        windowsApp.on("error", (err) => {
+          // eslint-disable-next-line no-console
+          console.log(`[modudoc] error: ${String(err)}`);
+        });
 
-      waitForTcpPort("127.0.0.1", windowsEdgeDriverPort, 30000);
-      const status = fetchWebDriverStatus("127.0.0.1", windowsEdgeDriverPort);
+        // Wait for the WebView2 runtime to open the CDP port.
+        waitForTcpPort("127.0.0.1", windowsWebViewDebugPort, 60000);
+
+        // Start EdgeDriver once and let all workers attach to the same WebView2 instance.
+        const msEdgeDriver = resolveMsEdgeDriverBin();
+        windowsWebDriver = spawn(
+          msEdgeDriver,
+          ["--verbose", `--port=${windowsEdgeDriverPort}`, "--host=127.0.0.1"],
+          {
+            cwd: projectRoot,
+            stdio: ["ignore", "pipe", "pipe"],
+            shell: false,
+          },
+        );
+        if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsWebDriver) {
+          teeChildOutput(windowsWebDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "msedgedriver.log");
+        }
+        windowsWebDriver.on("exit", (code, signal) => {
+          // eslint-disable-next-line no-console
+          console.log(`[msedgedriver] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
+        });
+        windowsWebDriver.on("error", (err) => {
+          // eslint-disable-next-line no-console
+          console.log(`[msedgedriver] error: ${String(err)}`);
+        });
+
+        waitForTcpPort("127.0.0.1", windowsEdgeDriverPort, 30000);
+        const status = fetchWebDriverStatus("127.0.0.1", windowsEdgeDriverPort);
+        // eslint-disable-next-line no-console
+        console.log(`[msedgedriver] status: ${status}`);
+      }
+    } catch (err) {
       // eslint-disable-next-line no-console
-      console.log(`[msedgedriver] status: ${status}`);
+      console.error(
+        `[MODUDOC_E2E] onPrepare failed: ${
+          err instanceof Error ? err.stack || err.message : String(err)
+        }`,
+      );
+      throw err;
     }
   },
   beforeSession: () => {
