@@ -84,7 +84,7 @@ describe("ModuDoc workflows", () => {
     await safeSetValue("[data-testid='global-search-input']", workspaceName);
     const searchResult = await $(`button*=${workspaceName}`);
     await browser.waitUntil(async () => await searchResult.isDisplayed());
-    await searchResult.click();
+    await safeClick(`button*=${workspaceName}`);
     await browser.waitUntil(async () => (await $("#workspace-select").getValue()) === workspace.id);
 
     await tauriInvoke("update_workspace", {
@@ -358,7 +358,7 @@ describe("ModuDoc workflows", () => {
     });
     await selectWorkspaceById(workspace.id);
 
-    await $("button*=Workspace settings").click();
+    await safeClick("button*=Workspace settings");
     await safeSetValue("[data-testid='workspace-settings-name']", `${workspaceName} Updated`);
     await safeClick("[data-testid='workspace-settings-save']");
 
@@ -407,11 +407,9 @@ describe("ModuDoc workflows", () => {
 
   it("smoke tests locale toggle between English and Chinese", async () => {
     await dismissWorkspaceStatus();
-    const localeButton = await $("button*=EN");
-    await localeButton.waitForExist({ timeout: 20000 });
-    await localeButton.click();
+    await safeClick("button*=EN");
     await browser.waitUntil(async () => (await $("button*=ZH")).isExisting());
-    await $("button*=ZH").click();
+    await safeClick("button*=ZH");
     await browser.waitUntil(async () => (await $("button*=EN")).isExisting());
   });
 

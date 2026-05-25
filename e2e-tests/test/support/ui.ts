@@ -1,12 +1,25 @@
 import { browser } from "@wdio/globals";
 
+function isWindowsAttachMode() {
+  if (process.platform !== "win32") return false;
+  const strategy = (process.env.MODUDOC_E2E_WINDOWS_STRATEGY ?? "").trim().toLowerCase();
+  if (strategy === "attach") return true;
+  return Boolean(process.env.MODUDOC_E2E_EDGE_DRIVER_PORT && process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT);
+}
+
 export async function dismissWorkspaceStatus() {
   const popover = await $("[data-testid='workspace-status-popover']");
   if (!(await popover.isExisting())) return;
 
   const close = await $("[data-testid='workspace-status-close']");
   if (await close.isExisting()) {
-    await close.click();
+    try {
+      await close.click();
+    } catch {
+      await browser.execute(() => {
+        (document.querySelector("[data-testid='workspace-status-close']") as HTMLElement | null)?.click();
+      });
+    }
   }
 
   await browser.waitUntil(async () => !(await popover.isExisting()), {
@@ -18,56 +31,67 @@ export async function dismissWorkspaceStatus() {
 export async function ensureInteractable(element: WebdriverIO.Element, timeoutMs = 20000) {
   await element.waitForExist({ timeout: timeoutMs });
   await element.waitForDisplayed({ timeout: timeoutMs });
-  await element.scrollIntoView();
+  await element.scrollIntoView({ block: "center", inline: "center" });
   await element.waitForEnabled({ timeout: timeoutMs });
 }
 
 export async function safeClick(selector: string, timeoutMs = 20000) {
   const element = await $(selector);
   await ensureInteractable(element, timeoutMs);
-  if (!(await element.isClickable())) {
-    await browser.waitUntil(async () => await element.isClickable(), {
-      timeout: timeoutMs,
-      interval: 200,
-    });
+  const windowsAttach = isWindowsAttachMode();
+
+  if (!windowsAttach) {
+    if (!(await element.isClickable())) {
+      await browser.waitUntil(async () => await element.isClickable(), {
+        timeout: timeoutMs,
+        interval: 200,
+      });
+    }
+    try {
+      await element.click();
+      return;
+    } catch {
+      // fall through to JS click
+    }
   }
-  try {
-    await element.click();
-  } catch {
-    await browser.execute((cssSelector) => {
-      (document.querySelector(cssSelector) as HTMLElement | null)?.click();
-    }, selector);
-  }
+
+  await browser.execute((cssSelector) => {
+    (document.querySelector(cssSelector) as HTMLElement | null)?.click();
+  }, selector);
 }
 
 export async function safeSetValue(selector: string, value: string, timeoutMs = 20000) {
   const element = await $(selector);
   await ensureInteractable(element, timeoutMs);
-  try {
-    await element.click();
+  const windowsAttach = isWindowsAttachMode();
+
+  if (!windowsAttach) {
     try {
-      await element.clearValue();
+      await element.click();
+      try {
+        await element.clearValue();
+      } catch {
+        // ignore
+      }
+      await element.setValue(value);
+      return;
     } catch {
-      // ignore
+      // fall through to JS set
     }
-    await element.setValue(value);
-  } catch {
-    await browser.execute(
-      (cssSelector, nextValue) => {
-        const input = document.querySelector(cssSelector) as
-          | HTMLInputElement
-          | HTMLTextAreaElement
-          | null;
-        if (!input) return;
-        input.focus();
-        input.value = String(nextValue);
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      },
-      selector,
-      value,
-    );
   }
+
+  await browser.execute(
+    (cssSelector, nextValue) => {
+      const input = document.querySelector(cssSelector) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (!input) return;
+      input.focus();
+      input.value = String(nextValue);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    selector,
+    value,
+  );
 }
 
 export async function selectWorkspaceById(workspaceId: string, timeoutMs = 20000) {

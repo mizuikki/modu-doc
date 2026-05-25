@@ -1,5 +1,5 @@
 import { browser } from "@wdio/globals";
-import { ensureInteractable } from "./ui";
+import { ensureInteractable, safeClick, safeSetValue } from "./ui";
 
 export async function setFragmentEditorContent(text: string) {
   const editor = await $("#fragment-editor");
@@ -7,14 +7,7 @@ export async function setFragmentEditorContent(text: string) {
 
   const tag = await editor.getTagName();
   if (tag.toLowerCase() === "textarea") {
-    await ensureInteractable(editor);
-    await editor.click();
-    try {
-      await editor.clearValue();
-    } catch {
-      // ignore
-    }
-    await editor.setValue(text);
+    await safeSetValue("#fragment-editor", text);
     await browser.execute(() => {
       (document.activeElement as HTMLElement | null)?.blur?.();
     });
@@ -23,7 +16,7 @@ export async function setFragmentEditorContent(text: string) {
 
   const cmContent = await $(".cm-content");
   await ensureInteractable(cmContent);
-  await cmContent.click();
+  await safeClick(".cm-content");
   await browser.keys(["Control", "a"]);
   await browser.keys("Backspace");
   for (const ch of text) {

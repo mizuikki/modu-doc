@@ -100,6 +100,8 @@ jobs:
 
       - name: Run e2e
         run: npm run e2e
+        env:
+          MODUDOC_E2E_WINDOWS_STRATEGY: attach
 
   e2e-windows:
     runs-on: windows-latest

@@ -664,10 +664,28 @@ export const config: Options.WebdriverIO = {
     }
   },
   before: async () => {
-    if (windowsDriverStrategy === "attach") {
+    const width = resolveNumberEnv("MODUDOC_E2E_WINDOW_WIDTH") ?? 1280;
+    const height = resolveNumberEnv("MODUDOC_E2E_WINDOW_HEIGHT") ?? 900;
+
+    try {
+      await browser.setWindowSize(width, height);
       return;
+    } catch {
+      // ignore
     }
-    await browser.setWindowSize(1280, 900);
+
+    try {
+      await browser.setWindowRect(0, 0, width, height);
+      return;
+    } catch {
+      // ignore
+    }
+
+    try {
+      await browser.maximizeWindow();
+    } catch {
+      // ignore
+    }
   },
   afterSession: () => {
     cleanupChildProcess(tauriDriver);

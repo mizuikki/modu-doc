@@ -33,7 +33,9 @@ describe("Recipes", () => {
       `//strong[normalize-space()="${beta}"]/ancestor::div[contains(@style,"border-radius")][1]//button[contains(.,"Disable")]`,
     );
     await betaToggle.waitForExist({ timeout: 20000 });
-    await betaToggle.click();
+    await safeClick(
+      `//strong[normalize-space()="${beta}"]/ancestor::div[contains(@style,"border-radius")][1]//button[contains(.,"Disable")]`,
+    );
 
     await safeClick("button*=Preview");
     await expect($("p*=A")).toBeDisplayed();
