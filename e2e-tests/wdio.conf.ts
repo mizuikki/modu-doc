@@ -426,6 +426,12 @@ export const config: Options.WebdriverIO = {
   ],
   onPrepare: (wdioConfig, capabilities) => {
     registerCleanupHandlers();
+    // eslint-disable-next-line no-console
+    console.log(
+      `[MODUDOC_E2E] platform=${process.platform} mode=${e2eMode} windowsStrategy=${windowsDriverStrategy} CI=${JSON.stringify(
+        process.env.CI,
+      )}`,
+    );
 
     // Ensure the output directory exists (WDIO doesn't create it automatically).
     try {
@@ -528,12 +534,19 @@ export const config: Options.WebdriverIO = {
     }
 
     if (windowsDriverStrategy === "attach") {
+      // eslint-disable-next-line no-console
+      console.log("[MODUDOC_E2E] Windows attach mode enabled; starting app and EdgeDriver.");
+
       windowsEdgeDriverPort =
         resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT") ?? resolveAvailablePort();
       windowsWebViewDebugPort =
         resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT") ?? resolveAvailablePort();
       process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
       process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
+      // eslint-disable-next-line no-console
+      console.log(
+        `[MODUDOC_E2E] edgeDriverPort=${windowsEdgeDriverPort} webviewDebugPort=${windowsWebViewDebugPort} app=${builtApp}`,
+      );
 
       wdioConfig.hostname = "127.0.0.1";
       wdioConfig.port = windowsEdgeDriverPort;
