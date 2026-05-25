@@ -190,6 +190,25 @@ function waitForTcpPort(hostname: string, port: number, timeoutMs = 30000) {
   throw new Error(`Timed out waiting for TCP port ${hostname}:${port} to become available`);
 }
 
+function fetchWebDriverStatus(hostname: string, port: number) {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `const http=require('http');const req=http.request({hostname:${JSON.stringify(
+        hostname,
+      )},port:${port},path:'/status',method:'GET'},res=>{let body='';res.on('data',d=>body+=d);res.on('end',()=>{console.log(body)});});req.on('error',err=>{console.error(String(err));process.exit(1)});req.end();`,
+    ],
+    { cwd: projectRoot, encoding: "utf8", shell: false },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to query WebDriver status (exit=${result.status ?? "null"}): ${result.stderr || ""}`.trim(),
+    );
+  }
+  return (result.stdout || "").trim();
+}
+
 function findBuiltAppBinaryPath(): string {
   const configured = resolveConfiguredAppBinaryPath();
   if (existsSync(configured)) {
@@ -547,6 +566,14 @@ export const config: Options.WebdriverIO = {
       if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsApp) {
         teeChildOutput(windowsApp, process.env.MODUDOC_E2E_OUTPUT_DIR, "modudoc.log");
       }
+      windowsApp.on("exit", (code, signal) => {
+        // eslint-disable-next-line no-console
+        console.log(`[modudoc] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
+      });
+      windowsApp.on("error", (err) => {
+        // eslint-disable-next-line no-console
+        console.log(`[modudoc] error: ${String(err)}`);
+      });
 
       // Wait for the WebView2 runtime to open the CDP port.
       waitForTcpPort("127.0.0.1", windowsWebViewDebugPort, 60000);
@@ -555,7 +582,7 @@ export const config: Options.WebdriverIO = {
       const msEdgeDriver = resolveMsEdgeDriverBin();
       windowsWebDriver = spawn(
         msEdgeDriver,
-        [`--port=${windowsEdgeDriverPort}`, "--host=127.0.0.1"],
+        ["--verbose", `--port=${windowsEdgeDriverPort}`, "--host=127.0.0.1"],
         {
           cwd: projectRoot,
           stdio: ["ignore", "pipe", "pipe"],
@@ -565,8 +592,19 @@ export const config: Options.WebdriverIO = {
       if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsWebDriver) {
         teeChildOutput(windowsWebDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "msedgedriver.log");
       }
+      windowsWebDriver.on("exit", (code, signal) => {
+        // eslint-disable-next-line no-console
+        console.log(`[msedgedriver] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
+      });
+      windowsWebDriver.on("error", (err) => {
+        // eslint-disable-next-line no-console
+        console.log(`[msedgedriver] error: ${String(err)}`);
+      });
 
       waitForTcpPort("127.0.0.1", windowsEdgeDriverPort, 30000);
+      const status = fetchWebDriverStatus("127.0.0.1", windowsEdgeDriverPort);
+      // eslint-disable-next-line no-console
+      console.log(`[msedgedriver] status: ${status}`);
     }
   },
   beforeSession: () => {
