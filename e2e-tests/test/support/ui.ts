@@ -69,36 +69,43 @@ export async function safeSetValue(selector: string, value: string, timeoutMs = 
   await ensureInteractable(element, timeoutMs);
   const windowsAttach = isWindowsAttachMode();
 
-  if (!windowsAttach) {
-    try {
+  try {
+    if (!windowsAttach) {
       await element.click();
-      try {
-        await element.clearValue();
-      } catch {
-        // ignore
-      }
-      await element.setValue(value);
-      return;
-    } catch {
-      // fall through to JS set
+    } else {
+      await browser.execute((cssSelector) => {
+        const input = document.querySelector(cssSelector) as HTMLElement | null;
+        input?.focus?.();
+      }, selector);
     }
-  }
 
-  await browser.execute(
-    (cssSelector, nextValue) => {
-      const input = document.querySelector(cssSelector) as
-        | HTMLInputElement
-        | HTMLTextAreaElement
-        | null;
-      if (!input) return;
-      input.focus();
-      input.value = String(nextValue);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    },
-    selector,
-    value,
-  );
+    try {
+      await element.clearValue();
+    } catch {
+      // ignore
+    }
+
+    await element.setValue(value);
+    return;
+  } catch {
+    await browser.execute(
+      (cssSelector, nextValue) => {
+        const input = document.querySelector(cssSelector) as
+          | HTMLInputElement
+          | HTMLTextAreaElement
+          | null;
+        if (!input) return;
+        input.focus();
+        input.value = String(nextValue);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+        input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Enter" }));
+      },
+      selector,
+      value,
+    );
+  }
 }
 
 export async function selectWorkspaceById(workspaceId: string, timeoutMs = 20000) {

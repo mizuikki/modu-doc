@@ -111,17 +111,28 @@ function resolveWindowsDriverStrategy(): WindowsDriverStrategy {
 const windowsDriverStrategy: WindowsDriverStrategy =
   process.platform === "win32" ? resolveWindowsDriverStrategy() : "tauri-driver";
 
-let windowsEdgeDriverPort: number | undefined;
-let windowsWebViewDebugPort: number | undefined;
-
 const windowsAttachEnabled = process.platform === "win32" && windowsDriverStrategy === "attach";
-if (windowsAttachEnabled) {
-  windowsEdgeDriverPort =
-    resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT") ?? resolveAvailablePort();
-  windowsWebViewDebugPort =
-    resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT") ?? resolveAvailablePort();
-  process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
-  process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
+
+function parseWorkerIndex(cid: string): number {
+  const parts = cid.split("-").map((value) => Number.parseInt(value, 10));
+  if (parts.length !== 2 || parts.some((value) => !Number.isFinite(value) || value < 0)) {
+    return 0;
+  }
+  // cid format is "{capabilityIndex}-{specIndex}".
+  return parts[0] * 100 + parts[1];
+}
+
+function resolveWindowsAttachWorkerPorts(cid: string): {
+  edgeDriverPort: number;
+  webViewDebugPort: number;
+} {
+  const workerIndex = parseWorkerIndex(cid);
+  const edgeBase = resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT_BASE") ?? 51000;
+  const debugBase = resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT_BASE") ?? 52000;
+  return {
+    edgeDriverPort: edgeBase + workerIndex,
+    webViewDebugPort: debugBase + workerIndex,
+  };
 }
 
 function ensureTauriDriverPortsAssigned() {
@@ -179,6 +190,14 @@ function resolveMsEdgeDriverBin() {
   throw new Error(
     "Unable to locate msedgedriver.exe. Ensure it is on PATH or set MSEDGEDRIVER_PATH.",
   );
+}
+
+function parseDebuggerPort(debuggerAddress: unknown): number | undefined {
+  if (typeof debuggerAddress !== "string") return undefined;
+  const match = debuggerAddress.match(/:(\d+)$/);
+  if (!match) return undefined;
+  const port = Number.parseInt(match[1], 10);
+  return Number.isFinite(port) && port > 0 ? port : undefined;
 }
 
 function waitForTcpPort(hostname: string, port: number, timeoutMs = 30000) {
@@ -398,7 +417,8 @@ function resolveTauriDriverBin() {
 export const config: Options.WebdriverIO = {
   runner: "local",
   hostname: "127.0.0.1",
-  port: windowsAttachEnabled && windowsEdgeDriverPort ? windowsEdgeDriverPort : tauriDriverPort,
+  // NOTE: In Windows attach mode, we assign a per-worker port in onWorkerStart.
+  port: tauriDriverPort,
   path: "/",
   specs: ["./test/specs/**/*.ts"],
   maxInstances: 1,
@@ -424,29 +444,48 @@ export const config: Options.WebdriverIO = {
     ui: "bdd",
     timeout: 120000,
   },
-  capabilities:
-    windowsAttachEnabled && windowsWebViewDebugPort
-      ? [
-          {
-            maxInstances: 1,
-            browserName: "webview2",
-            "wdio:enforceWebDriverClassic": true,
-            "ms:edgeOptions": {
-              debuggerAddress: `127.0.0.1:${windowsWebViewDebugPort}`,
-            },
+  capabilities: windowsAttachEnabled
+    ? [
+        {
+          maxInstances: 1,
+          browserName: "webview2",
+          "wdio:enforceWebDriverClassic": true,
+          "ms:edgeOptions": {
+            // Overridden in onWorkerStart; keep a placeholder for type shape.
+            debuggerAddress: "127.0.0.1:0",
           },
-        ]
-      : [
-          {
-            maxInstances: 1,
-            browserName: process.platform === "win32" ? "webview2" : "wry",
-            "wdio:enforceWebDriverClassic": true,
-            "tauri:options": {
-              application,
-              webviewOptions: {},
-            },
+        },
+      ]
+    : [
+        {
+          maxInstances: 1,
+          browserName: process.platform === "win32" ? "webview2" : "wry",
+          "wdio:enforceWebDriverClassic": true,
+          "tauri:options": {
+            application,
+            webviewOptions: {},
           },
-        ],
+        },
+      ],
+  onWorkerStart: (cid, caps, _specs, args) => {
+    if (!windowsAttachEnabled) return;
+
+    const { edgeDriverPort, webViewDebugPort } = resolveWindowsAttachWorkerPorts(cid);
+
+    // Ensure each worker gets its own driver + WebView2 instance.
+    (args as Record<string, unknown>).hostname = "127.0.0.1";
+    (args as Record<string, unknown>).port = edgeDriverPort;
+    (args as Record<string, unknown>).path = "/";
+
+    const capsRecord = caps as Record<string, unknown>;
+    const edgeOptionsRaw = capsRecord["ms:edgeOptions"];
+    const edgeOptions =
+      edgeOptionsRaw && typeof edgeOptionsRaw === "object"
+        ? (edgeOptionsRaw as Record<string, unknown>)
+        : ({} as Record<string, unknown>);
+    edgeOptions.debuggerAddress = `127.0.0.1:${webViewDebugPort}`;
+    capsRecord["ms:edgeOptions"] = edgeOptions;
+  },
   onPrepare: (_wdioConfig, capabilities) => {
     registerCleanupHandlers();
     // eslint-disable-next-line no-console
@@ -566,76 +605,6 @@ export const config: Options.WebdriverIO = {
       if (!existsSync(builtApp)) {
         throw new Error(`Built app binary not found at ${JSON.stringify(builtApp)}`);
       }
-
-      if (windowsDriverStrategy === "attach") {
-        // eslint-disable-next-line no-console
-        console.log("[MODUDOC_E2E] Windows attach mode enabled; starting app and EdgeDriver.");
-
-        if (!windowsEdgeDriverPort || !windowsWebViewDebugPort) {
-          throw new Error(
-            "Windows attach mode requires MODUDOC_E2E_EDGE_DRIVER_PORT and MODUDOC_E2E_WEBVIEW_DEBUG_PORT",
-          );
-        }
-        // eslint-disable-next-line no-console
-        console.log(
-          `[MODUDOC_E2E] edgeDriverPort=${windowsEdgeDriverPort} webviewDebugPort=${windowsWebViewDebugPort} app=${builtApp}`,
-        );
-
-        // Launch the application with WebView2 remote debugging enabled so EdgeDriver can attach.
-        const webviewArgs = `--remote-debugging-port=${windowsWebViewDebugPort} --remote-allow-origins=*`;
-
-        windowsApp = spawn(builtApp, [], {
-          cwd: projectRoot,
-          stdio: ["ignore", "pipe", "pipe"],
-          shell: false,
-          env: {
-            ...process.env,
-            WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webviewArgs,
-          } as NodeJS.ProcessEnv,
-        });
-        if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsApp) {
-          teeChildOutput(windowsApp, process.env.MODUDOC_E2E_OUTPUT_DIR, "modudoc.log");
-        }
-        windowsApp.on("exit", (code, signal) => {
-          // eslint-disable-next-line no-console
-          console.log(`[modudoc] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-        });
-        windowsApp.on("error", (err) => {
-          // eslint-disable-next-line no-console
-          console.log(`[modudoc] error: ${String(err)}`);
-        });
-
-        // Wait for the WebView2 runtime to open the CDP port.
-        waitForTcpPort("127.0.0.1", windowsWebViewDebugPort, 60000);
-
-        // Start EdgeDriver once and let all workers attach to the same WebView2 instance.
-        const msEdgeDriver = resolveMsEdgeDriverBin();
-        windowsWebDriver = spawn(
-          msEdgeDriver,
-          ["--verbose", `--port=${windowsEdgeDriverPort}`, "--host=127.0.0.1"],
-          {
-            cwd: projectRoot,
-            stdio: ["ignore", "pipe", "pipe"],
-            shell: false,
-          },
-        );
-        if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsWebDriver) {
-          teeChildOutput(windowsWebDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "msedgedriver.log");
-        }
-        windowsWebDriver.on("exit", (code, signal) => {
-          // eslint-disable-next-line no-console
-          console.log(`[msedgedriver] exited code=${code ?? "null"} signal=${signal ?? "null"}`);
-        });
-        windowsWebDriver.on("error", (err) => {
-          // eslint-disable-next-line no-console
-          console.log(`[msedgedriver] error: ${String(err)}`);
-        });
-
-        waitForTcpPort("127.0.0.1", windowsEdgeDriverPort, 30000);
-        const status = fetchWebDriverStatus("127.0.0.1", windowsEdgeDriverPort);
-        // eslint-disable-next-line no-console
-        console.log(`[msedgedriver] status: ${status}`);
-      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(
@@ -646,22 +615,85 @@ export const config: Options.WebdriverIO = {
       throw err;
     }
   },
-  beforeSession: () => {
-    if (windowsDriverStrategy === "attach") {
+  beforeSession: (wdioConfig, caps) => {
+    registerCleanupHandlers();
+
+    if (!windowsAttachEnabled) {
+      tauriDriver = spawn(
+        resolveTauriDriverBin(),
+        ["--port", String(tauriDriverPort), "--native-port", String(tauriNativePort)],
+        {
+          stdio: ["ignore", "pipe", "pipe"],
+          shell: false,
+        },
+      );
+      if (process.env.MODUDOC_E2E_OUTPUT_DIR && tauriDriver) {
+        teeChildOutput(tauriDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "tauri-driver.log");
+      }
       return;
     }
 
-    tauriDriver = spawn(
-      resolveTauriDriverBin(),
-      ["--port", String(tauriDriverPort), "--native-port", String(tauriNativePort)],
+    const builtApp = findBuiltAppBinaryPath();
+    if (!existsSync(builtApp)) {
+      throw new Error(`Built app binary not found at ${JSON.stringify(builtApp)}`);
+    }
+
+    const capsRecord = caps as Record<string, unknown>;
+    const debugPort = parseDebuggerPort(
+      (capsRecord["ms:edgeOptions"] as Record<string, unknown> | undefined)?.debuggerAddress,
+    );
+    if (!debugPort) {
+      throw new Error("Windows attach mode requires ms:edgeOptions.debuggerAddress to be set");
+    }
+
+    const edgeDriverPort = wdioConfig.port;
+    // eslint-disable-next-line no-console
+    console.log(
+      `[MODUDOC_E2E] worker=${process.env.WDIO_WORKER_ID ?? ""} edgeDriverPort=${edgeDriverPort} webviewDebugPort=${debugPort} app=${builtApp}`,
+    );
+
+    const webviewArgs = `--remote-debugging-port=${debugPort} --remote-allow-origins=*`;
+    windowsApp = spawn(builtApp, [], {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: false,
+      env: {
+        ...process.env,
+        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webviewArgs,
+      } as NodeJS.ProcessEnv,
+    });
+    if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsApp) {
+      teeChildOutput(
+        windowsApp,
+        process.env.MODUDOC_E2E_OUTPUT_DIR,
+        `modudoc-${edgeDriverPort}.log`,
+      );
+    }
+
+    waitForTcpPort("127.0.0.1", debugPort, 60000);
+
+    const msEdgeDriver = resolveMsEdgeDriverBin();
+    windowsWebDriver = spawn(
+      msEdgeDriver,
+      ["--verbose", `--port=${edgeDriverPort}`, "--host=127.0.0.1"],
       {
+        cwd: projectRoot,
         stdio: ["ignore", "pipe", "pipe"],
         shell: false,
       },
     );
-    if (process.env.MODUDOC_E2E_OUTPUT_DIR && tauriDriver) {
-      teeChildOutput(tauriDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "tauri-driver.log");
+    if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsWebDriver) {
+      teeChildOutput(
+        windowsWebDriver,
+        process.env.MODUDOC_E2E_OUTPUT_DIR,
+        `msedgedriver-${edgeDriverPort}.log`,
+      );
     }
+
+    waitForTcpPort("127.0.0.1", edgeDriverPort, 30000);
+    const status = fetchWebDriverStatus("127.0.0.1", edgeDriverPort);
+    // eslint-disable-next-line no-console
+    console.log(`[msedgedriver] status: ${status}`);
   },
   before: async () => {
     const width = resolveNumberEnv("MODUDOC_E2E_WINDOW_WIDTH") ?? 1280;
@@ -692,16 +724,16 @@ export const config: Options.WebdriverIO = {
     tauriDriver = undefined;
     cleanupChildProcess(viteServer);
     viteServer = undefined;
+    cleanupChildProcess(windowsWebDriver);
+    windowsWebDriver = undefined;
+    cleanupChildProcess(windowsApp);
+    windowsApp = undefined;
   },
   onComplete: () => {
     cleanupChildProcess(tauriDriver);
     tauriDriver = undefined;
     cleanupChildProcess(viteServer);
     viteServer = undefined;
-    cleanupChildProcess(windowsWebDriver);
-    windowsWebDriver = undefined;
-    cleanupChildProcess(windowsApp);
-    windowsApp = undefined;
   },
 };
 
