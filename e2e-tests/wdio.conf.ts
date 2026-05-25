@@ -405,7 +405,7 @@ export const config: Options.WebdriverIO = {
       },
     },
   ],
-  onPrepare: (_config, capabilities) => {
+  onPrepare: (wdioConfig, capabilities) => {
     registerCleanupHandlers();
 
     // Ensure the output directory exists (WDIO doesn't create it automatically).
@@ -516,6 +516,22 @@ export const config: Options.WebdriverIO = {
       process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
       process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
 
+      wdioConfig.hostname = "127.0.0.1";
+      wdioConfig.port = windowsEdgeDriverPort;
+      wdioConfig.path = "/";
+
+      for (const cap of capabilities) {
+        if (!cap || typeof cap !== "object") {
+          continue;
+        }
+        delete (cap as Record<string, unknown>)["tauri:options"];
+        (cap as Record<string, unknown>).browserName = "webview2";
+        (cap as Record<string, unknown>)["ms:edgeOptions"] = {
+          debuggerAddress: `127.0.0.1:${windowsWebViewDebugPort}`,
+        };
+        (cap as Record<string, unknown>)["wdio:enforceWebDriverClassic"] = true;
+      }
+
       // Launch the application with WebView2 remote debugging enabled so EdgeDriver can attach.
       const webviewArgs = `--remote-debugging-port=${windowsWebViewDebugPort} --remote-allow-origins=*`;
 
@@ -551,39 +567,6 @@ export const config: Options.WebdriverIO = {
       }
 
       waitForTcpPort("127.0.0.1", windowsEdgeDriverPort, 30000);
-    }
-  },
-  onWorkerStart: (_cid, caps, _specs, args) => {
-    if (windowsDriverStrategy !== "attach") {
-      return;
-    }
-
-    const edgePort = Number.parseInt(process.env.MODUDOC_E2E_EDGE_DRIVER_PORT || "", 10);
-    const debugPort = Number.parseInt(process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT || "", 10);
-    if (
-      !Number.isFinite(edgePort) ||
-      edgePort <= 0 ||
-      !Number.isFinite(debugPort) ||
-      debugPort <= 0
-    ) {
-      throw new Error(
-        "Windows attach mode requires MODUDOC_E2E_EDGE_DRIVER_PORT and MODUDOC_E2E_WEBVIEW_DEBUG_PORT",
-      );
-    }
-
-    // Point this worker at the EdgeDriver server.
-    (args as Record<string, unknown>).hostname = "127.0.0.1";
-    (args as Record<string, unknown>).port = edgePort;
-    (args as Record<string, unknown>).path = "/";
-
-    // Replace capabilities to attach to the WebView2 CDP port.
-    if (caps && typeof caps === "object") {
-      delete (caps as Record<string, unknown>)["tauri:options"];
-      (caps as Record<string, unknown>).browserName = "webview2";
-      (caps as Record<string, unknown>)["ms:edgeOptions"] = {
-        debuggerAddress: `127.0.0.1:${debugPort}`,
-      };
-      (caps as Record<string, unknown>)["wdio:enforceWebDriverClassic"] = true;
     }
   },
   beforeSession: () => {
