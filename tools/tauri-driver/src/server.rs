@@ -56,7 +56,6 @@ impl TauriOptions {
       json!(self.application.with_extension("exe")),
     );
     ms_edge_options.insert("args".into(), self.args.into());
-    ms_edge_options.insert("useWebView".into(), json!(true));
 
     if let Some(webview_options) = self.webview_options {
       ms_edge_options.insert("webviewOptions".into(), webview_options);

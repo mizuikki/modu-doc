@@ -15,6 +15,8 @@ import type { Options } from "@wdio/types";
 
 let tauriDriver: ChildProcess | undefined;
 let viteServer: ChildProcess | undefined;
+let windowsWebDriver: ChildProcess | undefined;
+let windowsApp: ChildProcess | undefined;
 let cleanupRegistered = false;
 
 type E2eMode = "dist" | "dev";
@@ -326,7 +328,6 @@ export const config: Options.WebdriverIO = {
       maxInstances: 1,
       browserName: process.platform === "win32" ? "webview2" : "wry",
       "wdio:enforceWebDriverClassic": true,
-      ...(process.platform === "win32" ? { "ms:edgeOptions": { useWebView: true } } : {}),
       "tauri:options": {
         application,
         webviewOptions: {},
