@@ -367,7 +367,7 @@ function resolveTauriDriverBin() {
 
 export const config: Options.WebdriverIO = {
   runner: "local",
-  host: "127.0.0.1",
+  hostname: "127.0.0.1",
   port: tauriDriverPort,
   path: "/",
   specs: ["./test/specs/**/*.ts"],
@@ -572,7 +572,7 @@ export const config: Options.WebdriverIO = {
     }
 
     // Point this worker at the EdgeDriver server.
-    (args as Record<string, unknown>).host = "127.0.0.1";
+    (args as Record<string, unknown>).hostname = "127.0.0.1";
     (args as Record<string, unknown>).port = edgePort;
     (args as Record<string, unknown>).path = "/";
 
