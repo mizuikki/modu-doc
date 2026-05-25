@@ -26,6 +26,7 @@ const appName = "modudoc";
 const appBinary = process.platform === "win32" ? `${appName}.exe` : appName;
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(configDir, "..");
+const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 
 function resolveE2eMode(): E2eMode {
   const raw = (process.env.MODUDOC_E2E_MODE ?? "").trim().toLowerCase();
@@ -508,7 +509,7 @@ export const config: Options.WebdriverIO = {
         },
       );
     } else {
-      const build = spawnSync("npx", ["--no-install", "tauri", "build", "--no-bundle"], {
+      const build = spawnSync(npxCommand, ["--no-install", "tauri", "build", "--no-bundle"], {
         cwd: projectRoot,
         stdio: "inherit",
         shell: false,
