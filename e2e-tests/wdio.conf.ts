@@ -553,7 +553,12 @@ export const config: Options.WebdriverIO = {
       wdioConfig.port = windowsEdgeDriverPort;
       wdioConfig.path = "/";
 
-      for (const cap of capabilities) {
+      const capsArray = Array.isArray(capabilities)
+        ? capabilities
+        : capabilities && typeof capabilities === "object"
+          ? Object.values(capabilities as Record<string, unknown>)
+          : [];
+      for (const cap of capsArray) {
         if (!cap || typeof cap !== "object") {
           continue;
         }
