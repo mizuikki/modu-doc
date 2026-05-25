@@ -20,6 +20,7 @@ let windowsApp: ChildProcess | undefined;
 let cleanupRegistered = false;
 
 type E2eMode = "dist" | "dev";
+type WindowsDriverStrategy = "tauri-driver" | "attach";
 
 const appName = "modudoc";
 const appBinary = process.platform === "win32" ? `${appName}.exe` : appName;
@@ -89,6 +90,29 @@ function resolveTauriDriverPorts(): { port: number; nativePort: number } {
 
 const e2eMode = resolveE2eMode();
 
+function resolveWindowsDriverStrategy(): WindowsDriverStrategy {
+  const raw = (process.env.MODUDOC_E2E_WINDOWS_STRATEGY ?? "").trim().toLowerCase();
+  if (!raw) {
+    // Default to the more reliable attach strategy on CI.
+    return process.env.CI ? "attach" : "tauri-driver";
+  }
+  if (raw === "tauri-driver" || raw === "tauridirver" || raw === "tauri") {
+    return "tauri-driver";
+  }
+  if (raw === "attach" || raw === "debuggeraddress" || raw === "debugger-address") {
+    return "attach";
+  }
+  throw new Error(
+    `Unknown MODUDOC_E2E_WINDOWS_STRATEGY=${JSON.stringify(process.env.MODUDOC_E2E_WINDOWS_STRATEGY)} (expected "tauri-driver" or "attach")`,
+  );
+}
+
+const windowsDriverStrategy: WindowsDriverStrategy =
+  process.platform === "win32" ? resolveWindowsDriverStrategy() : "tauri-driver";
+
+let windowsEdgeDriverPort: number | undefined;
+let windowsWebViewDebugPort: number | undefined;
+
 function ensureTauriDriverPortsAssigned() {
   if (process.env.MODUDOC_E2E_WD_PORT && process.env.MODUDOC_E2E_WD_NATIVE_PORT) {
     return;
@@ -120,6 +144,50 @@ function resolveConfiguredAppBinaryPath(): string {
 
   const profileDir = e2eMode === "dev" ? "debug" : "release";
   return path.resolve(projectRoot, "src-tauri", "target", profileDir, appBinary);
+}
+
+function resolveMsEdgeDriverBin() {
+  const override = process.env.MSEDGEDRIVER_PATH || process.env.MSEDGEDRIVER_BIN;
+  if (override && existsSync(override)) {
+    return override;
+  }
+  const result = spawnSync("where", ["msedgedriver"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.status === 0) {
+    const resolved = result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean);
+    if (resolved && existsSync(resolved)) {
+      return resolved;
+    }
+  }
+  throw new Error(
+    "Unable to locate msedgedriver.exe. Ensure it is on PATH or set MSEDGEDRIVER_PATH.",
+  );
+}
+
+function waitForTcpPort(hostname: string, port: number, timeoutMs = 30000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `const net=require('net');const s=net.connect(${port},${JSON.stringify(
+          hostname,
+        )});s.on('connect',()=>{process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),500);`,
+      ],
+      { cwd: projectRoot, stdio: "ignore", shell: false },
+    );
+    if (result.status === 0) {
+      return;
+    }
+  }
+  throw new Error(`Timed out waiting for TCP port ${hostname}:${port} to become available`);
 }
 
 function findBuiltAppBinaryPath(): string {
@@ -255,6 +323,8 @@ function registerCleanupHandlers() {
   const cleanup = () => {
     cleanupChildProcess(tauriDriver);
     cleanupChildProcess(viteServer);
+    cleanupChildProcess(windowsWebDriver);
+    cleanupChildProcess(windowsApp);
   };
 
   process.once("exit", cleanup);
@@ -299,6 +369,7 @@ export const config: Options.WebdriverIO = {
   runner: "local",
   host: "127.0.0.1",
   port: tauriDriverPort,
+  path: "/",
   specs: ["./test/specs/**/*.ts"],
   maxInstances: 1,
   logLevel: "info",
@@ -412,11 +483,14 @@ export const config: Options.WebdriverIO = {
         },
       );
     } else {
-      spawnSync("npx", ["--no-install", "tauri", "build", "--no-bundle"], {
+      const build = spawnSync("npx", ["--no-install", "tauri", "build", "--no-bundle"], {
         cwd: projectRoot,
         stdio: "inherit",
         shell: false,
       });
+      if (build.status !== 0) {
+        throw new Error(`tauri build failed (exit=${build.status ?? "null"})`);
+      }
     }
 
     const builtApp = findBuiltAppBinaryPath();
@@ -433,8 +507,90 @@ export const config: Options.WebdriverIO = {
     if (!existsSync(builtApp)) {
       throw new Error(`Built app binary not found at ${JSON.stringify(builtApp)}`);
     }
+
+    if (windowsDriverStrategy === "attach") {
+      windowsEdgeDriverPort =
+        resolveNumberEnv("MODUDOC_E2E_EDGE_DRIVER_PORT") ?? resolveAvailablePort();
+      windowsWebViewDebugPort =
+        resolveNumberEnv("MODUDOC_E2E_WEBVIEW_DEBUG_PORT") ?? resolveAvailablePort();
+      process.env.MODUDOC_E2E_EDGE_DRIVER_PORT = String(windowsEdgeDriverPort);
+      process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT = String(windowsWebViewDebugPort);
+
+      // Launch the application with WebView2 remote debugging enabled so EdgeDriver can attach.
+      const webviewArgs = `--remote-debugging-port=${windowsWebViewDebugPort} --remote-allow-origins=*`;
+
+      windowsApp = spawn(builtApp, [], {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+        shell: false,
+        env: {
+          ...process.env,
+          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webviewArgs,
+        } as NodeJS.ProcessEnv,
+      });
+      if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsApp) {
+        teeChildOutput(windowsApp, process.env.MODUDOC_E2E_OUTPUT_DIR, "modudoc.log");
+      }
+
+      // Wait for the WebView2 runtime to open the CDP port.
+      waitForTcpPort("127.0.0.1", windowsWebViewDebugPort, 60000);
+
+      // Start EdgeDriver once and let all workers attach to the same WebView2 instance.
+      const msEdgeDriver = resolveMsEdgeDriverBin();
+      windowsWebDriver = spawn(
+        msEdgeDriver,
+        [`--port=${windowsEdgeDriverPort}`, "--host=127.0.0.1"],
+        {
+          cwd: projectRoot,
+          stdio: ["ignore", "pipe", "pipe"],
+          shell: false,
+        },
+      );
+      if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsWebDriver) {
+        teeChildOutput(windowsWebDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "msedgedriver.log");
+      }
+
+      waitForTcpPort("127.0.0.1", windowsEdgeDriverPort, 30000);
+    }
+  },
+  onWorkerStart: (_cid, caps, _specs, args) => {
+    if (windowsDriverStrategy !== "attach") {
+      return;
+    }
+
+    const edgePort = Number.parseInt(process.env.MODUDOC_E2E_EDGE_DRIVER_PORT || "", 10);
+    const debugPort = Number.parseInt(process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT || "", 10);
+    if (
+      !Number.isFinite(edgePort) ||
+      edgePort <= 0 ||
+      !Number.isFinite(debugPort) ||
+      debugPort <= 0
+    ) {
+      throw new Error(
+        "Windows attach mode requires MODUDOC_E2E_EDGE_DRIVER_PORT and MODUDOC_E2E_WEBVIEW_DEBUG_PORT",
+      );
+    }
+
+    // Point this worker at the EdgeDriver server.
+    (args as Record<string, unknown>).host = "127.0.0.1";
+    (args as Record<string, unknown>).port = edgePort;
+    (args as Record<string, unknown>).path = "/";
+
+    // Replace capabilities to attach to the WebView2 CDP port.
+    if (caps && typeof caps === "object") {
+      delete (caps as Record<string, unknown>)["tauri:options"];
+      (caps as Record<string, unknown>).browserName = "webview2";
+      (caps as Record<string, unknown>)["ms:edgeOptions"] = {
+        debuggerAddress: `127.0.0.1:${debugPort}`,
+      };
+      (caps as Record<string, unknown>)["wdio:enforceWebDriverClassic"] = true;
+    }
   },
   beforeSession: () => {
+    if (windowsDriverStrategy === "attach") {
+      return;
+    }
+
     tauriDriver = spawn(
       resolveTauriDriverBin(),
       ["--port", String(tauriDriverPort), "--native-port", String(tauriNativePort)],
@@ -448,6 +604,9 @@ export const config: Options.WebdriverIO = {
     }
   },
   before: async () => {
+    if (windowsDriverStrategy === "attach") {
+      return;
+    }
     await browser.setWindowSize(1280, 900);
   },
   afterSession: () => {
@@ -461,6 +620,10 @@ export const config: Options.WebdriverIO = {
     tauriDriver = undefined;
     cleanupChildProcess(viteServer);
     viteServer = undefined;
+    cleanupChildProcess(windowsWebDriver);
+    windowsWebDriver = undefined;
+    cleanupChildProcess(windowsApp);
+    windowsApp = undefined;
   },
 };
 
