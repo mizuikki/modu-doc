@@ -521,11 +521,18 @@ export const config: Options.WebdriverIO = {
 
     const builtApp = findBuiltAppBinaryPath();
     process.env.MODUDOC_E2E_APP_PATH = builtApp;
-    for (const cap of capabilities) {
-      if (cap && typeof cap === "object" && "tauri:options" in cap) {
-        const opts = (cap as Record<string, unknown>)["tauri:options"];
-        if (opts && typeof opts === "object") {
-          (opts as Record<string, unknown>).application = builtApp;
+    {
+      const capsArray = Array.isArray(capabilities)
+        ? capabilities
+        : capabilities && typeof capabilities === "object"
+          ? Object.values(capabilities as Record<string, unknown>)
+          : [];
+      for (const cap of capsArray) {
+        if (cap && typeof cap === "object" && "tauri:options" in cap) {
+          const opts = (cap as Record<string, unknown>)["tauri:options"];
+          if (opts && typeof opts === "object") {
+            (opts as Record<string, unknown>).application = builtApp;
+          }
         }
       }
     }
