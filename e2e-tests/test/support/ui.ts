@@ -4,7 +4,9 @@ function isWindowsAttachMode() {
   if (process.platform !== "win32") return false;
   const strategy = (process.env.MODUDOC_E2E_WINDOWS_STRATEGY ?? "").trim().toLowerCase();
   if (strategy === "attach") return true;
-  return Boolean(process.env.MODUDOC_E2E_EDGE_DRIVER_PORT && process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT);
+  return Boolean(
+    process.env.MODUDOC_E2E_EDGE_DRIVER_PORT && process.env.MODUDOC_E2E_WEBVIEW_DEBUG_PORT,
+  );
 }
 
 export async function dismissWorkspaceStatus() {
@@ -17,7 +19,9 @@ export async function dismissWorkspaceStatus() {
       await close.click();
     } catch {
       await browser.execute(() => {
-        (document.querySelector("[data-testid='workspace-status-close']") as HTMLElement | null)?.click();
+        (
+          document.querySelector("[data-testid='workspace-status-close']") as HTMLElement | null
+        )?.click();
       });
     }
   }
@@ -82,7 +86,10 @@ export async function safeSetValue(selector: string, value: string, timeoutMs = 
 
   await browser.execute(
     (cssSelector, nextValue) => {
-      const input = document.querySelector(cssSelector) as HTMLInputElement | HTMLTextAreaElement | null;
+      const input = document.querySelector(cssSelector) as
+        | HTMLInputElement
+        | HTMLTextAreaElement
+        | null;
       if (!input) return;
       input.focus();
       input.value = String(nextValue);
