@@ -647,9 +647,19 @@ export const config: Options.WebdriverIO = {
     }
 
     const edgeDriverPort = wdioConfig.port;
+
+    const baseDataDir = process.env.MODUDOC_E2E_RUN_DIR || buildE2eDataDir();
+    const workerDataDir = path.join(baseDataDir, `worker-${edgeDriverPort}`);
+    try {
+      rmSync(workerDataDir, { recursive: true, force: true });
+    } catch {
+      // ignore stale directory cleanup failures
+    }
+    mkdirSync(workerDataDir, { recursive: true });
+
     // eslint-disable-next-line no-console
     console.log(
-      `[MODUDOC_E2E] worker=${process.env.WDIO_WORKER_ID ?? ""} edgeDriverPort=${edgeDriverPort} webviewDebugPort=${debugPort} app=${builtApp}`,
+      `[MODUDOC_E2E] worker=${process.env.WDIO_WORKER_ID ?? ""} edgeDriverPort=${edgeDriverPort} webviewDebugPort=${debugPort} app=${builtApp} dataDir=${workerDataDir}`,
     );
 
     const webviewArgs = `--remote-debugging-port=${debugPort} --remote-allow-origins=*`;
@@ -660,6 +670,7 @@ export const config: Options.WebdriverIO = {
       env: {
         ...process.env,
         WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webviewArgs,
+        MODUDOC_DATA_DIR: workerDataDir,
       } as NodeJS.ProcessEnv,
     });
     if (process.env.MODUDOC_E2E_OUTPUT_DIR && windowsApp) {
