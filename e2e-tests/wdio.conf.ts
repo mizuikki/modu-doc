@@ -308,11 +308,19 @@ function pruneOldRuns(rootDir: string, keep = 3) {
   }
 }
 
-function teeChildOutput(child: ChildProcess, outputDir: string, basename: string) {
-  teeChildOutput(child, outputDir, basename, true);
-}
-
-function teeChildOutput(child: ChildProcess, outputDir: string, basename: string, mirrorToConsole: boolean) {
+function teeChildOutput(child: ChildProcess, outputDir: string, basename: string): void;
+function teeChildOutput(
+  child: ChildProcess,
+  outputDir: string,
+  basename: string,
+  mirrorToConsole: boolean,
+): void;
+function teeChildOutput(
+  child: ChildProcess,
+  outputDir: string,
+  basename: string,
+  mirrorToConsole = true,
+) {
   const logPath = path.join(outputDir, basename);
   try {
     mkdirSync(outputDir, { recursive: true });
