@@ -309,6 +309,10 @@ function pruneOldRuns(rootDir: string, keep = 3) {
 }
 
 function teeChildOutput(child: ChildProcess, outputDir: string, basename: string) {
+  teeChildOutput(child, outputDir, basename, true);
+}
+
+function teeChildOutput(child: ChildProcess, outputDir: string, basename: string, mirrorToConsole: boolean) {
   const logPath = path.join(outputDir, basename);
   try {
     mkdirSync(outputDir, { recursive: true });
@@ -328,13 +332,17 @@ function teeChildOutput(child: ChildProcess, outputDir: string, basename: string
   if (child.stdout) {
     child.stdout.on("data", (chunk) => {
       append(chunk);
-      process.stdout.write(chunk);
+      if (mirrorToConsole) {
+        process.stdout.write(chunk);
+      }
     });
   }
   if (child.stderr) {
     child.stderr.on("data", (chunk) => {
       append(chunk);
-      process.stderr.write(chunk);
+      if (mirrorToConsole) {
+        process.stderr.write(chunk);
+      }
     });
   }
 }
@@ -698,6 +706,10 @@ export const config: Options.WebdriverIO = {
         windowsWebDriver,
         process.env.MODUDOC_E2E_OUTPUT_DIR,
         `msedgedriver-${edgeDriverPort}.log`,
+        // msedgedriver --verbose spams DevTools DEBUG lines and can make GitHub Actions UI
+        // appear blank due to extremely large logs. Keep the file for postmortem, but don't
+        // mirror to the step log.
+        false,
       );
     }
 
