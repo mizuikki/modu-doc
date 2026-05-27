@@ -1,3 +1,4 @@
+import * as Select from "@radix-ui/react-select";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store/appStore";
 
@@ -12,24 +13,84 @@ export function WorkspaceSelect() {
       <label htmlFor="workspace-select" style={{ display: "block", fontSize: 12, marginBottom: 8 }}>
         {t("workspace")}
       </label>
-      <select
-        id="workspace-select"
-        style={{
-          width: "100%",
-          padding: 8,
-          borderRadius: 8,
-          border: "1px solid hsl(var(--border))",
-        }}
+      <Select.Root
         value={activeWorkspaceId ?? ""}
-        onChange={(event) => setActiveWorkspace(event.target.value || null)}
+        onValueChange={(value) => setActiveWorkspace(value ? value : null)}
       >
-        <option value="">{t("select_workspace")}</option>
-        {workspaces.map((workspace) => (
-          <option key={workspace.id} value={workspace.id}>
-            {workspace.name}
-          </option>
-        ))}
-      </select>
+        <Select.Trigger
+          data-testid="workspace-select-trigger"
+          data-current-workspace-id={activeWorkspaceId ?? ""}
+          aria-label={t("workspace")}
+          title={
+            activeWorkspaceId
+              ? (workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.name ?? "")
+              : ""
+          }
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            padding: 8,
+            borderRadius: 8,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          <Select.Value placeholder={t("select_workspace")} />
+          <Select.Icon style={{ color: "hsl(var(--muted-foreground))" }}>▾</Select.Icon>
+        </Select.Trigger>
+
+        <Select.Portal>
+          <Select.Content
+            position="popper"
+            style={{
+              zIndex: 50,
+              background: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 12,
+              boxShadow: "0 18px 48px rgba(15, 23, 42, 0.14)",
+              overflow: "hidden",
+            }}
+          >
+            <Select.Viewport
+              style={{
+                padding: 6,
+                maxHeight: 320,
+                width: "var(--radix-select-trigger-width)",
+              }}
+            >
+              <div
+                style={{
+                  padding: "8px 10px",
+                  fontSize: 12,
+                  color: "hsl(var(--muted-foreground))",
+                }}
+              >
+                {t("select_workspace")}
+              </div>
+              {workspaces.map((workspace) => (
+                <Select.Item
+                  key={workspace.id}
+                  value={workspace.id}
+                  data-testid={`workspace-select-item-${workspace.id}`}
+                  title={workspace.name}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                >
+                  <Select.ItemText>{workspace.name}</Select.ItemText>
+                </Select.Item>
+              ))}
+            </Select.Viewport>
+          </Select.Content>
+        </Select.Portal>
+      </Select.Root>
     </div>
   );
 }

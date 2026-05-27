@@ -6,7 +6,6 @@ import { FragmentPreview } from "@/features/fragments/FragmentPreview";
 import { SnapshotDiff } from "@/features/history/SnapshotDiff";
 import { SnapshotTimeline } from "@/features/history/SnapshotTimeline";
 import { ConflictBanner } from "@/features/sync/ConflictBanner";
-import { SyncStatusBadge } from "@/features/sync/SyncStatusBadge";
 import { WorkspacePreview } from "@/features/workspaces/WorkspacePreview";
 import { useAppStore } from "@/store/appStore";
 
@@ -53,9 +52,7 @@ export function MainPanel() {
             {t("reset_split")}
           </button>
         ) : null}
-        <span style={{ marginLeft: "auto" }}>
-          <SyncStatusBadge />
-        </span>
+        <span style={{ marginLeft: "auto" }} />
       </div>
       <div style={{ minHeight: 0, display: "grid", gap: 12, padding: 16 }}>
         <ConflictBanner />
@@ -128,10 +125,17 @@ export function MainPanel() {
                   display: "grid",
                   placeItems: "center",
                   color: "hsl(var(--muted-foreground))",
+                  padding: "12px 0",
                 }}
               >
                 <span
-                  style={{ width: 2, height: "40%", borderRadius: 999, background: "currentColor" }}
+                  style={{
+                    width: 2,
+                    height: "100%",
+                    borderRadius: 999,
+                    background: "currentColor",
+                    opacity: 0.7,
+                  }}
                 />
               </button>
               <FragmentPreview />

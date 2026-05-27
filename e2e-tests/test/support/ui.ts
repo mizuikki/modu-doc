@@ -110,11 +110,14 @@ export async function safeSetValue(selector: string, value: string, timeoutMs = 
 
 export async function selectWorkspaceById(workspaceId: string, timeoutMs = 20000) {
   await dismissWorkspaceStatus();
-  const select = await $("#workspace-select");
-  await ensureInteractable(select, timeoutMs);
-  await select.selectByAttribute("value", workspaceId);
-  await browser.waitUntil(async () => (await select.getValue()) === workspaceId, {
-    timeout: timeoutMs,
-    interval: 200,
-  });
+  await safeClick("[data-testid='workspace-select-trigger']", timeoutMs);
+  await safeClick(`[data-testid='workspace-select-item-${workspaceId}']`, timeoutMs);
+  await browser.waitUntil(
+    async () => {
+      const trigger = await $("[data-testid='workspace-select-trigger']");
+      const current = await trigger.getAttribute("data-current-workspace-id");
+      return current === workspaceId;
+    },
+    { timeout: timeoutMs, interval: 200 },
+  );
 }

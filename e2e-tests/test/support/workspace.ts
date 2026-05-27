@@ -60,16 +60,15 @@ export async function createAndSelectWorkspace(args: { name: string; targetPath?
     targetPath: args.targetPath ?? null,
   });
 
-  await browser.waitUntil(async () => await $("#workspace-select").isExisting(), {
-    timeout: 20000,
-    interval: 200,
-  });
+  await browser.waitUntil(
+    async () => await $("[data-testid='workspace-select-trigger']").isExisting(),
+    {
+      timeout: 20000,
+      interval: 200,
+    },
+  );
 
   await selectWorkspaceById(workspace.id);
-  await browser.waitUntil(async () => (await $("#workspace-select").getValue()) === workspace.id, {
-    timeout: 20000,
-    interval: 200,
-  });
 
   await safeClick("[data-testid='main-tab-edit']", 20000);
 

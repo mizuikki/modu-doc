@@ -53,9 +53,8 @@ type WorkspaceLoadResult = {
 };
 
 async function getWorkspaceCount(): Promise<number> {
-  return (await browser.execute(
-    () => (document.querySelectorAll("#workspace-select option").length ?? 0) as number,
-  )) as number;
+  const workspaces = await tauriInvoke<WorkspaceLoadResult["workspace"][]>("list_workspaces");
+  return workspaces.length;
 }
 
 describe("ModuDoc workflows", () => {
@@ -85,7 +84,11 @@ describe("ModuDoc workflows", () => {
     const searchResult = await $(`button*=${workspaceName}`);
     await browser.waitUntil(async () => await searchResult.isDisplayed());
     await safeClick(`button*=${workspaceName}`);
-    await browser.waitUntil(async () => (await $("#workspace-select").getValue()) === workspace.id);
+    await browser.waitUntil(async () => {
+      const trigger = await $("[data-testid='workspace-select-trigger']");
+      const current = await trigger.getAttribute("data-current-workspace-id");
+      return current === workspace.id;
+    });
 
     await tauriInvoke("update_workspace", {
       id: workspace.id,

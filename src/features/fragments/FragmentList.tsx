@@ -10,11 +10,47 @@ export function FragmentList() {
   const dialog = useAppDialog();
   const toast = useToast();
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
   const fragments = useAppStore((state) => state.fragments);
+  const recipeItems = useAppStore((state) => state.recipeItems);
   const activeFragmentId = useAppStore((state) => state.activeFragmentId);
   const setActiveFragment = useAppStore((state) => state.setActiveFragment);
+
   const activeFragments = fragments.filter((fragment) => fragment.deletedAt === null);
-  const deletedFragments = fragments.filter((fragment) => fragment.deletedAt !== null);
+  const deletedFragments = fragments
+    .filter((fragment) => fragment.deletedAt !== null)
+    .slice()
+    .sort((a, b) => {
+      const aTime = a.deletedAt ? Date.parse(a.deletedAt) : 0;
+      const bTime = b.deletedAt ? Date.parse(b.deletedAt) : 0;
+      return bTime - aTime;
+    });
+
+  const activeFragmentOrder = new Map<string, number>();
+  if (activeRecipeId) {
+    recipeItems
+      .filter((item) => item.recipeId === activeRecipeId)
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .forEach((item, index) => {
+        activeFragmentOrder.set(item.fragmentId, index);
+      });
+  }
+
+  const orderedActiveFragments = activeFragments.slice().sort((a, b) => {
+    const aInRecipe = activeFragmentOrder.has(a.id);
+    const bInRecipe = activeFragmentOrder.has(b.id);
+    if (aInRecipe && bInRecipe) {
+      return (activeFragmentOrder.get(a.id) ?? 0) - (activeFragmentOrder.get(b.id) ?? 0);
+    }
+    if (aInRecipe !== bInRecipe) {
+      return aInRecipe ? -1 : 1;
+    }
+    if (a.sortOrder !== b.sortOrder) {
+      return a.sortOrder - b.sortOrder;
+    }
+    return a.name.localeCompare(b.name);
+  });
 
   const handleCreateFragment = async () => {
     if (!activeWorkspaceId) return;
@@ -67,10 +103,7 @@ export function FragmentList() {
       </div>
       <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
         <div style={{ display: "grid", gap: 8 }}>
-          <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-            {t("fragments")}
-          </div>
-          {activeFragments.map((fragment) => (
+          {orderedActiveFragments.map((fragment) => (
             <div
               key={fragment.id}
               style={{

@@ -215,9 +215,6 @@ export function AssemblyBoard() {
         >
           <div>
             <h3 style={{ margin: 0 }}>{t("assembly")}</h3>
-            <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-              {activeRecipe?.name ?? t("no_active_recipe")}
-            </div>
           </div>
           <RecipeSelect />
         </div>

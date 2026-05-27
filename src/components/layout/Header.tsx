@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import brandLogo from "@/assets/modudoc-logo.png";
 import { GlobalSearch } from "@/features/search/GlobalSearch";
-import { SyncStatusBadge } from "@/features/sync/SyncStatusBadge";
 import { tMaybe } from "@/i18n/tMaybe";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveWorkspace } from "@/store/selectors";
@@ -51,11 +50,20 @@ export function Header() {
         </span>
       </div>
       <GlobalSearch />
-      <div style={{ display: "flex", gap: 8, fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          fontSize: 12,
+          color: "hsl(var(--muted-foreground))",
+          alignItems: "center",
+        }}
+      >
         <button
           type="button"
           onClick={() => void i18n.changeLanguage(language === "en" ? "zh" : "en")}
           data-testid="header-language-toggle"
+          style={{ padding: "6px 8px" }}
         >
           {language.toUpperCase()}
         </button>
@@ -63,11 +71,13 @@ export function Header() {
           type="button"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           data-testid="header-theme-toggle"
+          style={{ padding: "6px 8px" }}
         >
           {t("theme")}: {theme}
         </button>
-        <span>{t("settings")}</span>
-        <SyncStatusBadge />
+        <button type="button" data-testid="header-settings" style={{ padding: "6px 8px" }}>
+          {t("settings")}
+        </button>
       </div>
       {workspaceStatusMessage ? (
         <div
@@ -83,7 +93,6 @@ export function Header() {
             border: "1px solid hsl(var(--primary))",
             color: "hsl(var(--foreground))",
             boxShadow: "0 10px 24px rgba(0, 0, 0, 0.14)",
-            pointerEvents: "none",
           }}
         >
           {tMaybe(t, workspaceStatusMessage)}
@@ -96,7 +105,6 @@ export function Header() {
               border: 0,
               background: "transparent",
               color: "hsl(var(--muted-foreground))",
-              pointerEvents: "auto",
             }}
             aria-label={t("close")}
             data-testid="workspace-status-close"
