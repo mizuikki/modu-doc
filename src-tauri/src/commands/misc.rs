@@ -15,5 +15,15 @@ pub async fn open_target_in_file_manager(
     let Some(target_path) = workspace.target_path else {
         return Err("invalid_target_path".into());
     };
+
+    // During e2e we only assert the command path doesn't error; actually opening a file manager
+    // window makes cleanup flaky (and can show "file not found" dialogs after temp cleanup).
+    if std::env::var("MODUDOC_E2E_SKIP_REVEAL")
+        .ok()
+        .is_some_and(|value| value.trim() == "1")
+    {
+        return Ok(());
+    }
+
     reveal_item_in_dir(Path::new(&target_path)).map_err(crate::error::normalize_error)
 }

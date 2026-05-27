@@ -601,15 +601,16 @@ export const config: Options.WebdriverIO = {
   autoXvfb: true,
   xvfbAutoInstall: false,
   outputDir: (() => {
-    const root = process.env.MODUDOC_E2E_ROOT || path.join(projectRoot, "tmp", "modudoc-e2e");
-    const dataDir = buildE2eDataDir();
-    const outputDir = process.env.MODUDOC_E2E_OUTPUT_DIR || path.join(dataDir, "logs");
-    process.env.MODUDOC_DATA_DIR ||= dataDir;
-    process.env.MODUDOC_E2E_OUTPUT_DIR ||= outputDir;
-    process.env.MODUDOC_E2E_RUN_DIR ||= dataDir;
-    mkdirSync(outputDir, { recursive: true });
-    mkdirSync(root, { recursive: true });
-    pruneOldRuns(root, 3);
+     const root = process.env.MODUDOC_E2E_ROOT || path.join(projectRoot, "tmp", "modudoc-e2e");
+     const dataDir = buildE2eDataDir();
+     const outputDir = process.env.MODUDOC_E2E_OUTPUT_DIR || path.join(dataDir, "logs");
+     process.env.MODUDOC_DATA_DIR ||= dataDir;
+     process.env.MODUDOC_E2E_SKIP_REVEAL ||= "1";
+     process.env.MODUDOC_E2E_OUTPUT_DIR ||= outputDir;
+     process.env.MODUDOC_E2E_RUN_DIR ||= dataDir;
+     mkdirSync(outputDir, { recursive: true });
+     mkdirSync(root, { recursive: true });
+     pruneOldRuns(root, 3);
     return process.env.MODUDOC_E2E_OUTPUT_DIR;
   })(),
   waitforTimeout: 20000,
