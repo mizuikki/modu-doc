@@ -20,11 +20,12 @@ describe("Workspace preview", () => {
       // Best-effort smoke check: ensure the app is still responsive after invoking.
       await safeClick("[data-testid='main-tab-edit']");
     } finally {
-      if (process.env.MODUDOC_E2E_KEEP_TEMP === "1") return;
-      try {
-        await rm(tempDir, { recursive: true, force: true });
-      } catch {
-        // ignore best-effort cleanup failures (e.g. Windows file locking)
+      if (process.env.MODUDOC_E2E_KEEP_TEMP !== "1") {
+        try {
+          await rm(tempDir, { recursive: true, force: true });
+        } catch {
+          // ignore best-effort cleanup failures (e.g. Windows file locking)
+        }
       }
     }
   });

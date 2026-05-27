@@ -1,7 +1,7 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 
 function log(message) {
   // eslint-disable-next-line no-console
@@ -76,9 +76,10 @@ if (isWindows) {
   // Non-Windows environments generally rely on system-provided WebDriver binaries + tauri-driver in PATH.
   const cargoBin = path.join(os.homedir(), ".cargo", "bin", "tauri-driver");
   log("Non-Windows platform detected.");
-  log("Ensure `tauri-driver` is available (e.g. in PATH) and native WebDriver dependencies are installed.");
+  log(
+    "Ensure `tauri-driver` is available (e.g. in PATH) and native WebDriver dependencies are installed.",
+  );
   log(`Hint: typical cargo bin path is ${cargoBin}`);
 }
 
 log("Done.");
-

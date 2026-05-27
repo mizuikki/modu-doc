@@ -1,7 +1,7 @@
 import { browser, expect } from "@wdio/globals";
+import { tauriInvoke } from "../support/tauri";
 import { safeSetValue } from "../support/ui";
 import { createAndSelectWorkspace, deleteWorkspace } from "../support/workspace";
-import { tauriInvoke } from "../support/tauri";
 
 describe("Workspaces", () => {
   it("deletes a workspace and removes it from UI", async () => {

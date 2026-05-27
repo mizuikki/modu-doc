@@ -50,6 +50,5 @@ describe("Global search", () => {
     await safeClick(`[data-testid='global-search-result-snapshot-${snapshot.id}']`);
     await expect($("[data-testid='history-create-snapshot']")).toBeDisplayed();
     await expect($(`[data-testid='history-snapshot-${snapshot.id}']`)).toBeDisplayed();
-
   });
 });
