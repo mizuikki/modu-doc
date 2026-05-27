@@ -333,11 +333,43 @@ function buildE2eDataDir() {
     return process.env.MODUDOC_E2E_RUN_DIR;
   }
   const root = process.env.MODUDOC_E2E_ROOT || path.join(projectRoot, "tmp", "modudoc-e2e");
-  const runId =
-    process.env.GITHUB_RUN_ID ||
-    process.env.CI_RUN_ID ||
-    process.env.CI_JOB_ID ||
-    `${Date.now()}-${process.pid}`;
+  const sanitizeRunId = (value: string) =>
+    value
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-zA-Z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "")
+      .slice(0, 120);
+
+  const explicitRunId = (process.env.MODUDOC_E2E_RUN_ID ?? "").trim();
+  if (explicitRunId) {
+    const runId = sanitizeRunId(explicitRunId) || `local-${process.pid}`;
+    return path.join(root, `run-${runId}`);
+  }
+
+  const isGitHubActions = (process.env.GITHUB_ACTIONS ?? "").toLowerCase() === "true";
+  if (isGitHubActions && process.env.GITHUB_RUN_ID) {
+    const id = sanitizeRunId(process.env.GITHUB_RUN_ID);
+    const attempt = sanitizeRunId(process.env.GITHUB_RUN_ATTEMPT ?? "1");
+    const job = sanitizeRunId(process.env.GITHUB_JOB ?? "job");
+    const runId = [id, `a${attempt}`, job].filter(Boolean).join("-");
+    return path.join(root, `run-${runId}`);
+  }
+
+  const ciJobId = sanitizeRunId(process.env.CI_JOB_ID ?? "");
+  if (ciJobId) {
+    return path.join(root, `run-${ciJobId}`);
+  }
+
+  const ciRunId = sanitizeRunId(process.env.CI_RUN_ID ?? "");
+  if (ciRunId) {
+    return path.join(root, `run-${ciRunId}`);
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const rand = Math.random().toString(36).slice(2, 8);
+  const runId = sanitizeRunId(`${timestamp}-pid${process.pid}-${rand}`) || `${Date.now()}-${process.pid}`;
   return path.join(root, `run-${runId}`);
 }
 
