@@ -911,6 +911,13 @@ export const config: Options.WebdriverIO = {
     const width = resolveNumberEnv("MODUDOC_E2E_WINDOW_WIDTH") ?? 1280;
     const height = resolveNumberEnv("MODUDOC_E2E_WINDOW_HEIGHT") ?? 900;
 
+    // Resizing the window via WebDriver can leave unpainted/blank regions in WebView2 when
+    // using the tauri-driver strategy on Windows. The app already boots with a stable size
+    // from `src-tauri/tauri.conf.json`, so skip programmatic resizing by default.
+    if (process.platform === "win32" && windowsDriverStrategy === "tauri-driver") {
+      return;
+    }
+
     try {
       await browser.setWindowSize(width, height);
       return;

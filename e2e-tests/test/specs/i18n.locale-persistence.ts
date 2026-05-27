@@ -63,7 +63,11 @@ describe("i18n", () => {
 
     // Restart the app session; language should still be ZH.
     await browser.reloadSession();
-    await browser.setWindowSize(1280, 900);
+    // WebView2 can render blank/unpainted regions after WebDriver window resizes on Windows.
+    // The window starts at a stable size already; only resize on non-Windows platforms.
+    if (process.platform !== "win32") {
+      await browser.setWindowSize(1280, 900);
+    }
 
     await browser.waitUntil(async () => (await readLocalStorage("i18nextLng")) === "zh", {
       timeout: 40000,
