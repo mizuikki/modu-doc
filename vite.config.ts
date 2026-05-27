@@ -11,4 +11,11 @@ export default defineConfig({
       "@": resolve(__dirname, "src"),
     },
   },
+  server: {
+    watch: {
+      // Tauri's Rust build outputs Windows binaries under `src-tauri/target/**` that can be locked
+      // during compilation, which can crash Vite's watcher with EBUSY on Windows.
+      ignored: ["**/src-tauri/target/**"],
+    },
+  },
 });
