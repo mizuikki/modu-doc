@@ -13,7 +13,10 @@ describe("Fragments", () => {
     await safeSetValue("[data-testid='app-prompt-input']", fragmentName);
     await safeClick("[data-testid='app-dialog-confirm']");
 
-    await safeClick(`button*=${fragmentName}`);
+    const bundleForSelect = await loadWorkspace(workspace.id);
+    const created = bundleForSelect.fragments.find((entry) => entry.name === fragmentName);
+    if (!created) throw new Error("fragment not created");
+    await safeClick(`[data-testid='fragment-select-${created.id}']`);
     await browser.waitUntil(
       async () => (await $("label[for='fragment-editor']").getText()).includes(fragmentName),
       {

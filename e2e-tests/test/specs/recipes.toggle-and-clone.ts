@@ -29,22 +29,20 @@ describe("Recipes", () => {
     await expect($(`strong=${alpha}`)).toBeDisplayed();
     await expect($(`strong=${beta}`)).toBeDisplayed();
 
-    const betaToggle = await $(
-      `//strong[normalize-space()="${beta}"]/ancestor::div[contains(@style,"border-radius")][1]//button[contains(.,"Disable")]`,
-    );
-    await betaToggle.waitForExist({ timeout: 20000 });
-    await safeClick(
-      `//strong[normalize-space()="${beta}"]/ancestor::div[contains(@style,"border-radius")][1]//button[contains(.,"Disable")]`,
-    );
+    const bundle = await loadWorkspace(workspace.id);
+    const betaFragment = bundle.fragments.find((fragment) => fragment.name === beta);
+    if (!betaFragment) throw new Error("missing Beta fragment");
 
-    await safeClick("button*=Preview");
+    await safeClick(`[data-testid='recipe-item-toggle-${betaFragment.id}']`);
+
+    await safeClick("[data-testid='main-tab-preview']");
     await expect($("p*=A")).toBeDisplayed();
     await expect($("p*=C")).toBeDisplayed();
     await expect($("p*=B")).not.toBeExisting();
 
-    await safeClick("button*=Edit");
+    await safeClick("[data-testid='main-tab-edit']");
 
-    await safeClick("button*=Save as new recipe");
+    await safeClick("[data-testid='recipe-save-as-new']");
     const clonedName = `Cloned ${Date.now()}`;
     await safeSetValue("[data-testid='app-prompt-input']", clonedName);
     await safeClick("[data-testid='app-dialog-confirm']");

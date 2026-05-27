@@ -226,7 +226,12 @@ export function AssemblyBoard() {
           {currentRecipeItems.length}
         </div>
       </div>
-      <button type="button" onClick={cloneRecipe} disabled={!currentRecipeItems.length}>
+      <button
+        type="button"
+        onClick={cloneRecipe}
+        disabled={!currentRecipeItems.length}
+        data-testid="recipe-save-as-new"
+      >
         {t("save_as_new_recipe")}
       </button>
       <DndContext

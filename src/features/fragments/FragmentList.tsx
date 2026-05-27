@@ -89,6 +89,7 @@ export function FragmentList() {
               <button
                 type="button"
                 onClick={() => setActiveFragment(fragment.id)}
+                data-testid={`fragment-select-${fragment.id}`}
                 style={{
                   border: 0,
                   background: "transparent",

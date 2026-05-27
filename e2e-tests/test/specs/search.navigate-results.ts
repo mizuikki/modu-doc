@@ -10,11 +10,12 @@ describe("Global search", () => {
     const workspace = await createAndSelectWorkspace({ name: workspaceName, targetPath: null });
 
     const fragmentName = `Fragment ${keyword}`;
-    await tauriInvoke("create_fragment", {
+    const fragment = await tauriInvoke<{ id: string }>("create_fragment", {
       workspaceId: workspace.id,
       name: fragmentName,
       content: `content ${keyword}`,
     });
+    expect(fragment.id).toBeTruthy();
 
     const recipeName = `Recipe ${keyword}`;
     const recipe = await tauriInvoke<{ id: string }>("create_recipe", {
@@ -22,11 +23,16 @@ describe("Global search", () => {
       name: recipeName,
       description: "",
     });
+    expect(recipe.id).toBeTruthy();
 
-    await tauriInvoke("create_snapshot", { workspaceId: workspace.id, label: `Snap ${keyword}` });
+    const snapshot = await tauriInvoke<{ id: string }>("create_snapshot", {
+      workspaceId: workspace.id,
+      label: `Snap ${keyword}`,
+    });
+    expect(snapshot.id).toBeTruthy();
 
     await safeSetValue("[data-testid='global-search-input']", keyword);
-    await safeClick(`button*=${fragmentName}`);
+    await safeClick(`[data-testid='global-search-result-fragment-${fragment.id}']`);
     await browser.waitUntil(
       async () => (await $("label[for='fragment-editor']").getText()).includes(fragmentName),
       {
@@ -36,14 +42,14 @@ describe("Global search", () => {
     );
 
     await safeSetValue("[data-testid='global-search-input']", keyword);
-    await safeClick(`button*=${recipeName}`);
+    await safeClick(`[data-testid='global-search-result-recipe-${recipe.id}']`);
+    await expect($(`[data-testid='main-tab-edit']`)).toBeDisplayed();
     await expect($(`div*=${recipeName}`)).toBeDisplayed();
 
     await safeSetValue("[data-testid='global-search-input']", keyword);
-    await safeClick(`button*=Snap ${keyword}`);
-    await expect($("button*=Create snapshot")).toBeDisplayed();
-    await expect($(`div*=Snap ${keyword}`)).toBeDisplayed();
+    await safeClick(`[data-testid='global-search-result-snapshot-${snapshot.id}']`);
+    await expect($("[data-testid='history-create-snapshot']")).toBeDisplayed();
+    await expect($(`[data-testid='history-snapshot-${snapshot.id}']`)).toBeDisplayed();
 
-    expect(recipe.id).toBeTruthy();
   });
 });

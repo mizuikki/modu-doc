@@ -9,10 +9,21 @@ describe("History", () => {
     const workspace = await createAndSelectWorkspace({ name: workspaceName, targetPath: null });
 
     const fragmentName = `Snapshot fragment ${Date.now()}`;
-    await safeClick("button*=New fragment");
+    await safeClick("[data-testid='fragments-new']");
     await safeSetValue("[data-testid='app-prompt-input']", fragmentName);
     await safeClick("[data-testid='app-dialog-confirm']");
-    await safeClick(`button*=${fragmentName}`);
+
+    await browser.waitUntil(
+      async () => {
+        const bundle = await loadWorkspace(workspace.id);
+        return bundle.fragments.some((entry) => entry.name === fragmentName);
+      },
+      { timeout: 20000, interval: 200 },
+    );
+    const bundleAfterCreate = await loadWorkspace(workspace.id);
+    const created = bundleAfterCreate.fragments.find((entry) => entry.name === fragmentName);
+    if (!created) throw new Error("fragment not created");
+    await safeClick(`[data-testid='fragment-select-${created.id}']`);
 
     await setFragmentEditorContent("v1");
     await browser.waitUntil(
@@ -24,8 +35,8 @@ describe("History", () => {
       { timeout: 30000, interval: 250 },
     );
 
-    await safeClick("button*=History");
-    await safeClick("button*=Create snapshot");
+    await safeClick("[data-testid='main-tab-history']");
+    await safeClick("[data-testid='history-create-snapshot']");
 
     await browser.waitUntil(
       async () => {
@@ -35,7 +46,7 @@ describe("History", () => {
       { timeout: 20000, interval: 250 },
     );
 
-    await safeClick("button*=Edit");
+    await safeClick("[data-testid='main-tab-edit']");
     await setFragmentEditorContent("v2");
     await browser.waitUntil(
       async () => {
@@ -46,7 +57,7 @@ describe("History", () => {
       { timeout: 30000, interval: 250 },
     );
 
-    await safeClick("button*=History");
+    await safeClick("[data-testid='main-tab-history']");
     await browser.waitUntil(async () => await $("pre*=- v1").isDisplayed(), {
       timeout: 20000,
       interval: 250,
@@ -54,7 +65,10 @@ describe("History", () => {
     await expect($("pre*=- v1")).toBeDisplayed();
     await expect($("pre*=+ v2")).toBeDisplayed();
 
-    await safeClick("button*=Restore");
+    const bundleForRestore = await loadWorkspace(workspace.id);
+    const snapshot = bundleForRestore.snapshots?.[0];
+    if (!snapshot) throw new Error("snapshot missing");
+    await safeClick(`[data-testid='history-snapshot-restore-${snapshot.id}']`);
 
     await browser.waitUntil(
       async () => {

@@ -18,19 +18,19 @@ describe("Fragments", () => {
     }
     await safeClick(`[data-testid='fragment-delete-${fragment.id}']`);
 
-    await browser.waitUntil(async () => !(await $(`button*=${fragmentName}`).isExisting()), {
+    await browser.waitUntil(async () => !(await $(`[data-testid='fragment-select-${fragment.id}']`).isExisting()), {
       timeout: 20000,
       interval: 200,
     });
 
     await safeClick(`[data-testid='fragment-restore-${fragment.id}']`);
 
-    await browser.waitUntil(async () => await $(`button*=${fragmentName}`).isExisting(), {
+    await browser.waitUntil(async () => await $(`[data-testid='fragment-select-${fragment.id}']`).isExisting(), {
       timeout: 20000,
       interval: 200,
     });
 
-    await safeClick(`button*=${fragmentName}`);
+    await safeClick(`[data-testid='fragment-select-${fragment.id}']`);
     await browser.waitUntil(
       async () => (await $("label[for='fragment-editor']").getText()).includes(fragmentName),
       {

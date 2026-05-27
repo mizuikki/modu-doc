@@ -26,7 +26,7 @@ describe("Sync", () => {
 
     await writeFile(targetPath, "External change\n", "utf8");
 
-    await safeClick("button*=Backup then overwrite", 40000);
+    await safeClick("[data-testid='conflict-backup-then-overwrite']", 40000);
 
     await browser.waitUntil(
       async () => (await readFile(targetPath, "utf8")).includes("Intro body"),
