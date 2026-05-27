@@ -26,7 +26,20 @@ const appName = "modudoc";
 const appBinary = process.platform === "win32" ? `${appName}.exe` : appName;
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(configDir, "..");
-const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+function runTauriCli(args: string[]) {
+  const tauriCliEntry = path.resolve(projectRoot, "node_modules", "@tauri-apps", "cli", "tauri.js");
+  if (!existsSync(tauriCliEntry)) {
+    throw new Error(`Unable to locate @tauri-apps/cli entry at ${JSON.stringify(tauriCliEntry)}`);
+  }
+
+  const result = spawnSync(process.execPath, [tauriCliEntry, ...args], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    shell: false,
+  });
+
+  return result;
+}
 
 const isWindows = process.platform === "win32";
 
@@ -529,6 +542,19 @@ function resolveTauriDriverBin() {
   );
 }
 
+function resolveWindowsWebview2UserDataFolder() {
+  if (!isWindows) return undefined;
+
+  // Make WebView2 storage deterministic across `browser.reloadSession()` calls. Otherwise the
+  // native WebDriver will create a temporary user data folder and localStorage (i18n cache) can
+  // appear to reset between sessions.
+  //
+  // EdgeDriver supports `ms:edgeOptions.webviewOptions.userDataFolder`.
+  // See Microsoft docs: `webviewOptions.userDataFolder` creates/reuses the profile directory.
+  const base = process.env.MODUDOC_E2E_RUN_DIR || process.env.MODUDOC_DATA_DIR || buildE2eDataDir();
+  return path.join(base, "webview2-user-data");
+}
+
 export const config: Options.WebdriverIO = {
   runner: "local",
   hostname: "127.0.0.1",
@@ -578,7 +604,18 @@ export const config: Options.WebdriverIO = {
           "wdio:enforceWebDriverClassic": true,
           "tauri:options": {
             application,
-            webviewOptions: {},
+            webviewOptions: (() => {
+              if (!isWindows) return {};
+
+              const userDataFolder = resolveWindowsWebview2UserDataFolder();
+              if (!userDataFolder) return {};
+              try {
+                mkdirSync(userDataFolder, { recursive: true });
+              } catch {
+                // ignore
+              }
+              return { userDataFolder };
+            })(),
           },
         },
       ],
@@ -685,11 +722,7 @@ export const config: Options.WebdriverIO = {
           },
         );
       } else {
-        const build = spawnSync(npxCommand, ["--no-install", "tauri", "build", "--no-bundle"], {
-          cwd: projectRoot,
-          stdio: "inherit",
-          shell: false,
-        });
+        const build = runTauriCli(["build", "--no-bundle"]);
         // eslint-disable-next-line no-console
         console.log(
           `[MODUDOC_E2E] tauri build exit=${build.status ?? "null"} error=${build.error ? String(build.error) : ""}`,
