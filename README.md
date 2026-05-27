@@ -120,6 +120,7 @@ npm run format
 End-to-end tests are available through WebdriverIO:
 
 ```bash
+npm run e2e:setup
 npm run e2e
 ```
 
@@ -136,6 +137,13 @@ If you're on Wayland, `npm run e2e:xvfb` forces the X11 backend (`GDK_BACKEND=x1
 By default, each e2e run writes runner logs under `tmp/modudoc-e2e/run-*/logs/` and automatically keeps only the most recent 3 runs.
 
 If you need to avoid WebDriver port conflicts with other projects, you can override the ports used by `tauri-driver`/WebdriverIO via `MODUDOC_E2E_WD_PORT` and `MODUDOC_E2E_WD_NATIVE_PORT`.
+
+On Windows, e2e requires `tauri-driver` and `msedgedriver.exe` (Edge WebDriver). The runner will:
+
+- Use `TAURI_DRIVER_PATH` if set; otherwise it will try to locate `tauri-driver` on PATH, and finally fall back to building the vendored driver in `tools/tauri-driver`.
+- Use `MSEDGEDRIVER_PATH` if set; otherwise it will try to locate `msedgedriver.exe` on PATH, and finally fall back to downloading a matching driver into `tmp/modudoc-e2e/drivers/`.
+
+If you want to pre-warm these dependencies (recommended for fresh Windows environments or offline-friendly setup), run `npm run e2e:setup`.
 
 The i18n locale persistence check is covered by `e2e-tests/test/specs/i18n.locale-persistence.ts`.
 

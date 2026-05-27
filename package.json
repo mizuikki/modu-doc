@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "e2e": "wdio run e2e-tests/wdio.conf.ts",
+    "e2e:setup": "node scripts/e2e-setup.mjs",
     "e2e:xvfb": "env -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE GDK_BACKEND=x11 MODUDOC_E2E_DIAG=1 xvfb-run --auto-servernum -- wdio run e2e-tests/wdio.conf.ts"
   },
   "dependencies": {

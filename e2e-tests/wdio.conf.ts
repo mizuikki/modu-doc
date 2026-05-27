@@ -26,7 +26,16 @@ const appName = "modudoc";
 const appBinary = process.platform === "win32" ? `${appName}.exe` : appName;
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(configDir, "..");
-const npxCommand = "npx";
+const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+
+const isWindows = process.platform === "win32";
+
+let cachedMsEdgeDriverBin: string | undefined;
+let cachedTauriDriverBin: string | undefined;
+
+function withPlatformExeSuffix(basename: string) {
+  return isWindows && !basename.toLowerCase().endsWith(".exe") ? `${basename}.exe` : basename;
+}
 
 function resolveE2eMode(): E2eMode {
   const raw = (process.env.MODUDOC_E2E_MODE ?? "").trim().toLowerCase();
@@ -169,8 +178,13 @@ function resolveConfiguredAppBinaryPath(): string {
 }
 
 function resolveMsEdgeDriverBin() {
+  if (cachedMsEdgeDriverBin && existsSync(cachedMsEdgeDriverBin)) {
+    return cachedMsEdgeDriverBin;
+  }
+
   const override = process.env.MSEDGEDRIVER_PATH || process.env.MSEDGEDRIVER_BIN;
   if (override && existsSync(override)) {
+    cachedMsEdgeDriverBin = override;
     return override;
   }
   const result = spawnSync("where", ["msedgedriver"], {
@@ -184,11 +198,45 @@ function resolveMsEdgeDriverBin() {
       .map((line) => line.trim())
       .find(Boolean);
     if (resolved && existsSync(resolved)) {
+      cachedMsEdgeDriverBin = resolved;
       return resolved;
     }
   }
+
+  // Try to download a matching driver via the (already lockfile-pinned) `edgedriver` npm package.
+  // This avoids requiring manual PATH setup on fresh Windows environments.
+  const e2eRoot = process.env.MODUDOC_E2E_ROOT || path.join(projectRoot, "tmp", "modudoc-e2e");
+  const cacheDir = path.join(e2eRoot, "drivers");
+  try {
+    mkdirSync(cacheDir, { recursive: true });
+  } catch {
+    // ignore
+  }
+
+  const download = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `import('edgedriver').then(m=>m.download(undefined,${JSON.stringify(
+        cacheDir,
+      )}).then(p=>{console.log(String(p||''))}).catch(e=>{console.error(e?.stack||String(e));process.exit(1);})).catch(e=>{console.error(e?.stack||String(e));process.exit(1);});`,
+    ],
+    { cwd: projectRoot, encoding: "utf8", shell: false },
+  );
+  if (download.status === 0) {
+    const downloadedPath = (download.stdout || "")
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)[0];
+    if (downloadedPath && existsSync(downloadedPath)) {
+      cachedMsEdgeDriverBin = downloadedPath;
+      return downloadedPath;
+    }
+  }
+
   throw new Error(
-    "Unable to locate msedgedriver.exe. Ensure it is on PATH or set MSEDGEDRIVER_PATH.",
+    "Unable to locate msedgedriver.exe. Ensure it is on PATH, set MSEDGEDRIVER_PATH, or ensure the `edgedriver` npm package can download it.",
   );
 }
 
@@ -404,8 +452,13 @@ function registerCleanupHandlers() {
 }
 
 function resolveTauriDriverBin() {
+  if (cachedTauriDriverBin && existsSync(cachedTauriDriverBin)) {
+    return cachedTauriDriverBin;
+  }
+
   const override = process.env.TAURI_DRIVER_PATH || process.env.TAURI_DRIVER_BIN;
   if (override && existsSync(override)) {
+    cachedTauriDriverBin = override;
     return override;
   }
   const locator = process.platform === "win32" ? "where" : "which";
@@ -420,14 +473,60 @@ function resolveTauriDriverBin() {
       .map((entry) => entry.trim())
       .find(Boolean);
     if (resolved && existsSync(resolved)) {
+      cachedTauriDriverBin = resolved;
       return resolved;
     }
   }
-  const cargoBin = path.resolve(os.homedir(), ".cargo", "bin", "tauri-driver");
+
+  const cargoBin = path.resolve(os.homedir(), ".cargo", "bin", withPlatformExeSuffix("tauri-driver"));
   if (existsSync(cargoBin)) {
+    cachedTauriDriverBin = cargoBin;
     return cargoBin;
   }
-  throw new Error("Unable to locate tauri-driver. Set TAURI_DRIVER_PATH to override.");
+
+  const localRelease = path.resolve(
+    projectRoot,
+    "tools",
+    "tauri-driver",
+    "target",
+    "release",
+    withPlatformExeSuffix("tauri-driver"),
+  );
+  if (existsSync(localRelease)) {
+    cachedTauriDriverBin = localRelease;
+    return localRelease;
+  }
+
+  const localDebug = path.resolve(
+    projectRoot,
+    "tools",
+    "tauri-driver",
+    "target",
+    "debug",
+    withPlatformExeSuffix("tauri-driver"),
+  );
+  if (existsSync(localDebug)) {
+    cachedTauriDriverBin = localDebug;
+    return localDebug;
+  }
+
+  // Last resort: build the vendored tauri-driver (requires Rust toolchain).
+  const toolsManifest = path.resolve(projectRoot, "tools", "tauri-driver", "Cargo.toml");
+  if (existsSync(toolsManifest)) {
+    const build = spawnSync(
+      "cargo",
+      ["build", "--manifest-path", toolsManifest, "--release"],
+      { cwd: projectRoot, stdio: "inherit", shell: false },
+    );
+    if (build.status === 0 && existsSync(localRelease)) {
+      cachedTauriDriverBin = localRelease;
+      return localRelease;
+    }
+  }
+
+  throw new Error(
+    "Unable to locate tauri-driver. Set TAURI_DRIVER_PATH to override or build it via `cargo build --manifest-path tools/tauri-driver/Cargo.toml --release`.",
+  );
 }
 
 export const config: Options.WebdriverIO = {
@@ -589,7 +688,7 @@ export const config: Options.WebdriverIO = {
         const build = spawnSync(npxCommand, ["--no-install", "tauri", "build", "--no-bundle"], {
           cwd: projectRoot,
           stdio: "inherit",
-          shell: process.platform === "win32",
+          shell: false,
         });
         // eslint-disable-next-line no-console
         console.log(
@@ -635,9 +734,16 @@ export const config: Options.WebdriverIO = {
     registerCleanupHandlers();
 
     if (!windowsAttachEnabled) {
+      const msEdgeDriver = isWindows ? resolveMsEdgeDriverBin() : undefined;
       tauriDriver = spawn(
         resolveTauriDriverBin(),
-        ["--port", String(tauriDriverPort), "--native-port", String(tauriNativePort)],
+        [
+          "--port",
+          String(tauriDriverPort),
+          "--native-port",
+          String(tauriNativePort),
+          ...(msEdgeDriver ? ["--native-driver", msEdgeDriver] : []),
+        ],
         {
           stdio: ["ignore", "pipe", "pipe"],
           shell: false,
@@ -645,6 +751,16 @@ export const config: Options.WebdriverIO = {
       );
       if (process.env.MODUDOC_E2E_OUTPUT_DIR && tauriDriver) {
         teeChildOutput(tauriDriver, process.env.MODUDOC_E2E_OUTPUT_DIR, "tauri-driver.log");
+      }
+
+      // Wait for tauri-driver to accept connections before WDIO creates a session.
+      waitForTcpPort("127.0.0.1", tauriDriverPort, 30000);
+      try {
+        const status = fetchWebDriverStatus("127.0.0.1", tauriDriverPort);
+        // eslint-disable-next-line no-console
+        console.log(`[tauri-driver] status: ${status}`);
+      } catch {
+        // ignore status failures (port open is usually sufficient)
       }
       return;
     }
