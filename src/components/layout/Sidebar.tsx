@@ -90,10 +90,22 @@ export function Sidebar() {
   };
 
   return (
-    <div style={{ padding: 16 }}>
+    <div className="panel-scroll" style={{ padding: 16 }}>
       <WorkspaceSelect />
       <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-        <button type="button" onClick={handleCreateWorkspace} data-testid="sidebar-new-workspace">
+        <button
+          type="button"
+          onClick={handleCreateWorkspace}
+          data-testid="sidebar-new-workspace"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
           {t("new_workspace")}
         </button>
         <WorkspaceSettingsDialog />
@@ -102,6 +114,14 @@ export function Sidebar() {
           onClick={handleImportMarkdown}
           disabled={!activeWorkspaceId}
           data-testid="sidebar-import-markdown"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
         >
           {t("import_markdown")}
         </button>
@@ -110,21 +130,77 @@ export function Sidebar() {
           onClick={handleExportPackage}
           disabled={!activeWorkspaceId}
           data-testid="sidebar-export-package"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
         >
           {t("export_package")}
         </button>
-        <button type="button" onClick={handleImportPackage} data-testid="sidebar-import-package">
+        <button
+          type="button"
+          onClick={handleImportPackage}
+          data-testid="sidebar-import-package"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
           {t("import_package")}
         </button>
       </div>
       <nav style={{ marginTop: 16, display: "grid", gap: 8 }}>
-        <button type="button" onClick={() => setActiveMainTab("edit")} data-testid="nav-assembly">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("edit")}
+          data-testid="nav-assembly"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
           {t("assembly")}
         </button>
-        <button type="button" onClick={() => setActiveMainTab("preview")} data-testid="nav-preview">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("preview")}
+          data-testid="nav-preview"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
           {t("fragments")}
         </button>
-        <button type="button" onClick={() => setActiveMainTab("history")} data-testid="nav-history">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("history")}
+          data-testid="nav-history"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
           {t("history")}
         </button>
       </nav>

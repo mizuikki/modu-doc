@@ -49,11 +49,13 @@ describe("Recipes", () => {
 
     await browser.waitUntil(
       async () => {
-        const recipeSelect = await $("[data-testid='recipe-select']");
-        const options = await recipeSelect.$$("option");
-        for (const option of options as unknown as WebdriverIO.Element[]) {
-          if ((await option.getText()) === clonedName) return true;
+        await safeClick("[data-testid='recipe-select']", 30000);
+        const items = await $$("[data-testid^='recipe-select-item-']");
+        for (const item of items as unknown as WebdriverIO.Element[]) {
+          const text = await item.getText();
+          if (text === clonedName) return true;
         }
+        await safeClick("[data-testid='recipe-select']", 30000);
         return false;
       },
       { timeout: 30000, interval: 250 },

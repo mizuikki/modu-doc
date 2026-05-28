@@ -60,7 +60,19 @@ export function WorkspaceSettingsDialog() {
       }}
     >
       <Dialog.Trigger asChild>
-        <button type="button" disabled={!activeWorkspaceId} data-testid="workspace-settings-open">
+        <button
+          type="button"
+          disabled={!activeWorkspaceId}
+          data-testid="workspace-settings-open"
+          style={{
+            textAlign: "left",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
           {t("workspace_settings")}
         </button>
       </Dialog.Trigger>

@@ -24,19 +24,36 @@ export function MainPanel() {
       style={{
         display: "grid",
         gridTemplateRows: "48px minmax(0, 1fr)",
-        minHeight: "100%",
+        minHeight: 0,
+        height: "100%",
         cursor: isResizing ? "col-resize" : undefined,
         userSelect: isResizing ? "none" : undefined,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", padding: "0 16px", gap: 12 }}>
-        <button type="button" onClick={() => setActiveMainTab("edit")} data-testid="main-tab-edit">
+      <div style={{ display: "flex", alignItems: "center", padding: "0 16px", gap: 10 }}>
+        <button
+          type="button"
+          onClick={() => setActiveMainTab("edit")}
+          data-testid="main-tab-edit"
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: activeMainTab === "edit" ? "hsl(var(--muted))" : "hsl(var(--card))",
+          }}
+        >
           {t("edit")}
         </button>
         <button
           type="button"
           onClick={() => setActiveMainTab("preview")}
           data-testid="main-tab-preview"
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: activeMainTab === "preview" ? "hsl(var(--muted))" : "hsl(var(--card))",
+          }}
         >
           {t("preview_tab")}
         </button>
@@ -44,20 +61,44 @@ export function MainPanel() {
           type="button"
           onClick={() => setActiveMainTab("history")}
           data-testid="main-tab-history"
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: activeMainTab === "history" ? "hsl(var(--muted))" : "hsl(var(--card))",
+          }}
         >
           {t("history_tab")}
         </button>
         {activeMainTab === "edit" ? (
-          <button type="button" onClick={() => setSplitRatio(0.5)}>
+          <button
+            type="button"
+            onClick={() => setSplitRatio(0.5)}
+            style={{
+              marginLeft: 6,
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: "1px solid hsl(var(--border))",
+              background: "hsl(var(--card))",
+            }}
+          >
             {t("reset_split")}
           </button>
         ) : null}
         <span style={{ marginLeft: "auto" }} />
       </div>
-      <div style={{ minHeight: 0, display: "grid", gap: 12, padding: 16 }}>
+      <div style={{ display: "grid", gap: 12, padding: 16, minHeight: 0, overflow: "hidden" }}>
         <ConflictBanner />
         {activeMainTab === "edit" ? (
-          <div style={{ display: "grid", gap: 12, gridTemplateRows: "minmax(280px, 1fr) auto" }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateRows: "minmax(0, 1fr) minmax(220px, auto)",
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
             <div
               data-main-split
               ref={splitPaneRef}
@@ -140,12 +181,18 @@ export function MainPanel() {
               </button>
               <FragmentPreview />
             </div>
-            <FragmentList />
+            <div style={{ minHeight: 0, overflow: "hidden" }}>
+              <FragmentList />
+            </div>
           </div>
         ) : null}
-        {activeMainTab === "preview" ? <WorkspacePreview /> : null}
+        {activeMainTab === "preview" ? (
+          <div className="panel-scroll">
+            <WorkspacePreview />
+          </div>
+        ) : null}
         {activeMainTab === "history" ? (
-          <div style={{ display: "grid", gap: 16 }}>
+          <div className="panel-scroll" style={{ display: "grid", gap: 16 }}>
             <SnapshotTimeline />
             <SnapshotDiff />
           </div>

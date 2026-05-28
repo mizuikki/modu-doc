@@ -202,9 +202,15 @@ export function AssemblyBoard() {
     );
   };
 
+  const enabledCount = currentRecipeItems.filter((item) => item.enabled).length;
+
   return (
-    <div style={{ padding: 16, display: "grid", gap: 16 }}>
-      <div style={{ display: "grid", gap: 8 }}>
+    <div className="panel-scroll" style={{ padding: 16, display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>{t("assembly")}</h3>
+          <RecipeSelect />
+        </div>
         <div
           style={{
             display: "flex",
@@ -213,24 +219,25 @@ export function AssemblyBoard() {
             gap: 12,
           }}
         >
-          <div>
-            <h3 style={{ margin: 0 }}>{t("assembly")}</h3>
+          <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+            {t("compile")}: {enabledCount} / {currentRecipeItems.length}
           </div>
-          <RecipeSelect />
-        </div>
-        <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-          {t("compile")}: {currentRecipeItems.filter((item) => item.enabled).length} /{" "}
-          {currentRecipeItems.length}
+          <button
+            type="button"
+            onClick={cloneRecipe}
+            disabled={!currentRecipeItems.length}
+            data-testid="recipe-save-as-new"
+            style={{
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 10,
+              padding: "6px 10px",
+              background: "hsl(var(--card))",
+            }}
+          >
+            + {t("save_as_new_recipe")}
+          </button>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={cloneRecipe}
-        disabled={!currentRecipeItems.length}
-        data-testid="recipe-save-as-new"
-      >
-        {t("save_as_new_recipe")}
-      </button>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}

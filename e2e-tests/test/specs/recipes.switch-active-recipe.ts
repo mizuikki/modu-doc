@@ -72,13 +72,8 @@ describe("Recipes", () => {
     await tauriInvoke("update_recipe_items", { recipeId: altRecipe.id, items: altItems });
 
     // Switch active recipe in UI.
-    const select = await $("[data-testid='recipe-select']");
-    await select.waitForExist({ timeout: 20000 });
-    await select.selectByAttribute("value", altRecipe.id);
-    await browser.waitUntil(async () => (await select.getValue()) === altRecipe.id, {
-      timeout: 20000,
-      interval: 200,
-    });
+    await safeClick("[data-testid='recipe-select']", 20000);
+    await safeClick(`[data-testid='recipe-select-item-${altRecipe.id}']`, 20000);
 
     // Verify compilation reflects active recipe by writing target.
     await tauriInvoke("write_target_file", {
@@ -92,9 +87,13 @@ describe("Recipes", () => {
     // Also verify global search can find the alt recipe and navigate.
     await safeSetValue("[data-testid='global-search-input']", "Alt");
     await safeClick(`button*=Alt`);
-    await browser.waitUntil(async () => (await select.getValue()) === altRecipe.id, {
-      timeout: 20000,
-      interval: 200,
-    });
+    await browser.waitUntil(
+      async () => {
+        const trigger = await $("[data-testid='recipe-select']");
+        const title = await trigger.getAttribute("title");
+        return title === "Alt";
+      },
+      { timeout: 20000, interval: 200 },
+    );
   });
 });

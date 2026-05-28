@@ -63,7 +63,12 @@ export function Header() {
           type="button"
           onClick={() => void i18n.changeLanguage(language === "en" ? "zh" : "en")}
           data-testid="header-language-toggle"
-          style={{ padding: "6px 8px" }}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
         >
           {language.toUpperCase()}
         </button>
@@ -71,11 +76,25 @@ export function Header() {
           type="button"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           data-testid="header-theme-toggle"
-          style={{ padding: "6px 8px" }}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
         >
           {t("theme")}: {theme}
         </button>
-        <button type="button" data-testid="header-settings" style={{ padding: "6px 8px" }}>
+        <button
+          type="button"
+          data-testid="header-settings"
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
           {t("settings")}
         </button>
       </div>

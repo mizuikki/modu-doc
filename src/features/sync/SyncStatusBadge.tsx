@@ -23,11 +23,12 @@ export function SyncStatusBadge() {
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
-        padding: "4px 10px",
+        padding: "3px 10px",
         borderRadius: 999,
         border: "1px solid hsl(var(--border))",
         background: "hsl(var(--card))",
         fontSize: 12,
+        lineHeight: 1.2,
         color: "hsl(var(--foreground))",
       }}
       title={workspaceStatusMessage ? tMaybe(t, workspaceStatusMessage) : ""}

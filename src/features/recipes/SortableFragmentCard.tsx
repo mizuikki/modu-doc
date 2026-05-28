@@ -25,6 +25,9 @@ export function SortableFragmentCard({
     id,
   });
 
+  const disabledOpacity = 0.62;
+  const isDisabled = !enabled;
+  const dragColor = isDisabled ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))";
   return (
     <div
       ref={setNodeRef}
@@ -34,9 +37,13 @@ export function SortableFragmentCard({
         transition,
         border: active ? "1px solid hsl(var(--primary))" : "1px solid hsl(var(--border))",
         borderRadius: 14,
-        background: isDragging ? "hsl(var(--muted))" : "hsl(var(--card))",
+        background: isDragging
+          ? "hsl(var(--muted))"
+          : isDisabled
+            ? "hsl(var(--muted))"
+            : "hsl(var(--card))",
         padding: 12,
-        opacity: enabled ? 1 : 0.62,
+        opacity: enabled ? 1 : disabledOpacity,
         boxShadow: isDragging ? "0 12px 28px rgba(0, 0, 0, 0.12)" : "none",
       }}
     >
@@ -52,8 +59,10 @@ export function SortableFragmentCard({
             border: "1px solid hsl(var(--border))",
             borderRadius: 10,
             padding: "6px 8px",
-            background: "transparent",
+            background: isDisabled ? "hsl(var(--card))" : "transparent",
             lineHeight: 1,
+            color: dragColor,
+            opacity: isDisabled ? 0.7 : 1,
           }}
         >
           ::
@@ -78,6 +87,7 @@ export function SortableFragmentCard({
                 padding: "4px 10px",
                 background: enabled ? "hsl(var(--primary))" : "transparent",
                 color: enabled ? "hsl(var(--primary-foreground))" : "inherit",
+                opacity: isDisabled ? 0.85 : 1,
               }}
             >
               {enabled ? t("disable") : t("enable")}

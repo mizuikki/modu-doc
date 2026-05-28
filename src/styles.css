@@ -15,6 +15,7 @@
   --primary: 160 84% 39%;
   --primary-foreground: 0 0% 100%;
   --ring: 160 84% 39%;
+  --status-bar-height: 32px;
 }
 
 .dark {
@@ -61,7 +62,8 @@ textarea {
 .app-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-main {
@@ -69,12 +71,17 @@ textarea {
   grid-template-columns: 220px 340px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
+  padding-bottom: var(--status-bar-height);
 }
 
 .panel {
   border-right: 1px solid hsl(var(--border));
   background: color-mix(in srgb, hsl(var(--card)) 92%, transparent);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .panel:last-child {
@@ -82,12 +89,23 @@ textarea {
 }
 
 .status-bar {
-  height: 24px;
+  height: var(--status-bar-height);
   border-top: 1px solid hsl(var(--border));
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 16px;
   font-size: 12px;
   color: hsl(var(--muted-foreground));
   background: hsl(var(--card));
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+}
+
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }

@@ -45,12 +45,6 @@ export async function safeClick(selector: string, timeoutMs = 20000) {
   const windowsAttach = isWindowsAttachMode();
 
   if (!windowsAttach) {
-    if (!(await element.isClickable())) {
-      await browser.waitUntil(async () => await element.isClickable(), {
-        timeout: timeoutMs,
-        interval: 200,
-      });
-    }
     try {
       await element.click();
       return;
@@ -59,9 +53,10 @@ export async function safeClick(selector: string, timeoutMs = 20000) {
     }
   }
 
-  await browser.execute((cssSelector) => {
-    (document.querySelector(cssSelector) as HTMLElement | null)?.click();
-  }, selector);
+  await browser.execute((target) => {
+    const elementNode = target as HTMLElement | null;
+    elementNode?.click?.();
+  }, element);
 }
 
 export async function safeSetValue(selector: string, value: string, timeoutMs = 20000) {

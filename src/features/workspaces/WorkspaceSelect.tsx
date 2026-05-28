@@ -32,14 +32,25 @@ export function WorkspaceSelect() {
             alignItems: "center",
             justifyContent: "space-between",
             gap: 8,
-            padding: 8,
+            padding: "8px 10px",
             borderRadius: 8,
             border: "1px solid hsl(var(--border))",
             background: "hsl(var(--card))",
             color: "hsl(var(--foreground))",
           }}
         >
-          <Select.Value placeholder={t("select_workspace")} />
+          <Select.Value
+            placeholder={t("select_workspace")}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              lineHeight: 1.2,
+              padding: "2px 0",
+            }}
+          />
           <Select.Icon style={{ color: "hsl(var(--muted-foreground))" }}>▾</Select.Icon>
         </Select.Trigger>
 

@@ -87,21 +87,36 @@ export function FragmentList() {
   };
 
   return (
-    <div style={{ padding: 16, borderTop: "1px solid hsl(var(--border))" }}>
+    <div
+      style={{
+        padding: 16,
+        borderTop: "1px solid hsl(var(--border))",
+        display: "grid",
+        gridTemplateRows: "auto minmax(0, 1fr)",
+        minHeight: 0,
+        gap: 12,
+      }}
+    >
       <div
         style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}
       >
-        <h3>{t("fragments")}</h3>
+        <h3 style={{ margin: 0 }}>{t("fragments")}</h3>
         <button
           type="button"
           onClick={handleCreateFragment}
           disabled={!activeWorkspaceId}
           data-testid="fragments-new"
+          style={{
+            border: "1px solid hsl(var(--border))",
+            borderRadius: 10,
+            padding: "6px 10px",
+            background: "hsl(var(--card))",
+          }}
         >
-          {t("new_fragment")}
+          + {t("new_fragment")}
         </button>
       </div>
-      <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
+      <div style={{ overflowY: "auto", minHeight: 0, paddingRight: 2 }}>
         <div style={{ display: "grid", gap: 8 }}>
           {orderedActiveFragments.map((fragment) => (
             <div
