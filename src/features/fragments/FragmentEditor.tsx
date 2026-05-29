@@ -1,6 +1,8 @@
 import type { Extension } from "@codemirror/state";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { githubDark, githubLight } from "@uiw/codemirror-theme-github";
+import { useAppResolvedTheme } from "@/app/hooks/useResolvedTheme";
 import { useToast } from "@/components/toast/ToastProvider";
 import { updateFragment } from "@/lib/api/fragments";
 import { scheduleWorkspaceSync } from "@/lib/syncScheduler";
@@ -14,6 +16,7 @@ const AUTO_SAVE_DELAY_MS = 800;
 export function FragmentEditor() {
   const { t } = useTranslation();
   const toast = useToast();
+  const resolvedTheme = useAppResolvedTheme();
   const activeFragmentId = useAppStore((state) => state.activeFragmentId);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
   const fragments = useAppStore((state) => state.fragments);
@@ -131,6 +134,7 @@ export function FragmentEditor() {
             const nextValue = draftRef.current;
             void persistFragment(nextValue, "blur");
           }}
+          resolvedTheme={resolvedTheme}
         />
       ) : (
         <textarea
@@ -167,27 +171,26 @@ function EditorShell({
   value,
   onChange,
   onBlur,
+  resolvedTheme,
 }: {
   value: string;
   onChange: (nextValue: string) => void;
   onBlur: () => void;
+  resolvedTheme: "light" | "dark";
 }) {
   const [CodeMirrorComponent, setCodeMirrorComponent] = useState<CodeMirrorComponentType | null>(
     null,
   );
-  const [theme, setTheme] = useState<Extension | null>(null);
   const [markdownExtension, setMarkdownExtension] = useState<null | (() => Extension)>(null);
 
   useEffect(() => {
     let mounted = true;
     void Promise.all([
       import("@uiw/react-codemirror"),
-      import("@uiw/codemirror-theme-github"),
       import("@codemirror/lang-markdown"),
-    ]).then(([codeMirror, githubTheme, markdownLang]) => {
+    ]).then(([codeMirror, markdownLang]) => {
       if (!mounted) return;
       setCodeMirrorComponent(() => codeMirror.default);
-      setTheme(githubTheme.githubLight);
       setMarkdownExtension(() => markdownLang.markdown);
     });
 
@@ -196,11 +199,12 @@ function EditorShell({
     };
   }, []);
 
-  if (!CodeMirrorComponent || !theme || !markdownExtension) {
+  if (!CodeMirrorComponent || !markdownExtension) {
     return null;
   }
 
   const markdown = markdownExtension();
+  const theme = resolvedTheme === "dark" ? githubDark : githubLight;
 
   return (
     <CodeMirrorComponent
