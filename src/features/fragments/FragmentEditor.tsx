@@ -1,7 +1,7 @@
 import type { Extension } from "@codemirror/state";
+import { githubDark, githubLight } from "@uiw/codemirror-theme-github";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { githubDark, githubLight } from "@uiw/codemirror-theme-github";
 import { useAppResolvedTheme } from "@/app/hooks/useResolvedTheme";
 import { useToast } from "@/components/toast/ToastProvider";
 import { updateFragment } from "@/lib/api/fragments";
@@ -185,14 +185,13 @@ function EditorShell({
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([
-      import("@uiw/react-codemirror"),
-      import("@codemirror/lang-markdown"),
-    ]).then(([codeMirror, markdownLang]) => {
-      if (!mounted) return;
-      setCodeMirrorComponent(() => codeMirror.default);
-      setMarkdownExtension(() => markdownLang.markdown);
-    });
+    void Promise.all([import("@uiw/react-codemirror"), import("@codemirror/lang-markdown")]).then(
+      ([codeMirror, markdownLang]) => {
+        if (!mounted) return;
+        setCodeMirrorComponent(() => codeMirror.default);
+        setMarkdownExtension(() => markdownLang.markdown);
+      },
+    );
 
     return () => {
       mounted = false;
