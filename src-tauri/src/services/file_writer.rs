@@ -1,5 +1,7 @@
 use std::io::{ErrorKind, Write};
 use std::path::Path;
+#[cfg(windows)]
+use std::fs::OpenOptions;
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::commands;
@@ -203,8 +205,50 @@ impl FileWriterService {
         temp.write_all(content.as_bytes())
             .map_err(Self::map_io_error)?;
         temp.as_file().sync_all().map_err(Self::map_io_error)?;
-        temp.persist(target)
-            .map_err(|err| Self::map_io_error(err.error))?;
+        match temp.persist(target) {
+            Ok(_) => {}
+            Err(err) => {
+                #[cfg(windows)]
+                {
+                    // On Windows, replacing an existing file via rename can fail if the destination
+                    // is momentarily locked (e.g. by AV scanners) or opened without share-delete.
+                    // Falling back to in-place truncate+write is less atomic, but more reliable.
+                    if err.error.kind() == ErrorKind::PermissionDenied {
+                        return Self::write_in_place(content, target);
+                    }
+
+                    // Some platforms/FS drivers can still report AlreadyExists for the replace;
+                    // best-effort remove + retry once.
+                    if err.error.kind() == ErrorKind::AlreadyExists {
+                        let _ = std::fs::remove_file(target);
+                        err.file
+                            .persist(target)
+                            .map_err(|err| Self::map_io_error(err.error))?;
+                    } else {
+                        return Err(Self::map_io_error(err.error));
+                    }
+                }
+
+                #[cfg(not(windows))]
+                {
+                    return Err(Self::map_io_error(err.error));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn write_in_place(content: &str, target: &Path) -> Result<(), String> {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(target)
+            .map_err(Self::map_io_error)?;
+        file.write_all(content.as_bytes())
+            .map_err(Self::map_io_error)?;
+        file.sync_all().map_err(Self::map_io_error)?;
         Ok(())
     }
 }
@@ -286,5 +330,21 @@ mod tests {
             .await
             .expect("status");
         assert_eq!(status, "conflicted");
+    }
+
+    #[tokio::test]
+    async fn replace_file_overwrites_existing_target() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let target_path = dir.path().join("workspace.md");
+        tokio::fs::write(&target_path, "old").await.expect("write old");
+
+        FileWriterService::replace_file("new", &target_path)
+            .await
+            .expect("replace");
+
+        let content = tokio::fs::read_to_string(&target_path)
+            .await
+            .expect("read");
+        assert_eq!(content, "new");
     }
 }
