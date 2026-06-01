@@ -1,5 +1,6 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import { save } from "@tauri-apps/plugin-dialog";
+import * as Dialog from "@radix-ui/react-dialog";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -8,7 +9,11 @@ import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveWorkspace } from "@/store/selectors";
 
-export function WorkspaceSettingsDialog() {
+type WorkspaceSettingsDialogProps = {
+  trigger?: ReactNode;
+};
+
+export function WorkspaceSettingsDialog({ trigger }: WorkspaceSettingsDialogProps) {
   const { t } = useTranslation();
   const toast = useToast();
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
@@ -60,21 +65,23 @@ export function WorkspaceSettingsDialog() {
       }}
     >
       <Dialog.Trigger asChild>
-        <button
-          type="button"
-          disabled={!activeWorkspaceId}
-          data-testid="workspace-settings-open"
-          style={{
-            textAlign: "left",
-            justifyContent: "flex-start",
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid hsl(var(--border))",
-            background: "hsl(var(--card))",
-          }}
-        >
-          {t("workspace_settings")}
-        </button>
+        {trigger ?? (
+          <button
+            type="button"
+            disabled={!activeWorkspaceId}
+            data-testid="workspace-settings-open"
+            style={{
+              textAlign: "left",
+              justifyContent: "flex-start",
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid hsl(var(--border))",
+              background: "hsl(var(--card))",
+            }}
+          >
+            {t("workspace_settings")}
+          </button>
+        )}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay

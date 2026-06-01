@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import brandLogo from "@/assets/modudoc-logo.png";
 import { GlobalSearch } from "@/features/search/GlobalSearch";
+import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
 import { tMaybe } from "@/i18n/tMaybe";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveWorkspace } from "@/store/selectors";
@@ -12,6 +13,7 @@ export function Header() {
   const setTheme = useAppStore((state) => state.setTheme);
   const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
+  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const language = i18n.resolvedLanguage ?? i18n.language;
 
   return (
@@ -85,18 +87,23 @@ export function Header() {
         >
           {t("theme")}: {theme}
         </button>
-        <button
-          type="button"
-          data-testid="header-settings"
-          style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid hsl(var(--border))",
-            background: "hsl(var(--card))",
-          }}
-        >
-          {t("settings")}
-        </button>
+        <WorkspaceSettingsDialog
+          trigger={
+            <button
+              type="button"
+              disabled={!activeWorkspaceId}
+              data-testid="header-settings"
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid hsl(var(--border))",
+                background: "hsl(var(--card))",
+              }}
+            >
+              {t("settings")}
+            </button>
+          }
+        />
       </div>
       {workspaceStatusMessage ? (
         <div
