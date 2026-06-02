@@ -177,7 +177,7 @@ export function Sidebar() {
           data-testid="nav-preview"
           style={navButtonStyle}
         >
-          <span>{t("fragments")}</span>
+          <span>{t("preview_tab")}</span>
           <span data-testid="nav-preview-count" style={badgeStyle}>
             {t("sidebar_nav_fragments_count", { count: fragmentsCount })}
           </span>

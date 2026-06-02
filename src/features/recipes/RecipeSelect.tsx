@@ -35,13 +35,15 @@ export function RecipeSelect() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 8,
-          padding: "8px 10px",
+          gap: 6,
+          padding: "7px 9px",
           borderRadius: 8,
           border: "1px solid hsl(var(--border))",
           background: "hsl(var(--card))",
           color: "hsl(var(--foreground))",
-          minWidth: 180,
+          minWidth: 152,
+          maxWidth: 190,
+          flex: 1,
         }}
       >
         <Select.Value

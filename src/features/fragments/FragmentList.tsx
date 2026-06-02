@@ -5,7 +5,53 @@ import { createFragment, restoreFragment, softDeleteFragment } from "@/lib/api/f
 import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
 
-export function FragmentList() {
+type FragmentListProps = {
+  createButtonTestId?: string;
+  emptyMessage?: string;
+  filterMode?: "all" | "not_in_recipe";
+  hideHeader?: boolean;
+  onAddFragment?: (fragmentId: string) => void;
+  onCreateFragment?: () => Promise<void> | void;
+  rootTestId?: string;
+  searchQuery?: string;
+  showDeletedSection?: boolean;
+  title?: string;
+};
+
+function statusChip(label: string, tone: "primary" | "muted") {
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        lineHeight: 1.2,
+        padding: "3px 8px",
+        borderRadius: 999,
+        border:
+          tone === "primary" ? "1px solid hsl(var(--primary))" : "1px solid hsl(var(--border))",
+        color: tone === "primary" ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
+        background:
+          tone === "primary"
+            ? "color-mix(in srgb, hsl(var(--primary)) 10%, transparent)"
+            : "hsl(var(--muted))",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+export function FragmentList({
+  createButtonTestId = "fragments-new",
+  emptyMessage,
+  filterMode = "all",
+  hideHeader = false,
+  onAddFragment,
+  onCreateFragment,
+  rootTestId = "content-manager-fragments",
+  searchQuery = "",
+  showDeletedSection = true,
+  title,
+}: FragmentListProps = {}) {
   const { t } = useTranslation();
   const dialog = useAppDialog();
   const toast = useToast();
@@ -16,28 +62,47 @@ export function FragmentList() {
   const activeFragmentId = useAppStore((state) => state.activeFragmentId);
   const setActiveFragment = useAppStore((state) => state.setActiveFragment);
 
+  const activeRecipeItems = activeRecipeId
+    ? recipeItems
+        .filter((item) => item.recipeId === activeRecipeId)
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+    : [];
+  const activeRecipeItemByFragmentId = new Map(
+    activeRecipeItems.map((item) => [item.fragmentId, item] as const),
+  );
+
   const activeFragments = fragments.filter((fragment) => fragment.deletedAt === null);
-  const deletedFragments = fragments
-    .filter((fragment) => fragment.deletedAt !== null)
-    .slice()
-    .sort((a, b) => {
-      const aTime = a.deletedAt ? Date.parse(a.deletedAt) : 0;
-      const bTime = b.deletedAt ? Date.parse(b.deletedAt) : 0;
-      return bTime - aTime;
-    });
+  const filteredActiveFragments = activeFragments.filter((fragment) => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (normalizedQuery) {
+      const haystack = `${fragment.name}\n${fragment.content}`.toLocaleLowerCase();
+      if (!haystack.includes(normalizedQuery)) {
+        return false;
+      }
+    }
+    if (filterMode === "not_in_recipe") {
+      return !activeRecipeItemByFragmentId.has(fragment.id);
+    }
+    return true;
+  });
+  const deletedFragments = showDeletedSection
+    ? fragments
+        .filter((fragment) => fragment.deletedAt !== null)
+        .slice()
+        .sort((a, b) => {
+          const aTime = a.deletedAt ? Date.parse(a.deletedAt) : 0;
+          const bTime = b.deletedAt ? Date.parse(b.deletedAt) : 0;
+          return bTime - aTime;
+        })
+    : [];
 
   const activeFragmentOrder = new Map<string, number>();
-  if (activeRecipeId) {
-    recipeItems
-      .filter((item) => item.recipeId === activeRecipeId)
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .forEach((item, index) => {
-        activeFragmentOrder.set(item.fragmentId, index);
-      });
-  }
+  activeRecipeItems.forEach((item, index) => {
+    activeFragmentOrder.set(item.fragmentId, index);
+  });
 
-  const orderedActiveFragments = activeFragments.slice().sort((a, b) => {
+  const orderedActiveFragments = filteredActiveFragments.slice().sort((a, b) => {
     const aInRecipe = activeFragmentOrder.has(a.id);
     const bInRecipe = activeFragmentOrder.has(b.id);
     if (aInRecipe && bInRecipe) {
@@ -53,6 +118,10 @@ export function FragmentList() {
   });
 
   const handleCreateFragment = async () => {
+    if (onCreateFragment) {
+      await onCreateFragment();
+      return;
+    }
     if (!activeWorkspaceId) return;
     const result = await dialog.prompt({ title: t("fragment_name_prompt") });
     if (!result.ok) return;
@@ -88,34 +157,45 @@ export function FragmentList() {
 
   return (
     <div
+      data-testid={rootTestId}
       style={{
-        padding: 16,
-        borderTop: "1px solid hsl(var(--border))",
         display: "grid",
-        gridTemplateRows: "auto minmax(0, 1fr)",
+        gridTemplateRows: hideHeader ? "minmax(0, 1fr)" : "auto minmax(0, 1fr)",
         minHeight: 0,
         gap: 12,
       }}
     >
-      <div
-        style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}
-      >
-        <h3 style={{ margin: 0 }}>{t("fragments")}</h3>
-        <button
-          type="button"
-          onClick={handleCreateFragment}
-          disabled={!activeWorkspaceId}
-          data-testid="fragments-new"
+      {hideHeader ? null : (
+        <div
           style={{
-            border: "1px solid hsl(var(--border))",
-            borderRadius: 10,
-            padding: "6px 10px",
-            background: "hsl(var(--card))",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            alignItems: "center",
           }}
         >
-          + {t("new_fragment")}
-        </button>
-      </div>
+          <div style={{ display: "grid", gap: 2 }}>
+            <h3 style={{ margin: 0 }}>{title ?? t("fragments")}</h3>
+            <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+              {t("fragment_library_hint")}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleCreateFragment()}
+            disabled={!activeWorkspaceId}
+            data-testid={createButtonTestId}
+            style={{
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 10,
+              padding: "6px 10px",
+              background: "hsl(var(--card))",
+            }}
+          >
+            + {t("new_fragment")}
+          </button>
+        </div>
+      )}
       <div
         style={{
           overflowY: "auto",
@@ -124,91 +204,166 @@ export function FragmentList() {
           paddingBottom: 8,
           display: "grid",
           alignContent: "start",
-          gap: 8,
+          gap: 10,
         }}
       >
-        {orderedActiveFragments.map((fragment) => (
+        {orderedActiveFragments.length === 0 ? (
           <div
-            key={fragment.id}
             style={{
-              display: "grid",
-              gap: 6,
-              textAlign: "left",
-              borderRadius: 10,
-              border:
-                fragment.id === activeFragmentId
-                  ? "1px solid hsl(var(--primary))"
-                  : "1px solid hsl(var(--border))",
-              background: "transparent",
-              padding: 10,
+              border: "1px dashed hsl(var(--border))",
+              borderRadius: 14,
+              padding: 16,
+              color: "hsl(var(--muted-foreground))",
             }}
           >
-            <button
-              type="button"
-              onClick={() => setActiveFragment(fragment.id)}
-              data-testid={`fragment-select-${fragment.id}`}
+            {emptyMessage ?? t("no_fragments_yet")}
+          </div>
+        ) : null}
+        {orderedActiveFragments.map((fragment) => {
+          const recipeItem = activeRecipeItemByFragmentId.get(fragment.id);
+          const preview = fragment.content.trim() || t("empty_fragment");
+          const isSelected = fragment.id === activeFragmentId;
+          return (
+            <div
+              key={fragment.id}
               style={{
-                border: 0,
-                background: "transparent",
-                padding: 0,
-                textAlign: "left",
-                color: "inherit",
+                display: "grid",
+                gap: 8,
+                border: isSelected
+                  ? "1px solid hsl(var(--primary))"
+                  : "1px solid hsl(var(--border))",
+                borderRadius: 14,
+                background: isSelected
+                  ? "color-mix(in srgb, hsl(var(--primary)) 6%, hsl(var(--card)))"
+                  : "hsl(var(--card))",
+                padding: 12,
+                boxShadow: isSelected ? "var(--elevation-1)" : "none",
               }}
             >
-              <div>{fragment.name}</div>
-              <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                {fragment.content.slice(0, 60)}
-              </div>
-            </button>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button
                 type="button"
-                onClick={() => void handleDeleteFragment(fragment.id)}
-                data-testid={`fragment-delete-${fragment.id}`}
-              >
-                {t("delete_fragment")}
-              </button>
-            </div>
-          </div>
-        ))}
-        <div style={{ display: "grid", gap: 8 }}>
-          <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-            {t("deleted_fragments")}
-          </div>
-          {deletedFragments.length === 0 ? (
-            <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>-</div>
-          ) : (
-            deletedFragments.map((fragment) => (
-              <div
-                key={fragment.id}
+                onClick={() => setActiveFragment(fragment.id)}
+                data-testid={`fragment-select-${fragment.id}`}
                 style={{
-                  display: "grid",
-                  gap: 6,
-                  textAlign: "left",
-                  borderRadius: 10,
-                  border: "1px solid hsl(var(--border))",
+                  border: 0,
                   background: "transparent",
-                  padding: 10,
-                  opacity: 0.7,
+                  padding: 0,
+                  textAlign: "left",
+                  color: "inherit",
+                  display: "grid",
+                  gap: 8,
                 }}
               >
-                <div>{fragment.name}</div>
-                <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                  {fragment.content.slice(0, 60)}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <strong style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {fragment.name}
+                  </strong>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {recipeItem
+                      ? statusChip(t("fragment_in_recipe"), "primary")
+                      : statusChip(t("fragment_not_in_recipe"), "muted")}
+                    {recipeItem
+                      ? statusChip(
+                          recipeItem.enabled ? t("enabled_status") : t("disabled_status"),
+                          recipeItem.enabled ? "primary" : "muted",
+                        )
+                      : null}
+                  </div>
                 </div>
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "hsl(var(--muted-foreground))",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {preview}
+                </div>
+              </button>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                {onAddFragment && !recipeItem ? (
                   <button
                     type="button"
-                    onClick={() => void handleRestoreFragment(fragment.id)}
-                    data-testid={`fragment-restore-${fragment.id}`}
+                    onClick={() => onAddFragment(fragment.id)}
+                    data-testid={`fragment-add-${fragment.id}`}
                   >
-                    {t("restore")}
+                    {t("add_fragment")}
                   </button>
-                </div>
+                ) : (
+                  <span />
+                )}
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteFragment(fragment.id)}
+                  data-testid={`fragment-delete-${fragment.id}`}
+                >
+                  {t("delete_fragment")}
+                </button>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+          );
+        })}
+        {showDeletedSection ? (
+          <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+              {t("deleted_fragments")}
+            </div>
+            {deletedFragments.length === 0 ? (
+              <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>-</div>
+            ) : (
+              deletedFragments.map((fragment) => (
+                <div
+                  key={fragment.id}
+                  style={{
+                    display: "grid",
+                    gap: 8,
+                    borderRadius: 14,
+                    border: "1px solid hsl(var(--border))",
+                    background: "hsl(var(--card))",
+                    padding: 12,
+                    opacity: 0.72,
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <strong>{fragment.name}</strong>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "hsl(var(--muted-foreground))",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {fragment.content.trim() || t("empty_fragment")}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleRestoreFragment(fragment.id)}
+                      data-testid={`fragment-restore-${fragment.id}`}
+                    >
+                      {t("restore")}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );

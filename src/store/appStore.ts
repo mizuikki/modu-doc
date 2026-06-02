@@ -18,7 +18,7 @@ const initialUI = {
   splitRatio: 0.5,
   zenMode: false,
   sidebarWidth: 200,
-  assemblyWidth: 320,
+  assemblyWidth: 400,
   viewMode: "split" as const,
   continuousMode: false,
   cheatsheetOpen: false,
@@ -242,7 +242,7 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           ui: {
             ...state.ui,
-            assemblyWidth: Math.min(480, Math.max(240, Math.round(width))),
+            assemblyWidth: Math.min(560, Math.max(280, Math.round(width))),
           },
         })),
       setCompileStatus: (compileStatus) =>

@@ -51,8 +51,8 @@ export function App() {
             testId="column-splitter-assembly"
             currentPx={assemblyWidth}
             onResize={setAssemblyWidth}
-            minPx={240}
-            maxPx={480}
+            minPx={280}
+            maxPx={560}
           />
         ) : null}
         <section className="panel" style={{ minWidth: 0 }}>

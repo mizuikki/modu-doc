@@ -3,13 +3,13 @@ import { useTranslation } from "react-i18next";
 import { ReadingColumn } from "@/components/layout/ReadingColumn";
 import { ContinuousEditor } from "@/features/fragments/ContinuousEditor";
 import { FragmentEditor } from "@/features/fragments/FragmentEditor";
-import { FragmentList } from "@/features/fragments/FragmentList";
 import { FragmentPreview } from "@/features/fragments/FragmentPreview";
 import { SnapshotDiff } from "@/features/history/SnapshotDiff";
 import { SnapshotTimeline } from "@/features/history/SnapshotTimeline";
 import { ConflictBanner } from "@/features/sync/ConflictBanner";
 import { WorkspacePreview } from "@/features/workspaces/WorkspacePreview";
 import { useAppStore } from "@/store/appStore";
+import { selectActiveFragment, selectActiveRecipeItem } from "@/store/selectors";
 
 export function MainPanel() {
   const { t } = useTranslation();
@@ -21,9 +21,19 @@ export function MainPanel() {
   const setViewMode = useAppStore((state) => state.setViewMode);
   const continuousMode = useAppStore((state) => state.ui.continuousMode);
   const setContinuousMode = useAppStore((state) => state.setContinuousMode);
+  const activeFragment = useAppStore(selectActiveFragment);
+  const activeRecipeItem = useAppStore(selectActiveRecipeItem);
+  const fragments = useAppStore((state) => state.fragments);
+  const recipeItems = useAppStore((state) => state.recipeItems);
+  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
   const resizeRef = useRef(false);
   const splitPaneRef = useRef<HTMLDivElement | null>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const enabledCount = recipeItems.filter(
+    (item) => item.recipeId === activeRecipeId && item.enabled,
+  ).length;
+  const recipeCount = recipeItems.filter((item) => item.recipeId === activeRecipeId).length;
+  const workspaceFragmentCount = fragments.filter((fragment) => fragment.deletedAt === null).length;
 
   return (
     <div
@@ -194,11 +204,99 @@ export function MainPanel() {
             style={{
               display: "grid",
               gap: 12,
-              gridTemplateRows: "minmax(0, 1fr) minmax(220px, 40%)",
+              gridTemplateRows: "auto minmax(0, 1fr)",
               minHeight: 0,
               overflow: "hidden",
             }}
           >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+                padding: "12px 14px",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 14,
+                background: "hsl(var(--card))",
+              }}
+            >
+              {continuousMode ? (
+                <div style={{ display: "grid", gap: 2 }}>
+                  <strong>{t("continuous_workspace_title")}</strong>
+                  <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                    {t("continuous_workspace_hint", {
+                      enabled: enabledCount,
+                      total: recipeCount,
+                    })}
+                  </div>
+                </div>
+              ) : activeFragment ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <strong>{activeFragment.name}</strong>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        border: "1px solid hsl(var(--border))",
+                        background: "hsl(var(--muted))",
+                        color: "hsl(var(--muted-foreground))",
+                      }}
+                    >
+                      {t("workspace_fragment_total", { count: workspaceFragmentCount })}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        border: activeRecipeItem
+                          ? "1px solid hsl(var(--primary))"
+                          : "1px solid hsl(var(--border))",
+                        background: activeRecipeItem
+                          ? "color-mix(in srgb, hsl(var(--primary)) 10%, transparent)"
+                          : "hsl(var(--muted))",
+                        color: activeRecipeItem
+                          ? "hsl(var(--primary))"
+                          : "hsl(var(--muted-foreground))",
+                      }}
+                    >
+                      {activeRecipeItem ? t("fragment_in_recipe") : t("fragment_not_in_recipe")}
+                    </span>
+                    {activeRecipeItem ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          padding: "3px 8px",
+                          borderRadius: 999,
+                          border: activeRecipeItem.enabled
+                            ? "1px solid hsl(var(--primary))"
+                            : "1px solid hsl(var(--border))",
+                          background: activeRecipeItem.enabled
+                            ? "color-mix(in srgb, hsl(var(--primary)) 10%, transparent)"
+                            : "hsl(var(--muted))",
+                          color: activeRecipeItem.enabled
+                            ? "hsl(var(--primary))"
+                            : "hsl(var(--muted-foreground))",
+                        }}
+                      >
+                        {activeRecipeItem.enabled ? t("enabled_status") : t("disabled_status")}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 2 }}>
+                  <strong>{t("editor_empty_title")}</strong>
+                  <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                    {t("select_fragment_to_edit")}
+                  </div>
+                </div>
+              )}
+            </div>
             <div style={{ minHeight: 0, overflow: "auto" }}>
               {viewMode === "write" ? (
                 <ReadingColumn>
@@ -298,9 +396,6 @@ export function MainPanel() {
                   <FragmentPreview />
                 </ReadingColumn>
               ) : null}
-            </div>
-            <div style={{ minHeight: 0, overflow: "hidden" }}>
-              <FragmentList />
             </div>
           </div>
         ) : null}

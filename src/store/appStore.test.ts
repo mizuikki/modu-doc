@@ -25,7 +25,7 @@ function resetStore() {
       splitRatio: 0.5,
       zenMode: false,
       sidebarWidth: 200,
-      assemblyWidth: 320,
+      assemblyWidth: 400,
       viewMode: "split",
       continuousMode: false,
       cheatsheetOpen: false,
