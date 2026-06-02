@@ -156,8 +156,8 @@ export function Sidebar() {
       <nav
         style={{
           display: "grid",
-          gap: "var(--space-2)",
-          marginBottom: "var(--space-4)",
+          gap: "var(--space-3)",
+          marginBottom: "var(--space-3)",
         }}
       >
         <button
@@ -208,6 +208,7 @@ export function Sidebar() {
               color: "hsl(var(--foreground))",
               cursor: "pointer",
               textAlign: "left",
+              marginBottom: "var(--space-3)",
             }}
           >
             {t("sidebar_more")}
@@ -216,7 +217,7 @@ export function Sidebar() {
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             align="start"
-            sideOffset={6}
+            sideOffset={10}
             data-testid="sidebar-more-content"
             style={{
               minWidth: 200,

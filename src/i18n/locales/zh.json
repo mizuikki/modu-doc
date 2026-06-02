@@ -195,9 +195,9 @@
   "sidebar_more": "更多…",
   "sidebar_open_in_file_manager": "在文件管理器中打开",
   "sidebar_about": "关于 ModuDoc",
-  "sidebar_nav_fragments_count": "{count} 个片段",
+  "sidebar_nav_fragments_count": "{count}",
   "sidebar_nav_assembly_count": "{enabled}/{total}",
-  "sidebar_nav_snapshots_count": "{count} 个快照",
+  "sidebar_nav_snapshots_count": "{count}",
   "switch_to_enable": "启用片段",
   "switch_to_disable": "禁用片段"
 }

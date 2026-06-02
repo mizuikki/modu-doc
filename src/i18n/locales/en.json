@@ -195,9 +195,9 @@
   "sidebar_more": "More...",
   "sidebar_open_in_file_manager": "Open in file manager",
   "sidebar_about": "About ModuDoc",
-  "sidebar_nav_fragments_count": "{count, plural, one {{count} fragment} other {{count} fragments}}",
+  "sidebar_nav_fragments_count": "{count}",
   "sidebar_nav_assembly_count": "{enabled}/{total}",
-  "sidebar_nav_snapshots_count": "{count, plural, one {{count} snapshot} other {{count} snapshots}}",
+  "sidebar_nav_snapshots_count": "{count}",
   "switch_to_enable": "Enable fragment",
   "switch_to_disable": "Disable fragment"
 }
