@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchShortcut } from "@/app/hooks/useSearchShortcut";
 import { searchWorkspaceContent } from "@/lib/api/search";
 import type { SearchResult } from "@/lib/api/types";
 import { useAppStore } from "@/store/appStore";
+
+type ResultKind = "workspace" | "fragment" | "recipe" | "snapshot";
 
 type UiSearchResult =
   | { kind: "workspace"; id: string; title: string; subtitle: string }
@@ -14,6 +16,21 @@ type UiSearchResult =
       title: string;
       subtitle: string;
     };
+
+const GROUP_ORDER: ResultKind[] = ["fragment", "recipe", "snapshot", "workspace"];
+
+const GROUP_LABEL_KEYS: Record<ResultKind, string> = {
+  fragment: "search_group_fragments",
+  recipe: "search_group_recipes",
+  snapshot: "search_group_snapshots",
+  workspace: "search_group_workspaces",
+};
+
+function isResultKind(value: string): value is ResultKind {
+  return (
+    value === "workspace" || value === "fragment" || value === "recipe" || value === "snapshot"
+  );
+}
 
 export function GlobalSearch() {
   const { t } = useTranslation();
@@ -48,6 +65,7 @@ export function GlobalSearch() {
     }
     setQuery("");
     setActiveIndex(-1);
+    inputRef.current?.blur();
   };
 
   useEffect(() => {
@@ -106,10 +124,86 @@ export function GlobalSearch() {
     }
   }, [activeIndex, results.length]);
 
+  const grouped = useMemo(() => {
+    const map = new Map<ResultKind, UiSearchResult[]>();
+    for (const kind of GROUP_ORDER) map.set(kind, []);
+    for (const result of results) {
+      if (!isResultKind(result.kind)) continue;
+      map.get(result.kind)?.push(result);
+    }
+    return GROUP_ORDER.map((kind) => ({
+      kind,
+      items: map.get(kind) ?? [],
+    })).filter((group) => group.items.length > 0);
+  }, [results]);
+
+  const flatIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    let index = 0;
+    for (const group of grouped) {
+      for (const item of group.items) {
+        map.set(`${item.kind}-${item.id}`, index);
+        index += 1;
+      }
+    }
+    return map;
+  }, [grouped]);
+
+  const firstIndexOfGroup = useCallback(
+    (kind: ResultKind): number => {
+      const group = grouped.find((entry) => entry.kind === kind);
+      if (!group || group.items.length === 0) return -1;
+      const id = `${group.items[0].kind}-${group.items[0].id}`;
+      return flatIndexById.get(id) ?? -1;
+    },
+    [grouped, flatIndexById],
+  );
+
+  const currentGroup = useMemo(() => {
+    if (activeIndex < 0) return null;
+    let index = 0;
+    for (const group of grouped) {
+      const nextIndex = index + group.items.length;
+      if (activeIndex < nextIndex) {
+        return group.kind;
+      }
+      index = nextIndex;
+    }
+    return null;
+  }, [activeIndex, grouped]);
+
+  const moveToNextGroup = () => {
+    if (!currentGroup) return;
+    const order = grouped.map((entry) => entry.kind);
+    const idx = order.indexOf(currentGroup);
+    if (idx < 0 || idx === order.length - 1) return;
+    const target = firstIndexOfGroup(order[idx + 1]);
+    if (target >= 0) setActiveIndex(target);
+  };
+
+  const moveToPreviousGroup = () => {
+    if (!currentGroup) return;
+    const order = grouped.map((entry) => entry.kind);
+    const idx = order.indexOf(currentGroup);
+    if (idx <= 0) return;
+    const target = firstIndexOfGroup(order[idx - 1]);
+    if (target >= 0) setActiveIndex(target);
+  };
+
   useSearchShortcut(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   });
+
+  const hasQuery = query.trim().length > 0;
+  const showHint = hasQuery && !isSearching && results.length === 0;
+  const shortcutToken =
+    typeof navigator === "undefined"
+      ? "other"
+      : /mac/i.test(navigator.platform ?? "") || /mac/i.test(navigator.userAgent ?? "")
+        ? "mac"
+        : "other";
+  const shortcutHint = t(shortcutToken === "mac" ? "shortcut_hint_mac" : "shortcut_hint_other");
 
   return (
     <div style={{ position: "relative", flex: 1, minWidth: 220, maxWidth: 520 }}>
@@ -120,8 +214,13 @@ export function GlobalSearch() {
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
-            setQuery("");
-            setActiveIndex(-1);
+            event.preventDefault();
+            if (query.trim().length > 0) {
+              setQuery("");
+              setActiveIndex(-1);
+              return;
+            }
+            inputRef.current?.blur();
             return;
           }
           if (event.key === "ArrowDown") {
@@ -136,6 +235,16 @@ export function GlobalSearch() {
             setActiveIndex((prev) => Math.max(0, prev <= 0 ? 0 : prev - 1));
             return;
           }
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            moveToNextGroup();
+            return;
+          }
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            moveToPreviousGroup();
+            return;
+          }
           if (event.key === "Enter") {
             if (activeIndex < 0 || activeIndex >= results.length) return;
             event.preventDefault();
@@ -146,14 +255,33 @@ export function GlobalSearch() {
         aria-label={t("search")}
         style={{
           width: "100%",
-          padding: "8px 12px",
+          padding: "8px 56px 8px 12px",
           borderRadius: 999,
           border: "1px solid hsl(var(--border))",
           background: "hsl(var(--background))",
           color: "hsl(var(--foreground))",
         }}
       />
-      {query.trim() ? (
+      <span
+        data-testid="search-shortcut-hint"
+        aria-hidden
+        style={{
+          position: "absolute",
+          right: 8,
+          top: "50%",
+          transform: "translateY(-50%)",
+          padding: "2px 8px",
+          fontSize: 11,
+          borderRadius: 6,
+          border: "1px solid hsl(var(--border))",
+          background: "hsl(var(--card))",
+          color: "hsl(var(--muted-foreground))",
+          pointerEvents: "none",
+        }}
+      >
+        {shortcutHint}
+      </span>
+      {hasQuery ? (
         <div
           data-testid="global-search-panel"
           style={{
@@ -182,9 +310,16 @@ export function GlobalSearch() {
                   padding: "10px 12px",
                   fontSize: 12,
                   color: "hsl(var(--muted-foreground))",
+                  display: "grid",
+                  gap: 4,
                 }}
               >
-                {t("no_results")}
+                <div>{t("no_results")}</div>
+                {showHint ? (
+                  <div data-testid="search-create-hint">
+                    {t("create_fragment_hint", { name: query.trim() })}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div
@@ -193,30 +328,50 @@ export function GlobalSearch() {
                 style={{ display: "grid" }}
                 data-testid="global-search-results"
               >
-                {results.map((result, index) => {
-                  const isActive = index === activeIndex;
-                  return (
-                    <button
-                      key={`${result.kind}-${result.id}`}
-                      type="button"
-                      onClick={() => applyResult(result)}
-                      aria-selected={isActive}
-                      role="option"
-                      data-testid={`global-search-result-${result.kind}-${result.id}`}
+                {grouped.map((group) => (
+                  <div key={group.kind} data-testid={`search-group-${group.kind}`}>
+                    <div
                       style={{
-                        textAlign: "left",
-                        padding: "10px 12px",
-                        borderTop: "1px solid hsl(var(--border))",
-                        background: isActive ? "hsl(var(--muted))" : "transparent",
+                        padding: "6px 12px",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        color: "hsl(var(--muted-foreground))",
+                        background: "hsl(var(--muted))",
                       }}
                     >
-                      <div style={{ fontWeight: 600 }}>{result.title}</div>
-                      <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                        {result.subtitle}
-                      </div>
-                    </button>
-                  );
-                })}
+                      {t(GROUP_LABEL_KEYS[group.kind] as never)}
+                    </div>
+                    {group.items.map((result) => {
+                      const key = `${result.kind}-${result.id}`;
+                      const flatIndex = flatIndexById.get(key) ?? -1;
+                      const isActive = flatIndex === activeIndex;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => applyResult(result)}
+                          aria-selected={isActive}
+                          role="option"
+                          data-testid={`global-search-result-${result.kind}-${result.id}`}
+                          style={{
+                            textAlign: "left",
+                            padding: "10px 12px",
+                            borderTop: "1px solid hsl(var(--border))",
+                            background: isActive ? "hsl(var(--muted))" : "transparent",
+                            width: "100%",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600 }}>{result.title}</div>
+                          <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                            {result.subtitle}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             )}
           </div>

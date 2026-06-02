@@ -23,6 +23,12 @@ function resetStore() {
       activeMainTab: "edit",
       sidebarCollapsed: false,
       splitRatio: 0.5,
+      zenMode: false,
+      sidebarWidth: 200,
+      assemblyWidth: 320,
+      viewMode: "split",
+      continuousMode: false,
+      cheatsheetOpen: false,
     },
   });
 }

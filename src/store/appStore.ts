@@ -16,6 +16,12 @@ const initialUI = {
   activeMainTab: "edit" as const,
   sidebarCollapsed: false,
   splitRatio: 0.5,
+  zenMode: false,
+  sidebarWidth: 200,
+  assemblyWidth: 320,
+  viewMode: "split" as const,
+  continuousMode: false,
+  cheatsheetOpen: false,
 };
 
 function browserStorage() {
@@ -174,6 +180,69 @@ export const useAppStore = create<AppState>()(
           ui: {
             ...state.ui,
             splitRatio: Math.min(0.8, Math.max(0.2, ratio)),
+          },
+        })),
+      setViewMode: (mode) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            viewMode: mode,
+          },
+        })),
+      setContinuousMode: (continuousMode) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            continuousMode,
+          },
+        })),
+      toggleContinuousMode: () =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            continuousMode: !state.ui.continuousMode,
+          },
+        })),
+      setZenMode: (zenMode) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            zenMode,
+          },
+        })),
+      toggleZenMode: () =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            zenMode: !state.ui.zenMode,
+          },
+        })),
+      setCheatsheetOpen: (cheatsheetOpen) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            cheatsheetOpen,
+          },
+        })),
+      toggleCheatsheet: () =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            cheatsheetOpen: !state.ui.cheatsheetOpen,
+          },
+        })),
+      setSidebarWidth: (width) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            sidebarWidth: Math.min(360, Math.max(160, Math.round(width))),
+          },
+        })),
+      setAssemblyWidth: (width) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            assemblyWidth: Math.min(480, Math.max(240, Math.round(width))),
           },
         })),
       setCompileStatus: (compileStatus) =>

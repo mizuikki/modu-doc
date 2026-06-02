@@ -207,7 +207,15 @@ export function AssemblyBoard() {
   return (
     <div className="panel-scroll" style={{ padding: 16, display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
           <h3 style={{ margin: 0 }}>{t("assembly")}</h3>
           <RecipeSelect />
         </div>
@@ -217,6 +225,8 @@ export function AssemblyBoard() {
             alignItems: "center",
             justifyContent: "space-between",
             gap: 12,
+            flexWrap: "wrap",
+            rowGap: 8,
           }}
         >
           <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
@@ -227,6 +237,8 @@ export function AssemblyBoard() {
             onClick={cloneRecipe}
             disabled={!currentRecipeItems.length}
             data-testid="recipe-save-as-new"
+            aria-label={t("save_as_new_recipe")}
+            title={t("save_as_new_recipe")}
             style={{
               border: "1px solid hsl(var(--border))",
               borderRadius: 10,
@@ -254,7 +266,6 @@ export function AssemblyBoard() {
                 key={item.id}
                 id={item.fragmentId}
                 name={item.fragment?.name ?? t("unknown_fragment")}
-                content={item.fragment?.content ?? ""}
                 enabled={item.enabled}
                 active={item.fragmentId === activeDragId}
                 t={t}

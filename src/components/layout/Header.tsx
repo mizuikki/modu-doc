@@ -1,10 +1,25 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import brandLogo from "@/assets/modudoc-logo.png";
+import { CommandPalette } from "@/features/commands/CommandPalette";
 import { GlobalSearch } from "@/features/search/GlobalSearch";
 import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
 import { tMaybe } from "@/i18n/tMaybe";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveWorkspace } from "@/store/selectors";
+
+type ThemeMode = "light" | "dark" | "system";
+
+const THEME_OPTIONS: Array<{
+  value: ThemeMode;
+  icon: typeof Sun;
+  iconTestId: string;
+}> = [
+  { value: "light", icon: Sun, iconTestId: "header-theme-icon-sun" },
+  { value: "system", icon: Monitor, iconTestId: "header-theme-icon-monitor" },
+  { value: "dark", icon: Moon, iconTestId: "header-theme-icon-moon" },
+];
 
 export function Header() {
   const { t, i18n } = useTranslation();
@@ -15,6 +30,15 @@ export function Header() {
   const activeWorkspace = useAppStore(selectActiveWorkspace);
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const language = i18n.resolvedLanguage ?? i18n.language;
+
+  const activeOption = THEME_OPTIONS.find((option) => option.value === theme) ?? THEME_OPTIONS[0];
+  const ActiveIcon = activeOption.icon;
+  const themeLabel =
+    theme === "light" ? t("theme_light") : theme === "dark" ? t("theme_dark") : t("theme_system");
+
+  const openCommandPalette = () => {
+    window.dispatchEvent(new Event("modudoc:open-command-palette"));
+  };
 
   return (
     <header
@@ -65,6 +89,8 @@ export function Header() {
           type="button"
           onClick={() => void i18n.changeLanguage(language === "en" ? "zh" : "en")}
           data-testid="header-language-toggle"
+          aria-label={`Switch language (current: ${language.toUpperCase()})`}
+          title={`Language: ${language.toUpperCase()}`}
           style={{
             padding: "6px 10px",
             borderRadius: 999,
@@ -74,19 +100,95 @@ export function Header() {
         >
           {language.toUpperCase()}
         </button>
-        <button
-          type="button"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          data-testid="header-theme-toggle"
-          style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid hsl(var(--border))",
-            background: "hsl(var(--card))",
-          }}
-        >
-          {t("theme")}: {theme}
-        </button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              data-testid="header-theme-menu"
+              aria-label={themeLabel}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid hsl(var(--border))",
+                background: "hsl(var(--card))",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                color: "hsl(var(--muted-foreground))",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              <ActiveIcon
+                size={14}
+                aria-hidden
+                strokeWidth={1.75}
+                data-testid={activeOption.iconTestId}
+              />
+              <span>{themeLabel}</span>
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={6}
+              data-testid="header-theme-menu-content"
+              style={{
+                minWidth: 160,
+                background: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 12,
+                padding: 6,
+                boxShadow: "0 10px 24px rgba(0, 0, 0, 0.14)",
+                zIndex: 30,
+              }}
+            >
+              {THEME_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const isActive = option.value === theme;
+                return (
+                  <DropdownMenu.Item
+                    key={option.value}
+                    data-testid={`theme-menu-${option.value}`}
+                    onSelect={() => setTheme(option.value)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      color: "hsl(var(--foreground))",
+                      background: isActive ? "hsl(var(--accent))" : "transparent",
+                      cursor: "pointer",
+                      outline: "none",
+                    }}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <Icon
+                        size={14}
+                        aria-hidden
+                        strokeWidth={1.75}
+                        data-testid={option.iconTestId}
+                      />
+                      {option.value === "light"
+                        ? t("theme_light")
+                        : option.value === "dark"
+                          ? t("theme_dark")
+                          : t("theme_system")}
+                    </span>
+                    {isActive ? (
+                      <span aria-hidden style={{ fontSize: 12, color: "hsl(var(--primary))" }}>
+                        ✓
+                      </span>
+                    ) : null}
+                  </DropdownMenu.Item>
+                );
+              })}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         <WorkspaceSettingsDialog
           trigger={
             <button
@@ -104,7 +206,26 @@ export function Header() {
             </button>
           }
         />
+        <button
+          type="button"
+          data-testid="header-more"
+          onClick={openCommandPalette}
+          aria-label={t("command_palette")}
+          title={t("command_palette")}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+            fontSize: 14,
+            lineHeight: 1,
+            cursor: "pointer",
+          }}
+        >
+          ⋯
+        </button>
       </div>
+      <CommandPalette openRef={undefined} />
       {workspaceStatusMessage ? (
         <div
           data-testid="workspace-status-popover"

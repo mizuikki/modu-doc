@@ -1,11 +1,11 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import * as Switch from "@radix-ui/react-switch";
 import type { TFunction } from "i18next";
 
 type SortableFragmentCardProps = {
   id: string;
   name: string;
-  content: string;
   enabled: boolean;
   active: boolean;
   t: TFunction;
@@ -15,7 +15,6 @@ type SortableFragmentCardProps = {
 export function SortableFragmentCard({
   id,
   name,
-  content,
   enabled,
   active,
   t,
@@ -36,18 +35,19 @@ export function SortableFragmentCard({
         transform: CSS.Transform.toString(transform),
         transition,
         border: active ? "1px solid hsl(var(--primary))" : "1px solid hsl(var(--border))",
-        borderRadius: 14,
+        borderRadius: "var(--radius-md)",
         background: isDragging
           ? "hsl(var(--muted))"
           : isDisabled
             ? "hsl(var(--muted))"
             : "hsl(var(--card))",
-        padding: 12,
+        padding: "var(--space-2)",
+        minHeight: 40,
         opacity: enabled ? 1 : disabledOpacity,
         boxShadow: isDragging ? "0 12px 28px rgba(0, 0, 0, 0.12)" : "none",
       }}
     >
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+      <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
         <button
           type="button"
           aria-label="Drag fragment"
@@ -57,8 +57,8 @@ export function SortableFragmentCard({
           style={{
             cursor: "grab",
             border: "1px solid hsl(var(--border))",
-            borderRadius: 10,
-            padding: "6px 8px",
+            borderRadius: "var(--radius-md)",
+            padding: "var(--space-1) var(--space-2)",
             background: isDisabled ? "hsl(var(--card))" : "transparent",
             lineHeight: 1,
             color: dragColor,
@@ -67,45 +67,47 @@ export function SortableFragmentCard({
         >
           ::
         </button>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div
+        <strong
+          style={{
+            fontSize: 13,
+            minWidth: 0,
+            flex: 1,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {name}
+        </strong>
+        <Switch.Root
+          checked={enabled}
+          onCheckedChange={onToggle}
+          data-testid={`recipe-item-toggle-${id}`}
+          aria-label={enabled ? t("switch_to_disable") : t("switch_to_enable")}
+          style={{
+            width: 36,
+            height: 20,
+            background: enabled ? "hsl(var(--primary))" : "hsl(var(--muted))",
+            borderRadius: 999,
+            position: "relative",
+            border: 0,
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <Switch.Thumb
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              justifyContent: "space-between",
+              display: "block",
+              width: 16,
+              height: 16,
+              background: "hsl(var(--card))",
+              borderRadius: 999,
+              boxShadow: "var(--elevation-1)",
+              transform: enabled ? "translateX(18px)" : "translateX(2px)",
+              transition: "transform 120ms ease",
             }}
-          >
-            <strong style={{ fontSize: 14 }}>{name}</strong>
-            <button
-              type="button"
-              onClick={onToggle}
-              data-testid={`recipe-item-toggle-${id}`}
-              style={{
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 999,
-                padding: "4px 10px",
-                background: enabled ? "hsl(var(--primary))" : "transparent",
-                color: enabled ? "hsl(var(--primary-foreground))" : "inherit",
-                opacity: isDisabled ? 0.85 : 1,
-              }}
-            >
-              {enabled ? t("disable") : t("enable")}
-            </button>
-          </div>
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 12,
-              color: "hsl(var(--muted-foreground))",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {content || t("empty_fragment")}
-          </div>
-        </div>
+          />
+        </Switch.Root>
       </div>
     </div>
   );

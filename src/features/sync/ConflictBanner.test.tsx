@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store/appStore";
 import { AppTestProviders, resetAppStore } from "@/test/testUtils";
@@ -9,11 +9,17 @@ const { writeTargetFile } = vi.hoisted(() => ({
 }));
 
 const { updateWorkspace } = vi.hoisted(() => ({
-  updateWorkspace: vi.fn(async () => undefined),
-}));
-
-const { save } = vi.hoisted(() => ({
-  save: vi.fn(async () => "/tmp/example.md"),
+  updateWorkspace: vi.fn(async () => ({
+    id: "workspace-a",
+    name: "Workspace A",
+    target_path: "/tmp/example.md",
+    default_recipe_id: null,
+    status: "dirty",
+    last_compiled_at: null,
+    last_compiled_hash: null,
+    created_at: "t",
+    updated_at: "t",
+  })),
 }));
 
 vi.mock("@/lib/api/sync", () => ({
@@ -24,15 +30,10 @@ vi.mock("@/lib/api/workspaces", () => ({
   updateWorkspace,
 }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  save,
-}));
-
 describe("ConflictBanner", () => {
   beforeEach(() => {
     writeTargetFile.mockClear();
     updateWorkspace.mockClear();
-    save.mockClear();
     resetAppStore();
     useAppStore.setState({
       workspaces: [
@@ -74,7 +75,7 @@ describe("ConflictBanner", () => {
     });
   });
 
-  it("offers choose target action on target issues", async () => {
+  it("opens settings dialog at sync section on choose target", async () => {
     useAppStore.setState({
       compileStatus: "error",
       workspaceStatusMessage: "target_missing",
@@ -86,17 +87,43 @@ describe("ConflictBanner", () => {
       </AppTestProviders>,
     );
 
-    const choose = screen.getByTestId("conflict-choose-target");
-    fireEvent.click(choose);
+    fireEvent.click(screen.getByTestId("conflict-choose-target"));
 
-    expect(save).toHaveBeenCalled();
-    // async handler
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(updateWorkspace).toHaveBeenCalledWith({
-      id: "workspace-a",
-      name: null,
-      targetPath: "/tmp/example.md",
-      clearTargetPath: false,
+    const syncNav = await screen.findByTestId("workspace-settings-nav-sync");
+    expect(syncNav.dataset.active).toBe("true");
+    const autoSync = await screen.findByTestId("workspace-settings-auto-sync");
+    expect(autoSync).toBeTruthy();
+  });
+
+  it("persists target path from the settings dialog general section", async () => {
+    useAppStore.setState({
+      compileStatus: "error",
+      workspaceStatusMessage: "target_missing",
+    });
+
+    render(
+      <AppTestProviders>
+        <ConflictBanner />
+      </AppTestProviders>,
+    );
+
+    fireEvent.click(screen.getByTestId("conflict-choose-target"));
+
+    const generalNav = await screen.findByTestId("workspace-settings-nav-general");
+    fireEvent.click(generalNav);
+
+    const targetInput = await screen.findByTestId("workspace-settings-target");
+    fireEvent.change(targetInput, { target: { value: "/tmp/rebound.md" } });
+
+    fireEvent.click(screen.getByTestId("workspace-settings-save"));
+
+    await waitFor(() => {
+      expect(updateWorkspace).toHaveBeenCalledWith({
+        id: "workspace-a",
+        name: "Workspace A",
+        targetPath: "/tmp/rebound.md",
+        clearTargetPath: false,
+      });
     });
   });
 });

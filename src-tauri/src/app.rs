@@ -25,6 +25,7 @@ pub fn run() {
             commands::activate_recipe,
             commands::update_recipe_items,
             commands::compile_workspace,
+            commands::compile_fragments_with_markers,
             commands::write_target_file,
             commands::import_markdown_file,
             commands::export_workspace,
@@ -32,7 +33,11 @@ pub fn run() {
             commands::create_snapshot,
             commands::list_snapshots,
             commands::restore_snapshot,
-            commands::open_target_in_file_manager
+            commands::open_target_in_file_manager,
+            commands::get_setting,
+            commands::set_setting,
+            commands::list_settings,
+            commands::delete_setting
         ])
         .setup(|app| {
             let pool = tauri::async_runtime::block_on(db::initialize(app.handle().clone()))?;

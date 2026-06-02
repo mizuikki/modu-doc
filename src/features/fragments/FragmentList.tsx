@@ -116,53 +116,61 @@ export function FragmentList() {
           + {t("new_fragment")}
         </button>
       </div>
-      <div style={{ overflowY: "auto", minHeight: 0, paddingRight: 2 }}>
-        <div style={{ display: "grid", gap: 8 }}>
-          {orderedActiveFragments.map((fragment) => (
-            <div
-              key={fragment.id}
+      <div
+        style={{
+          overflowY: "auto",
+          minHeight: 0,
+          paddingRight: 4,
+          paddingBottom: 8,
+          display: "grid",
+          alignContent: "start",
+          gap: 8,
+        }}
+      >
+        {orderedActiveFragments.map((fragment) => (
+          <div
+            key={fragment.id}
+            style={{
+              display: "grid",
+              gap: 6,
+              textAlign: "left",
+              borderRadius: 10,
+              border:
+                fragment.id === activeFragmentId
+                  ? "1px solid hsl(var(--primary))"
+                  : "1px solid hsl(var(--border))",
+              background: "transparent",
+              padding: 10,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setActiveFragment(fragment.id)}
+              data-testid={`fragment-select-${fragment.id}`}
               style={{
-                display: "grid",
-                gap: 6,
-                textAlign: "left",
-                borderRadius: 10,
-                border:
-                  fragment.id === activeFragmentId
-                    ? "1px solid hsl(var(--primary))"
-                    : "1px solid hsl(var(--border))",
+                border: 0,
                 background: "transparent",
-                padding: 8,
+                padding: 0,
+                textAlign: "left",
+                color: "inherit",
               }}
             >
+              <div>{fragment.name}</div>
+              <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                {fragment.content.slice(0, 60)}
+              </div>
+            </button>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button
                 type="button"
-                onClick={() => setActiveFragment(fragment.id)}
-                data-testid={`fragment-select-${fragment.id}`}
-                style={{
-                  border: 0,
-                  background: "transparent",
-                  padding: 0,
-                  textAlign: "left",
-                  color: "inherit",
-                }}
+                onClick={() => void handleDeleteFragment(fragment.id)}
+                data-testid={`fragment-delete-${fragment.id}`}
               >
-                <div>{fragment.name}</div>
-                <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                  {fragment.content.slice(0, 60)}
-                </div>
+                {t("delete_fragment")}
               </button>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteFragment(fragment.id)}
-                  data-testid={`fragment-delete-${fragment.id}`}
-                >
-                  {t("delete_fragment")}
-                </button>
-              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
             {t("deleted_fragments")}
@@ -180,7 +188,7 @@ export function FragmentList() {
                   borderRadius: 10,
                   border: "1px solid hsl(var(--border))",
                   background: "transparent",
-                  padding: 8,
+                  padding: 10,
                   opacity: 0.7,
                 }}
               >

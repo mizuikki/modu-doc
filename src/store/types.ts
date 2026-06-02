@@ -80,6 +80,12 @@ export type AppState = {
     activeMainTab: "edit" | "preview" | "history";
     sidebarCollapsed: boolean;
     splitRatio: number;
+    zenMode: boolean;
+    sidebarWidth: number;
+    assemblyWidth: number;
+    viewMode: "write" | "split" | "read";
+    continuousMode: boolean;
+    cheatsheetOpen: boolean;
   };
   hydrate: (
     initial: Pick<AppState, "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots">,
@@ -101,6 +107,15 @@ export type AppState = {
   setActiveMainTab: (tab: "edit" | "preview" | "history") => void;
   setTheme: (theme: "light" | "dark" | "system") => void;
   setSplitRatio: (ratio: number) => void;
+  setViewMode: (mode: "write" | "split" | "read") => void;
+  setContinuousMode: (enabled: boolean) => void;
+  toggleContinuousMode: () => void;
+  setZenMode: (zenMode: boolean) => void;
+  toggleZenMode: () => void;
+  setCheatsheetOpen: (open: boolean) => void;
+  toggleCheatsheet: () => void;
+  setSidebarWidth: (width: number) => void;
+  setAssemblyWidth: (width: number) => void;
   setCompileStatus: (status: CompileStatus) => void;
   updateEditorDraft: (fragmentId: string, content: string) => void;
   flushEditorDraft: (fragmentId: string) => void;

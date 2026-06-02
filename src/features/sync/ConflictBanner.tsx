@@ -1,13 +1,12 @@
-import { save } from "@tauri-apps/plugin-dialog";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppDialog } from "@/components/dialog/DialogProvider";
 import { useToast } from "@/components/toast/ToastProvider";
+import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
 import { tMaybe } from "@/i18n/tMaybe";
 import { writeTargetFile } from "@/lib/api/sync";
-import { updateWorkspace } from "@/lib/api/workspaces";
 import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveWorkspace } from "@/store/selectors";
 
 export function ConflictBanner() {
   const { t } = useTranslation();
@@ -18,7 +17,7 @@ export function ConflictBanner() {
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
   const setCompileStatus = useAppStore((state) => state.setCompileStatus);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const isConflict =
     compileStatus === "conflicted" || workspaceStatusMessage === "external_conflict";
   const isTargetIssue =
@@ -52,25 +51,9 @@ export function ConflictBanner() {
     }
   };
 
-  const handleChooseTarget = async () => {
+  const handleChooseTarget = () => {
     if (!activeWorkspaceId) return;
-    try {
-      const targetPath = await save({
-        defaultPath: `${activeWorkspace?.name ?? "workspace"}.md`,
-        filters: [{ name: "Markdown", extensions: ["md"] }],
-      });
-      if (!targetPath) return;
-      await updateWorkspace({
-        id: activeWorkspaceId,
-        name: null,
-        targetPath,
-        clearTargetPath: false,
-      });
-    } catch (error) {
-      setWorkspaceStatusMessage(normalizeAppError(error));
-      setCompileStatus("error");
-      toast.error(normalizeAppError(error), t("action_failed"));
-    }
+    setSettingsOpen(true);
   };
 
   if (!isConflict && !isTargetIssue) {
@@ -135,6 +118,11 @@ export function ConflictBanner() {
           </button>
         ) : null}
       </div>
+      <WorkspaceSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        defaultSection="sync"
+      />
     </div>
   );
 }
