@@ -56,7 +56,6 @@ export type SnapshotSummary = {
   workspaceId: string;
   recipeId: string;
   label: string;
-  snapshotJson: string;
   compiledText: string;
   compiledHash: string;
   createdAt: string;
@@ -79,12 +78,9 @@ export type AppState = {
     theme: "light" | "dark" | "system";
     activeMainTab: "edit" | "preview" | "history";
     sidebarCollapsed: boolean;
-    splitRatio: number;
     zenMode: boolean;
     sidebarWidth: number;
     assemblyWidth: number;
-    viewMode: "write" | "split" | "read";
-    continuousMode: boolean;
     cheatsheetOpen: boolean;
   };
   hydrate: (
@@ -106,10 +102,6 @@ export type AppState = {
   setActiveFragment: (fragmentId: string | null) => void;
   setActiveMainTab: (tab: "edit" | "preview" | "history") => void;
   setTheme: (theme: "light" | "dark" | "system") => void;
-  setSplitRatio: (ratio: number) => void;
-  setViewMode: (mode: "write" | "split" | "read") => void;
-  setContinuousMode: (enabled: boolean) => void;
-  toggleContinuousMode: () => void;
   setZenMode: (zenMode: boolean) => void;
   toggleZenMode: () => void;
   setCheatsheetOpen: (open: boolean) => void;

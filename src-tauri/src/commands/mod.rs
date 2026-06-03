@@ -18,6 +18,7 @@ pub(crate) struct WorkspaceStatusEvent {
 }
 
 mod fragments;
+mod debug;
 mod misc;
 mod packages;
 mod recipes;
@@ -28,6 +29,7 @@ mod sync;
 mod workspaces;
 
 pub use fragments::*;
+pub use debug::*;
 pub use misc::*;
 pub use packages::*;
 pub use recipes::*;

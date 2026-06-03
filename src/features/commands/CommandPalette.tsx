@@ -580,30 +580,6 @@ export function buildCommands(args: {
       },
     },
     {
-      id: "switch-write",
-      labelKey: "switch_write_cmd",
-      category: "view",
-      run: () => {
-        useAppStore.getState().setViewMode("write");
-      },
-    },
-    {
-      id: "switch-split",
-      labelKey: "switch_split_cmd",
-      category: "view",
-      run: () => {
-        useAppStore.getState().setViewMode("split");
-      },
-    },
-    {
-      id: "switch-read",
-      labelKey: "switch_read_cmd",
-      category: "view",
-      run: () => {
-        useAppStore.getState().setViewMode("read");
-      },
-    },
-    {
       id: "sync-now",
       labelKey: "sync_now_cmd",
       category: "sync",

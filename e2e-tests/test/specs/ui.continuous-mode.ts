@@ -1,27 +1,17 @@
-import { browser, expect } from "@wdio/globals";
-import { safeClick } from "../support/ui";
+import { expect } from "@wdio/globals";
 import { createAndSelectWorkspace } from "../support/workspace";
 
-describe("Continuous editor mode", () => {
-  it("switches from fragment to continuous mode", async () => {
-    const workspaceName = `E2E Continuous ${Date.now()}`;
+describe("Edit mode cleanup", () => {
+  it("does not expose the removed continuous mode toggle", async () => {
+    const workspaceName = `E2E RemovedContinuous ${Date.now()}`;
     await createAndSelectWorkspace({ name: workspaceName, targetPath: null });
 
-    await browser.waitUntil(async () => await $("[data-testid='mode-fragment']").isExisting(), {
-      timeout: 10000,
-      interval: 100,
+    await browser.waitUntil(async () => (await $("[data-testid='fragment-editor']")).isExisting(), {
+      timeout: 20000,
+      interval: 200,
     });
 
-    const fragmentButton = await $("[data-testid='mode-fragment']");
-    expect(await fragmentButton.getAttribute("aria-pressed")).toBe("true");
-
-    await safeClick("[data-testid='mode-continuous']");
-    await browser.waitUntil(async () => await $("[data-testid='continuous-editor']").isExisting(), {
-      timeout: 10000,
-      interval: 100,
-    });
-
-    const continuousButton = await $("[data-testid='mode-continuous']");
-    expect(await continuousButton.getAttribute("aria-pressed")).toBe("true");
+    await expect($("[data-testid='mode-fragment']")).not.toBeExisting();
+    await expect($("[data-testid='mode-continuous']")).not.toBeExisting();
   });
 });

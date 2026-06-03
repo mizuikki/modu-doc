@@ -18,13 +18,10 @@ const tauriWindow = {
 };
 
 const scenarios = [
-  { id: "edit-split", file: "tauri-edit-split.png" },
+  { id: "edit-fragment", file: "tauri-edit-fragment.png" },
   { id: "library-insert", file: "tauri-library-insert.png" },
   { id: "preview", file: "tauri-preview-tab.png" },
   { id: "history", file: "tauri-history-tab.png" },
-  { id: "edit-continuous", file: "tauri-edit-continuous.png" },
-  { id: "edit-read", file: "tauri-edit-read.png" },
-  { id: "edit-write", file: "tauri-edit-write.png" },
 ];
 
 function sleep(ms) {
@@ -286,6 +283,7 @@ async function main() {
           stdio: ["ignore", "pipe", "pipe"],
           env: {
             ...process.env,
+            WEBKIT_DISABLE_DMABUF_RENDERER: "1",
           },
         },
       );
@@ -296,11 +294,11 @@ async function main() {
       const framePath = path.join(tempDir, `${scenario.id}.active-window.png`);
       try {
         const payload = await captureServer.waitForScenario(scenario.id);
-        await sleep(300);
-
         const targetPath = path.join(outputDir, scenario.file);
+        await sleep(1200);
         const sourceSize = await captureValidatedWindow(framePath, scenario.id);
         await copyFile(framePath, targetPath);
+
         generated.push({
           scenarioId: scenario.id,
           file: path.relative(repoRoot, targetPath),

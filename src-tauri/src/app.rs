@@ -2,10 +2,14 @@ use crate::commands;
 use crate::db;
 use crate::services::watcher::{prime_watchers, WatcherService, WatcherState};
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let startup = Instant::now();
+    crate::debug_log!("[rust] run() entered");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -34,13 +38,24 @@ pub fn run() {
             commands::list_snapshots,
             commands::restore_snapshot,
             commands::open_target_in_file_manager,
+            commands::debug_log_frontend,
             commands::get_setting,
             commands::set_setting,
             commands::list_settings,
             commands::delete_setting
         ])
-        .setup(|app| {
+        .setup(move |app| {
+            crate::debug_log!(
+                "[rust] setup start +{:.1}ms",
+                startup.elapsed().as_secs_f64() * 1000.0
+            );
+            let db_start = Instant::now();
             let pool = tauri::async_runtime::block_on(db::initialize(app.handle().clone()))?;
+            crate::debug_log!(
+                "[rust] db initialized +{:.1}ms step={:.1}ms",
+                startup.elapsed().as_secs_f64() * 1000.0,
+                db_start.elapsed().as_secs_f64() * 1000.0
+            );
             app.manage(db::DbState::new(pool));
             app.manage(WatcherState::new());
             app.manage(Arc::new(WatcherService::new(app.handle().clone())));
@@ -50,6 +65,10 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let _ = prime_watchers(pool, watcher_state, watcher_service).await;
             });
+            crate::debug_log!(
+                "[rust] setup end +{:.1}ms",
+                startup.elapsed().as_secs_f64() * 1000.0
+            );
             Ok(())
         })
         .run(tauri::generate_context!())

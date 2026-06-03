@@ -123,6 +123,7 @@
   "cancel": "取消",
   "confirm": "确认",
   "editor": "编辑器",
+  "editor_placeholder": "开始编写 Markdown",
   "preview": "预览",
   "select_fragment_to_edit": "请选择一个片段进行编辑。",
   "no_fragment_selected": "未选择片段。",

@@ -60,6 +60,19 @@ pub async fn export_workspace(
             .unwrap_or("<missing>")
     );
     let load = load_workspace(state.clone(), workspace_id).await?;
+    let snapshot_rows = sqlx::query_as::<_, SnapshotRow>(
+        r#"
+        SELECT id, workspace_id, recipe_id, label, snapshot_json, compiled_text, compiled_hash, created_at
+        FROM snapshots
+        WHERE workspace_id = ?1
+        ORDER BY created_at DESC
+        LIMIT 20
+        "#,
+    )
+    .bind(&load.workspace.id)
+    .fetch_all(pool(&state))
+    .await
+    .map_err(crate::error::normalize_error)?;
     let export_path = options
         .get("path")
         .and_then(|value| value.as_str())
@@ -117,21 +130,18 @@ pub async fn export_workspace(
                     .unwrap_or_default(),
             })
             .collect(),
-        snapshots: {
-            let mut snapshots = Vec::with_capacity(load.snapshots.len().min(20));
-            for snapshot in load.snapshots.into_iter().take(20) {
-                snapshots.push(WorkspacePackageSnapshot {
-                    id: snapshot.id,
-                    recipe_id: snapshot.recipe_id,
-                    label: snapshot.label,
-                    snapshot_json: snapshot.snapshot_json,
-                    compiled_text: snapshot.compiled_text,
-                    compiled_hash: snapshot.compiled_hash,
-                    created_at: snapshot.created_at,
-                });
-            }
-            snapshots
-        },
+        snapshots: snapshot_rows
+            .into_iter()
+            .map(|snapshot| WorkspacePackageSnapshot {
+                id: snapshot.id,
+                recipe_id: snapshot.recipe_id,
+                label: snapshot.label,
+                snapshot_json: snapshot.snapshot_json,
+                compiled_text: snapshot.compiled_text,
+                compiled_hash: snapshot.compiled_hash,
+                created_at: snapshot.created_at,
+            })
+            .collect(),
     };
     crate::services::package::PackageService::export_workspace(Path::new(export_path), &package)?;
     Ok(export_path.to_string())
@@ -401,7 +411,6 @@ fn remap_workspace_load_result(
         remapped_snapshots.push(remap_workspace_snapshot(
             snapshot,
             workspace_id,
-            fragment_id_map,
             recipe_id_map,
             snapshot_id_map,
         )?);
@@ -413,19 +422,11 @@ fn remap_workspace_load_result(
 fn remap_workspace_snapshot(
     mut snapshot: Snapshot,
     workspace_id: &str,
-    fragment_id_map: &HashMap<String, String>,
     recipe_id_map: &HashMap<String, String>,
     snapshot_id_map: &HashMap<String, String>,
 ) -> Result<Snapshot, String> {
     snapshot.id = remap_required_id(snapshot_id_map, "snapshot", &snapshot.id)?;
     snapshot.workspace_id = workspace_id.to_string();
     snapshot.recipe_id = remap_required_id(recipe_id_map, "recipe", &snapshot.recipe_id)?;
-    snapshot.snapshot_json = remap_workspace_load_result_json(
-        &snapshot.snapshot_json,
-        workspace_id,
-        fragment_id_map,
-        recipe_id_map,
-        snapshot_id_map,
-    )?;
     Ok(snapshot)
 }

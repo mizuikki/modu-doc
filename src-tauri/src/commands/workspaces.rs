@@ -2,6 +2,8 @@ use super::*;
 
 #[tauri::command]
 pub async fn list_workspaces(state: State<'_, db::DbState>) -> Result<Vec<Workspace>, String> {
+    let started = std::time::Instant::now();
+    crate::debug_log!("[rust] list_workspaces start");
     let rows = sqlx::query_as::<_, WorkspaceRow>(
     r#"
     SELECT id, name, target_path, default_recipe_id, status, last_compiled_at, last_compiled_hash, created_at, updated_at
@@ -12,6 +14,11 @@ pub async fn list_workspaces(state: State<'_, db::DbState>) -> Result<Vec<Worksp
   .fetch_all(pool(&state))
   .await
   .map_err(crate::error::normalize_error)?;
+    crate::debug_log!(
+        "[rust] list_workspaces done rows={} took={:.1}ms",
+        rows.len(),
+        started.elapsed().as_secs_f64() * 1000.0
+    );
     Ok(rows.into_iter().map(Workspace::from).collect())
 }
 
@@ -218,6 +225,9 @@ pub async fn load_workspace(
     state: State<'_, db::DbState>,
     id: String,
 ) -> Result<WorkspaceLoadResult, String> {
+    let started = std::time::Instant::now();
+    crate::debug_log!("[rust] load_workspace start id={}", id);
+
     let workspace = sqlx::query_as::<_, WorkspaceRow>(
     r#"
     SELECT id, name, target_path, default_recipe_id, status, last_compiled_at, last_compiled_hash, created_at, updated_at
@@ -229,8 +239,12 @@ pub async fn load_workspace(
   .await
   .map_err(crate::error::normalize_error)?
   .into();
+    crate::debug_log!(
+        "[rust] load_workspace workspace row took={:.1}ms",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
 
-    let fragments = sqlx::query_as::<_, FragmentRow>(
+    let fragments: Vec<Fragment> = sqlx::query_as::<_, FragmentRow>(
     r#"
     SELECT id, workspace_id, name, content, content_hash, sort_order, is_archived, deleted_at, created_at, updated_at
     FROM fragments
@@ -245,8 +259,13 @@ pub async fn load_workspace(
   .into_iter()
   .map(Fragment::from)
   .collect();
+    crate::debug_log!(
+        "[rust] load_workspace fragments={} took={:.1}ms",
+        fragments.len(),
+        started.elapsed().as_secs_f64() * 1000.0
+    );
 
-    let recipes = sqlx::query_as::<_, RecipeRow>(
+    let recipes: Vec<Recipe> = sqlx::query_as::<_, RecipeRow>(
         r#"
     SELECT id, workspace_id, name, description, is_active, created_at, updated_at
     FROM recipes
@@ -261,8 +280,13 @@ pub async fn load_workspace(
     .into_iter()
     .map(Recipe::from)
     .collect();
+    crate::debug_log!(
+        "[rust] load_workspace recipes={} took={:.1}ms",
+        recipes.len(),
+        started.elapsed().as_secs_f64() * 1000.0
+    );
 
-    let recipe_items = sqlx::query_as::<_, RecipeItemRow>(
+    let recipe_items: Vec<RecipeItem> = sqlx::query_as::<_, RecipeItemRow>(
         r#"
     SELECT id, recipe_id, fragment_id, enabled, sort_order
     FROM recipe_items
@@ -277,10 +301,15 @@ pub async fn load_workspace(
     .into_iter()
     .map(RecipeItem::from)
     .collect();
+    crate::debug_log!(
+        "[rust] load_workspace recipe_items={} took={:.1}ms",
+        recipe_items.len(),
+        started.elapsed().as_secs_f64() * 1000.0
+    );
 
-    let snapshots = sqlx::query_as::<_, SnapshotRow>(
+    let snapshots: Vec<Snapshot> = sqlx::query_as::<_, SnapshotSummaryRow>(
     r#"
-    SELECT id, workspace_id, recipe_id, label, snapshot_json, compiled_text, compiled_hash, created_at
+    SELECT id, workspace_id, recipe_id, label, compiled_text, compiled_hash, created_at
     FROM snapshots
     WHERE workspace_id = ?1
     ORDER BY created_at DESC
@@ -293,6 +322,18 @@ pub async fn load_workspace(
   .into_iter()
   .map(Snapshot::from)
   .collect();
+    let compiled_text_bytes: usize = snapshots.iter().map(|snapshot| snapshot.compiled_text.len()).sum();
+    crate::debug_log!(
+        "[rust] load_workspace snapshots={} compiled_text_bytes={} took={:.1}ms",
+        snapshots.len(),
+        compiled_text_bytes,
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    crate::debug_log!(
+        "[rust] load_workspace done id={} total={:.1}ms",
+        id,
+        started.elapsed().as_secs_f64() * 1000.0
+    );
 
     Ok(WorkspaceLoadResult {
         workspace,

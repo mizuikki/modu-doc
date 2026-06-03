@@ -15,14 +15,50 @@ export const initialUI = {
   theme: "light" as const,
   activeMainTab: "edit" as const,
   sidebarCollapsed: false,
-  splitRatio: 0.5,
   zenMode: false,
   sidebarWidth: 196,
   assemblyWidth: 500,
-  viewMode: "split" as const,
-  continuousMode: false,
   cheatsheetOpen: false,
 };
+
+type PersistedUiState = Partial<AppState["ui"]> & {
+  splitRatio?: number;
+  viewMode?: "write" | "split" | "read";
+  continuousMode?: boolean;
+};
+
+type PersistedAppStateForMigration = {
+  ui?: PersistedUiState;
+};
+
+export function migratePersistedAppState(persistedState: unknown, version: number) {
+  const persisted = (persistedState as PersistedAppStateForMigration | undefined) ?? {};
+  const ui = persisted.ui;
+  const usesLegacyDefaultWidths =
+    (ui?.sidebarWidth === 200 && ui?.assemblyWidth === 400) ||
+    (ui?.sidebarWidth === 180 && ui?.assemblyWidth === 440);
+  const hasNoStoredWidths = ui?.sidebarWidth == null && ui?.assemblyWidth == null;
+
+  const migratedUi: PersistedUiState | undefined = ui
+    ? {
+        ...ui,
+      }
+    : undefined;
+
+  if (migratedUi && version < 2 && (usesLegacyDefaultWidths || hasNoStoredWidths)) {
+    migratedUi.sidebarWidth = initialUI.sidebarWidth;
+    migratedUi.assemblyWidth = initialUI.assemblyWidth;
+  }
+
+  if (migratedUi) {
+    delete migratedUi.splitRatio;
+    delete migratedUi.viewMode;
+    delete migratedUi.continuousMode;
+    persisted.ui = migratedUi;
+  }
+
+  return persisted;
+}
 
 function isScreenshotStoreMode() {
   if (!("location" in globalThis) || !globalThis.location) {
@@ -185,34 +221,6 @@ export const useAppStore = create<AppState>()(
             theme,
           },
         })),
-      setSplitRatio: (ratio) =>
-        set((state) => ({
-          ui: {
-            ...state.ui,
-            splitRatio: Math.min(0.8, Math.max(0.2, ratio)),
-          },
-        })),
-      setViewMode: (mode) =>
-        set((state) => ({
-          ui: {
-            ...state.ui,
-            viewMode: mode,
-          },
-        })),
-      setContinuousMode: (continuousMode) =>
-        set((state) => ({
-          ui: {
-            ...state.ui,
-            continuousMode,
-          },
-        })),
-      toggleContinuousMode: () =>
-        set((state) => ({
-          ui: {
-            ...state.ui,
-            continuousMode: !state.ui.continuousMode,
-          },
-        })),
       setZenMode: (zenMode) =>
         set((state) => ({
           ui: {
@@ -351,25 +359,8 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "modudoc-app-store",
-      version: 2,
-      migrate: (persistedState, version) => {
-        const persisted = persistedState as { ui?: Partial<AppState["ui"]> };
-        const ui = persisted.ui;
-        const usesLegacyDefaultWidths =
-          (ui?.sidebarWidth === 200 && ui?.assemblyWidth === 400) ||
-          (ui?.sidebarWidth === 180 && ui?.assemblyWidth === 440);
-        const hasNoStoredWidths = ui?.sidebarWidth == null && ui?.assemblyWidth == null;
-
-        if (version < 2 && (usesLegacyDefaultWidths || hasNoStoredWidths)) {
-          persisted.ui = {
-            ...ui,
-            sidebarWidth: initialUI.sidebarWidth,
-            assemblyWidth: initialUI.assemblyWidth,
-          };
-        }
-
-        return persisted;
-      },
+      version: 3,
+      migrate: migratePersistedAppState,
       storage: createJSONStorage(() => appStoreStorage),
       partialize: (state) => ({
         ui: state.ui,

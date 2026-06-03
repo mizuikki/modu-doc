@@ -37,6 +37,7 @@ describe("Fragments", () => {
       { timeout: 30000, interval: 250 },
     );
 
+    await safeClick("[data-testid='main-tab-preview']");
     await expect($("h1=Title")).toBeDisplayed();
     await expect($(`p*=Hello autosave`)).toBeDisplayed();
   });

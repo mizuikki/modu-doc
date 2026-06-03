@@ -100,7 +100,17 @@ pub struct Snapshot {
     pub workspace_id: String,
     pub recipe_id: String,
     pub label: String,
-    pub snapshot_json: String,
+    pub compiled_text: String,
+    pub compiled_hash: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct SnapshotSummaryRow {
+    pub id: String,
+    pub workspace_id: String,
+    pub recipe_id: String,
+    pub label: String,
     pub compiled_text: String,
     pub compiled_hash: String,
     pub created_at: String,
@@ -262,6 +272,20 @@ impl From<RecipeItemRow> for RecipeItem {
     }
 }
 
+impl From<SnapshotSummaryRow> for Snapshot {
+    fn from(value: SnapshotSummaryRow) -> Self {
+        Self {
+            id: value.id,
+            workspace_id: value.workspace_id,
+            recipe_id: value.recipe_id,
+            label: value.label,
+            compiled_text: value.compiled_text,
+            compiled_hash: value.compiled_hash,
+            created_at: value.created_at,
+        }
+    }
+}
+
 impl From<SnapshotRow> for Snapshot {
     fn from(value: SnapshotRow) -> Self {
         Self {
@@ -269,7 +293,6 @@ impl From<SnapshotRow> for Snapshot {
             workspace_id: value.workspace_id,
             recipe_id: value.recipe_id,
             label: value.label,
-            snapshot_json: value.snapshot_json,
             compiled_text: value.compiled_text,
             compiled_hash: value.compiled_hash,
             created_at: value.created_at,

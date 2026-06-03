@@ -24,12 +24,9 @@ export function resetAppStore() {
       theme: "light",
       activeMainTab: "edit",
       sidebarCollapsed: false,
-      splitRatio: 0.5,
       zenMode: false,
       sidebarWidth: 196,
       assemblyWidth: 500,
-      viewMode: "split",
-      continuousMode: false,
       cheatsheetOpen: false,
     },
   });

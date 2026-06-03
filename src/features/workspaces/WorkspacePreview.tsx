@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { tMaybe } from "@/i18n/tMaybe";
 import { openTargetInFileManager } from "@/lib/api/misc";
+import { logDebugPerf } from "@/lib/debugPerf";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveWorkspace } from "@/store/selectors";
 
@@ -21,18 +22,28 @@ export function WorkspacePreview() {
   const compiled = useMemo(() => {
     const activeFragments = fragments.filter((fragment) => fragment.deletedAt === null);
     const activeFragmentIds = new Set(activeFragments.map((fragment) => fragment.id));
+    const fragmentContentById = new Map(
+      activeFragments.map((fragment) => [fragment.id, fragment.content]),
+    );
     const orderedItems = recipeItems
       .filter((item) => item.recipeId === activeRecipeId && item.enabled)
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder);
     return orderedItems
       .filter((item) => activeFragmentIds.has(item.fragmentId))
-      .map(
-        (item) =>
-          activeFragments.find((fragment) => fragment.id === item.fragmentId)?.content ?? "",
-      )
+      .map((item) => fragmentContentById.get(item.fragmentId) ?? "")
       .join("\n\n");
   }, [activeRecipeId, fragments, recipeItems]);
+
+  useEffect(() => {
+    void logDebugPerf("main-tab ready:preview", {
+      workspaceId: activeWorkspace?.id ?? null,
+      recipeId: activeRecipeId,
+      compiledBytes: compiled.length,
+      enabledCount,
+      totalCount,
+    });
+  }, [activeRecipeId, activeWorkspace?.id, compiled.length, enabledCount, totalCount]);
 
   return (
     <div style={{ padding: 20, display: "grid", gap: 16 }}>

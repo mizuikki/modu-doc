@@ -123,6 +123,7 @@
   "cancel": "Cancel",
   "confirm": "Confirm",
   "editor": "Editor",
+  "editor_placeholder": "Start writing Markdown",
   "preview": "Preview",
   "select_fragment_to_edit": "Select a fragment to edit.",
   "no_fragment_selected": "No fragment selected.",

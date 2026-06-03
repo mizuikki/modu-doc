@@ -1,5 +1,11 @@
 @import "@fontsource/inter/latin.css";
 @import "@fontsource/jetbrains-mono/latin.css";
+@import "@milkdown/crepe/theme/common/prosemirror.css";
+@import "@milkdown/crepe/theme/common/reset.css";
+@import "@milkdown/crepe/theme/common/placeholder.css";
+@import "@milkdown/crepe/theme/common/list-item.css";
+@import "@milkdown/crepe/theme/common/link-tooltip.css";
+@import "@milkdown/crepe/theme/classic.css";
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
@@ -164,4 +170,74 @@ textarea {
   .reading-column {
     max-width: none;
   }
+}
+
+.milkdown-fragment-editor {
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--card)),
+    color-mix(in srgb, hsl(var(--muted)) 18%, hsl(var(--card)))
+  );
+  box-shadow: var(--elevation-1);
+  min-height: 360px;
+}
+
+.milkdown-fragment-editor .milkdown {
+  --crepe-color-background: hsl(var(--card));
+  --crepe-color-on-background: hsl(var(--foreground));
+  --crepe-color-surface: hsl(var(--card));
+  --crepe-color-surface-low: color-mix(in srgb, hsl(var(--muted)) 40%, hsl(var(--card)));
+  --crepe-color-on-surface: hsl(var(--foreground));
+  --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
+  --crepe-color-outline: hsl(var(--border));
+  --crepe-color-primary: hsl(var(--primary));
+  --crepe-color-secondary: color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--card)));
+  --crepe-color-on-secondary: hsl(var(--foreground));
+  --crepe-color-inverse: hsl(var(--foreground));
+  --crepe-color-on-inverse: hsl(var(--background));
+  --crepe-color-inline-code: hsl(var(--primary));
+  --crepe-color-error: rgb(220 38 38);
+  --crepe-color-hover: color-mix(in srgb, hsl(var(--muted)) 70%, hsl(var(--card)));
+  --crepe-color-selected: color-mix(in srgb, hsl(var(--muted)) 85%, hsl(var(--card)));
+  --crepe-color-inline-area: color-mix(in srgb, hsl(var(--muted)) 55%, hsl(var(--card)));
+  --crepe-font-title: Inter, system-ui, sans-serif;
+  --crepe-font-default: Inter, system-ui, sans-serif;
+  --crepe-font-code: "JetBrains Mono", monospace;
+  background: transparent;
+  color: hsl(var(--foreground));
+}
+
+.milkdown-fragment-editor .ProseMirror {
+  min-height: 360px;
+  padding: 30px 32px;
+  overflow-wrap: anywhere;
+}
+
+.milkdown-fragment-editor .ProseMirror p,
+.milkdown-fragment-editor .ProseMirror li {
+  line-height: 1.65;
+}
+
+.milkdown-fragment-editor .ProseMirror h1,
+.milkdown-fragment-editor .ProseMirror h2,
+.milkdown-fragment-editor .ProseMirror h3,
+.milkdown-fragment-editor .ProseMirror h4 {
+  letter-spacing: -0.02em;
+}
+
+.milkdown-fragment-editor .ProseMirror pre {
+  overflow-x: auto;
+}
+
+.milkdown-fragment-editor .ProseMirror-focused {
+  outline: none;
+}
+
+.milkdown-fragment-editor[data-editor-status="loading"]::before {
+  content: "";
+  display: block;
+  min-height: 360px;
 }

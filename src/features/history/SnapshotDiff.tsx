@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
 import { restoreSnapshot } from "@/lib/api/snapshots";
 import { normalizeAppError } from "@/lib/appError";
+import { logDebugPerf } from "@/lib/debugPerf";
 import { useAppStore } from "@/store/appStore";
 
 type RowKind = "same" | "remove" | "add";
@@ -141,6 +142,17 @@ export function SnapshotDiff() {
     () => buildSegments(snapshot?.compiledText ?? "", currentText),
     [currentText, snapshot?.compiledText],
   );
+
+  useEffect(() => {
+    if (!snapshot) {
+      return;
+    }
+    void logDebugPerf("main-tab ready:history", {
+      snapshotId: snapshot.id,
+      compiledBytes: snapshot.compiledText.length,
+      segmentCount: segments.length,
+    });
+  }, [segments.length, snapshot]);
 
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 

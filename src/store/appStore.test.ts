@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useAppStore } from "./appStore";
+import { initialUI, migratePersistedAppState, useAppStore } from "./appStore";
 import { createDefaultWorkspaceState } from "./defaults";
 
 function resetStore() {
@@ -22,12 +22,9 @@ function resetStore() {
       theme: "light",
       activeMainTab: "edit",
       sidebarCollapsed: false,
-      splitRatio: 0.5,
       zenMode: false,
       sidebarWidth: 196,
       assemblyWidth: 500,
-      viewMode: "split",
-      continuousMode: false,
       cheatsheetOpen: false,
     },
   });
@@ -124,5 +121,27 @@ describe("appStore", () => {
     useAppStore.getState().setActiveFragment("fragment-default");
     useAppStore.getState().reorderRecipeItems("recipe-default", ["fragment-default"]);
     expect(useAppStore.getState().activeFragmentId).toBe("fragment-default");
+  });
+
+  it("migrates persisted ui state by removing legacy edit mode fields", () => {
+    const migrated = migratePersistedAppState(
+      {
+        ui: {
+          ...initialUI,
+          sidebarWidth: 200,
+          assemblyWidth: 400,
+          splitRatio: 0.65,
+          viewMode: "read",
+          continuousMode: true,
+        },
+      },
+      1,
+    );
+
+    expect(migrated.ui).toEqual({
+      ...initialUI,
+      sidebarWidth: 196,
+      assemblyWidth: 500,
+    });
   });
 });

@@ -1,15 +1,7 @@
 import { initialUI, useAppStore } from "@/store/appStore";
 import type { AppState } from "@/store/types";
 
-type ScreenshotScenarioId =
-  | "default"
-  | "edit-split"
-  | "preview"
-  | "history"
-  | "edit-continuous"
-  | "edit-read"
-  | "edit-write"
-  | "library-insert";
+type ScreenshotScenarioId = "default" | "edit-fragment" | "preview" | "history" | "library-insert";
 
 type ScreenshotScenario = {
   app: Pick<AppState, "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots">;
@@ -57,12 +49,9 @@ export function getScreenshotScenarioId(): ScreenshotScenarioId | null {
   }
   const allowed = new Set<ScreenshotScenarioId>([
     "default",
-    "edit-split",
+    "edit-fragment",
     "preview",
     "history",
-    "edit-continuous",
-    "edit-read",
-    "edit-write",
     "library-insert",
   ]);
   if (allowed.has(raw as ScreenshotScenarioId)) {
@@ -218,7 +207,6 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         workspaceId: "workspace-screenshot",
         recipeId: "recipe-default",
         label: "Baseline snapshot",
-        snapshotJson: "{}",
         compiledText: "Intro body\n\n---\n\nMiddle body\n\n---\n\nOutro body",
         compiledHash: "snapshot-hash-1",
         createdAt: "2026-06-02 18:15",
@@ -228,7 +216,6 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         workspaceId: "workspace-screenshot",
         recipeId: "recipe-default",
         label: "Latest snapshot",
-        snapshotJson: "{}",
         compiledText: "Intro body\n\n---\n\nMiddle body\n\n---\n\nUnknown fragment",
         compiledHash: "snapshot-hash-2",
         createdAt: "2026-06-03 08:40",
@@ -246,8 +233,6 @@ const screenshotScenarioDefault: ScreenshotScenario = {
     activeMainTab: "edit",
     sidebarCollapsed: false,
     zenMode: false,
-    viewMode: "split",
-    continuousMode: false,
     cheatsheetOpen: false,
   },
   libraryDialog: null,
@@ -267,7 +252,7 @@ function createScenario(overrides: Partial<ScreenshotScenario>): ScreenshotScena
 
 const screenshotScenarios: Record<ScreenshotScenarioId, ScreenshotScenario> = {
   default: screenshotScenarioDefault,
-  "edit-split": screenshotScenarioDefault,
+  "edit-fragment": screenshotScenarioDefault,
   preview: createScenario({
     ui: {
       activeMainTab: "preview",
@@ -276,25 +261,6 @@ const screenshotScenarios: Record<ScreenshotScenarioId, ScreenshotScenario> = {
   history: createScenario({
     ui: {
       activeMainTab: "history",
-    },
-  }),
-  "edit-continuous": createScenario({
-    ui: {
-      activeMainTab: "edit",
-      continuousMode: true,
-      viewMode: "split",
-    },
-  }),
-  "edit-read": createScenario({
-    ui: {
-      activeMainTab: "edit",
-      viewMode: "read",
-    },
-  }),
-  "edit-write": createScenario({
-    ui: {
-      activeMainTab: "edit",
-      viewMode: "write",
     },
   }),
   "library-insert": createScenario({
@@ -359,6 +325,11 @@ function screenshotSceneLooksReady() {
     return false;
   }
 
+  const scenarioId = getScreenshotScenarioId();
+  if (!scenarioId) {
+    return false;
+  }
+
   const visibleText = document.body.innerText.replace(/\s+/g, " ").trim();
   if (visibleText.length < 40) {
     return false;
@@ -366,6 +337,13 @@ function screenshotSceneLooksReady() {
 
   const needsDialog = getScreenshotDialogMode() !== null;
   if (needsDialog && !document.querySelector('[role="dialog"]')) {
+    return false;
+  }
+
+  if (
+    (scenarioId === "default" || scenarioId === "edit-fragment") &&
+    !document.querySelector("#fragment-editor .ProseMirror, #fragment-editor textarea")
+  ) {
     return false;
   }
 

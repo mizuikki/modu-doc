@@ -46,7 +46,6 @@ pub async fn create_snapshot(
         workspace_id,
         recipe_id: active_recipe_id,
         label,
-        snapshot_json,
         compiled_text,
         compiled_hash,
         created_at: timestamp,
@@ -58,9 +57,9 @@ pub async fn list_snapshots(
     state: State<'_, db::DbState>,
     workspace_id: String,
 ) -> Result<Vec<Snapshot>, String> {
-    let rows = sqlx::query_as::<_, SnapshotRow>(
+    let rows = sqlx::query_as::<_, SnapshotSummaryRow>(
     r#"
-    SELECT id, workspace_id, recipe_id, label, snapshot_json, compiled_text, compiled_hash, created_at
+    SELECT id, workspace_id, recipe_id, label, compiled_text, compiled_hash, created_at
     FROM snapshots
     WHERE workspace_id = ?1
     ORDER BY created_at DESC

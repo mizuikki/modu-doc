@@ -124,6 +124,12 @@ npm run e2e:setup
 npm run e2e
 ```
 
+For Milkdown and UI performance diagnostics, run the dedicated perf spec:
+
+```bash
+npm run e2e:perf
+```
+
 By default, e2e runs the Tauri app against built frontend assets (`frontendDist`) and does not start a Vite dev server. To run e2e against the Vite dev server instead, set `MODUDOC_E2E_MODE=dev`.
 
 On Linux, you can also run e2e tests inside a virtual display to avoid bringing the app window to the foreground:
@@ -135,6 +141,8 @@ npm run e2e:xvfb
 If you're on Wayland, `npm run e2e:xvfb` forces the X11 backend (`GDK_BACKEND=x11`) and unsets `WAYLAND_DISPLAY` so the app attaches to the virtual X server instead of the real Wayland session.
 
 By default, each e2e run writes runner logs under `tmp/modudoc-e2e/run-*/logs/` and automatically keeps only the most recent 3 runs.
+
+The performance spec writes its JSON report under `tmp/modudoc-e2e/run-*/perf/` by default. You can adjust sampling with `MODUDOC_E2E_PERF_ITERATIONS` and `MODUDOC_E2E_PERF_WARMUP`, or override the report directory with `MODUDOC_E2E_PERF_OUTPUT`.
 
 If you need to avoid WebDriver port conflicts with other projects, you can override the ports used by `tauri-driver`/WebdriverIO via `MODUDOC_E2E_WD_PORT` and `MODUDOC_E2E_WD_NATIVE_PORT`.
 

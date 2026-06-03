@@ -64,7 +64,6 @@ export function toSnapshot(snapshot: WorkspaceLoadResult["snapshots"][number]): 
     workspaceId: snapshot.workspace_id,
     recipeId: snapshot.recipe_id,
     label: snapshot.label,
-    snapshotJson: snapshot.snapshot_json,
     compiledText: snapshot.compiled_text,
     compiledHash: snapshot.compiled_hash,
     createdAt: snapshot.created_at,

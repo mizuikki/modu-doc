@@ -4,11 +4,29 @@ import { useAppStore } from "@/store/appStore";
 import { AppTestProviders, resetAppStore } from "@/test/testUtils";
 import { FragmentEditor } from "./FragmentEditor";
 
-vi.mock("@uiw/react-codemirror", () => {
-  throw new Error("codemirror disabled in tests");
-});
+vi.mock("./MilkdownEditor", () => ({
+  MilkdownEditor: ({
+    documentId,
+    value,
+    onChange,
+    onBlur,
+  }: {
+    documentId: string;
+    value: string;
+    onChange: (nextValue: string) => void;
+    onBlur: () => void;
+  }) => (
+    <textarea
+      data-testid="fragment-editor"
+      data-document-id={documentId}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onBlur={onBlur}
+    />
+  ),
+}));
 
-const { updateFragment, scheduleWorkspaceSync, forceWorkspaceSync } = vi.hoisted(() => ({
+const { updateFragment, scheduleWorkspaceSync } = vi.hoisted(() => ({
   updateFragment: vi.fn(async () => ({
     id: "fragment-a",
     workspace_id: "workspace-a",
@@ -22,7 +40,6 @@ const { updateFragment, scheduleWorkspaceSync, forceWorkspaceSync } = vi.hoisted
     updated_at: "t",
   })),
   scheduleWorkspaceSync: vi.fn(),
-  forceWorkspaceSync: vi.fn(),
 }));
 
 vi.mock("@/lib/api/fragments", () => ({
@@ -31,7 +48,7 @@ vi.mock("@/lib/api/fragments", () => ({
 
 vi.mock("@/lib/syncScheduler", () => ({
   scheduleWorkspaceSync,
-  forceWorkspaceSync,
+  forceWorkspaceSync: vi.fn(),
 }));
 
 describe("FragmentEditor", () => {
@@ -69,6 +86,18 @@ describe("FragmentEditor", () => {
           createdAt: "t",
           updatedAt: "t",
         },
+        {
+          id: "fragment-b",
+          workspaceId: "workspace-a",
+          name: "Outro",
+          content: "Second body",
+          contentHash: "",
+          sortOrder: 1,
+          isArchived: false,
+          deletedAt: null,
+          createdAt: "t",
+          updatedAt: "t",
+        },
       ],
     });
   });
@@ -76,6 +105,17 @@ describe("FragmentEditor", () => {
   afterEach(() => {
     vi.useRealTimers();
     cleanup();
+  });
+
+  it("does not save on initial mount", async () => {
+    render(
+      <AppTestProviders>
+        <FragmentEditor />
+      </AppTestProviders>,
+    );
+
+    await vi.advanceTimersByTimeAsync(900);
+    expect(updateFragment).not.toHaveBeenCalled();
   });
 
   it("auto-saves drafts and schedules workspace sync", async () => {
@@ -115,5 +155,45 @@ describe("FragmentEditor", () => {
     await vi.advanceTimersByTimeAsync(900);
 
     expect(useAppStore.getState().fragments[0]?.content).toBe("Initial body");
+  });
+
+  it("flushes the current draft before switching fragments", async () => {
+    render(
+      <AppTestProviders>
+        <FragmentEditor />
+      </AppTestProviders>,
+    );
+
+    fireEvent.change(screen.getByTestId("fragment-editor"), {
+      target: { value: "Switched body" },
+    });
+
+    useAppStore.getState().setActiveFragment("fragment-b");
+
+    await Promise.resolve();
+
+    expect(updateFragment).toHaveBeenCalledWith({
+      id: "fragment-a",
+      name: "Intro",
+      content: "Switched body",
+    });
+  });
+
+  it("reuses the editor instance when switching fragments", async () => {
+    render(
+      <AppTestProviders>
+        <FragmentEditor />
+      </AppTestProviders>,
+    );
+
+    const firstEditor = screen.getByTestId("fragment-editor");
+    expect(firstEditor).toHaveAttribute("data-document-id", "fragment-a");
+
+    useAppStore.getState().setActiveFragment("fragment-b");
+    await Promise.resolve();
+
+    const secondEditor = screen.getByTestId("fragment-editor");
+    expect(secondEditor).toBe(firstEditor);
+    expect(secondEditor).toHaveAttribute("data-document-id", "fragment-b");
   });
 });

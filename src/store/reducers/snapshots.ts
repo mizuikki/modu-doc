@@ -20,7 +20,6 @@ export function createSnapshotReducers(set: StoreSetState) {
             workspaceId: state.activeWorkspaceId ?? "",
             recipeId: state.activeRecipeId ?? "",
             label: label ?? "",
-            snapshotJson: "{}",
             compiledText: "",
             compiledHash: "",
             createdAt: new Date().toISOString(),

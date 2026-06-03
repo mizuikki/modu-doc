@@ -19,6 +19,7 @@ This file provides shared repository guidance for AI coding assistants and autom
 - Production builds: `npm run build` (typecheck + Vite) and `npm run tauri:build` (desktop bundles).
 - Checks to run before PRs: `npm run check`, `npm run typecheck`, `npm test`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`, `npm run notice:check`.
 - E2E: `npm run e2e:setup` then `npm run e2e` (Linux headless: `npm run e2e:xvfb`). By default e2e uses built frontend assets; set `MODUDOC_E2E_MODE=dev` to run against the Vite dev server.
+- Perf e2e: `npm run e2e:perf` runs the dedicated Milkdown/UI diagnostics spec and writes JSON output under `tmp/modudoc-e2e/run-*/perf/` by default. Sampling is controlled by `MODUDOC_E2E_PERF_ITERATIONS` and `MODUDOC_E2E_PERF_WARMUP`.
 
 ## Coding Style & Naming Conventions
 

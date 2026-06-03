@@ -9,16 +9,8 @@ vi.mock("@/components/layout/ReadingColumn", () => ({
   ReadingColumn: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock("@/features/fragments/ContinuousEditor", () => ({
-  ContinuousEditor: () => <div>continuous-editor</div>,
-}));
-
 vi.mock("@/features/fragments/FragmentEditor", () => ({
-  FragmentEditor: () => <div>fragment-editor</div>,
-}));
-
-vi.mock("@/features/fragments/FragmentPreview", () => ({
-  FragmentPreview: () => <div>fragment-preview</div>,
+  FragmentEditor: () => <div data-testid="fragment-editor-stub">fragment-editor</div>,
 }));
 
 vi.mock("@/features/history/SnapshotDiff", () => ({
@@ -37,7 +29,7 @@ vi.mock("@/features/workspaces/WorkspacePreview", () => ({
   WorkspacePreview: () => <div>workspace-preview</div>,
 }));
 
-describe("MainPanel toolbar", () => {
+describe("MainPanel", () => {
   beforeEach(() => {
     resetAppStore();
     useAppStore.setState({
@@ -81,9 +73,6 @@ describe("MainPanel toolbar", () => {
       ui: {
         ...useAppStore.getState().ui,
         activeMainTab: "edit",
-        continuousMode: false,
-        viewMode: "split",
-        splitRatio: 0.35,
       },
     });
   });
@@ -93,53 +82,35 @@ describe("MainPanel toolbar", () => {
     vi.clearAllMocks();
   });
 
-  it("shows labels only on active edit and view controls", () => {
+  it("renders the simplified edit surface without legacy mode controls", () => {
     render(
       <AppTestProviders>
         <MainPanel />
       </AppTestProviders>,
     );
 
-    const fragmentButton = screen.getByTestId("mode-fragment");
-    const continuousButton = screen.getByTestId("mode-continuous");
-    const writeButton = screen.getByTestId("view-mode-write");
-    const splitButton = screen.getByTestId("view-mode-split");
-    const readButton = screen.getByTestId("view-mode-read");
-    const resetButton = screen.getByTestId("reset-split-button");
-
-    expect(fragmentButton).toHaveTextContent("Fragment");
-    expect(fragmentButton).toHaveAccessibleName("Fragment");
-    expect(continuousButton).not.toHaveTextContent("Continuous");
-    expect(continuousButton).toHaveAccessibleName("Continuous");
-    expect(writeButton).not.toHaveTextContent("Write");
-    expect(writeButton).toHaveAccessibleName("Write");
-    expect(splitButton).toHaveTextContent("Split");
-    expect(splitButton).toHaveAccessibleName("Split");
-    expect(readButton).not.toHaveTextContent("Read");
-    expect(readButton).toHaveAccessibleName("Read");
-    expect(resetButton).not.toHaveTextContent("Reset split");
-    expect(resetButton).toHaveAccessibleName("Reset split");
+    expect(screen.getByTestId("main-tab-edit")).toHaveAccessibleName("Edit");
+    expect(screen.queryByTestId("mode-fragment")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("view-mode-write")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("reset-split-button")).not.toBeInTheDocument();
+    expect(screen.getByText("Intro")).toBeInTheDocument();
+    expect(screen.getByTestId("fragment-editor-stub")).toBeInTheDocument();
   });
 
-  it("moves the visible label to the newly active option and hides reset outside split mode", () => {
+  it("switches between top-level tabs", () => {
     render(
       <AppTestProviders>
         <MainPanel />
       </AppTestProviders>,
     );
 
-    const fragmentButton = screen.getByTestId("mode-fragment");
-    const continuousButton = screen.getByTestId("mode-continuous");
-    const splitButton = screen.getByTestId("view-mode-split");
-    const readButton = screen.getByTestId("view-mode-read");
+    expect(screen.getByTestId("fragment-editor-stub")).toBeInTheDocument();
+    expect(screen.queryByText("workspace-preview")).not.toBeInTheDocument();
 
-    fireEvent.click(continuousButton);
-    fireEvent.click(readButton);
+    fireEvent.click(screen.getByTestId("main-tab-preview"));
+    expect(screen.getByText("workspace-preview")).toBeInTheDocument();
 
-    expect(fragmentButton).not.toHaveTextContent("Fragment");
-    expect(continuousButton).toHaveTextContent("Continuous");
-    expect(splitButton).not.toHaveTextContent("Split");
-    expect(readButton).toHaveTextContent("Read");
-    expect(screen.queryByTestId("reset-split-button")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("main-tab-history"));
+    expect(screen.getByText("snapshot-timeline")).toBeInTheDocument();
   });
 });

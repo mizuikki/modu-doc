@@ -43,7 +43,6 @@ export type WorkspaceLoadResult = {
     workspace_id: string;
     recipe_id: string;
     label: string;
-    snapshot_json: string;
     compiled_text: string;
     compiled_hash: string;
     created_at: string;
