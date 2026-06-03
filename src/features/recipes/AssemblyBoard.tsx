@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ChevronDown, CopyPlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppDialog } from "@/components/dialog/DialogProvider";
@@ -310,11 +311,15 @@ export function AssemblyBoard() {
       className="panel-scroll"
       style={{ padding: 12, display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", gap: 12 }}
     >
-      <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "grid", gap: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>{t("current_recipe_title")}</h2>
           <span
             data-testid="recipe-compile-badge"
+            title={t("continuous_workspace_hint", {
+              enabled: enabledCount,
+              total: currentRecipeItems.length,
+            })}
             style={{
               fontSize: 11,
               lineHeight: 1.2,
@@ -328,154 +333,173 @@ export function AssemblyBoard() {
             {enabledCount}/{currentRecipeItems.length}
           </span>
         </div>
-        <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>
-          <div
-            style={{
-              maxWidth: 320,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {t("current_recipe_hint")}
-          </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "hsl(var(--muted-foreground))",
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {t("current_recipe_hint")}
         </div>
         <div
           style={{
-            display: "grid",
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "wrap",
             gap: 8,
-            padding: 10,
+            padding: "8px 10px",
             border: "1px solid hsl(var(--border))",
             borderRadius: 12,
             background: "hsl(var(--card))",
           }}
         >
-          <div
+          <RecipeSelect />
+          <button
+            type="button"
+            onClick={cloneRecipe}
+            disabled={!currentRecipeItems.length}
+            data-testid="recipe-save-as-new"
+            aria-label={t("save_as_new_recipe")}
+            title={t("save_as_new_recipe")}
             style={{
-              display: "flex",
+              display: "inline-flex",
               alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-              flexWrap: "nowrap",
+              justifyContent: "center",
+              width: 30,
+              height: 30,
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 10,
+              padding: 0,
+              background: "transparent",
+              color: "hsl(var(--muted-foreground))",
+              flexShrink: 0,
             }}
           >
-            <RecipeSelect />
-            <button
-              type="button"
-              onClick={cloneRecipe}
-              disabled={!currentRecipeItems.length}
-              data-testid="recipe-save-as-new"
-              aria-label={t("save_as_new_recipe")}
-              title={t("save_as_new_recipe")}
+            <CopyPlus size={15} strokeWidth={1.8} aria-hidden />
+          </button>
+          <DropdownMenu.Root>
+            <div
               style={{
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 10,
-                padding: "6px 10px",
-                background: "transparent",
-                color: "hsl(var(--muted-foreground))",
-                fontSize: 12,
-                whiteSpace: "nowrap",
-                flexShrink: 0,
+                display: "inline-flex",
+                minWidth: 0,
+                maxWidth: "100%",
+                flexShrink: 1,
+                flexBasis: 170,
               }}
             >
-              {t("save_as_new_short")}
-            </button>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <DropdownMenu.Root>
-              <div style={{ display: "inline-flex", minWidth: 0 }}>
+              <button
+                type="button"
+                onClick={() => openLibraryDialog("insert")}
+                data-testid="recipe-add-fragment"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  minWidth: 0,
+                  border: "1px solid hsl(var(--primary))",
+                  borderRight: 0,
+                  borderRadius: "10px 0 0 10px",
+                  padding: "7px 10px",
+                  background: "hsl(var(--primary))",
+                  color: "hsl(var(--primary-foreground))",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <Plus size={14} strokeWidth={2} aria-hidden />
+                <span
+                  style={{
+                    minWidth: 0,
+                    maxWidth: 104,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {t("add_fragment")}
+                </span>
+              </button>
+              <DropdownMenu.Trigger asChild>
                 <button
                   type="button"
-                  onClick={() => openLibraryDialog("insert")}
-                  data-testid="recipe-add-fragment"
+                  data-testid="recipe-add-fragment-menu"
+                  aria-label={t("fragment_actions")}
+                  title={t("fragment_actions")}
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     border: "1px solid hsl(var(--primary))",
-                    borderRight: 0,
-                    borderRadius: "10px 0 0 10px",
-                    padding: "7px 12px",
+                    borderRadius: "0 10px 10px 0",
+                    padding: "7px 8px",
                     background: "hsl(var(--primary))",
                     color: "hsl(var(--primary-foreground))",
-                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                    flexShrink: 0,
                   }}
                 >
-                  + {t("add_fragment")}
+                  <ChevronDown size={14} strokeWidth={2} aria-hidden />
                 </button>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    type="button"
-                    data-testid="recipe-add-fragment-menu"
-                    aria-label={t("fragment_actions")}
-                    style={{
-                      border: "1px solid hsl(var(--primary))",
-                      borderRadius: "0 10px 10px 0",
-                      padding: "7px 10px",
-                      background: "hsl(var(--primary))",
-                      color: "hsl(var(--primary-foreground))",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
-                  >
-                    ▾
-                  </button>
-                </DropdownMenu.Trigger>
-              </div>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  align="end"
-                  sideOffset={8}
-                  data-testid="recipe-add-fragment-menu-content"
+              </DropdownMenu.Trigger>
+            </div>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="end"
+                sideOffset={8}
+                data-testid="recipe-add-fragment-menu-content"
+                style={{
+                  minWidth: 200,
+                  background: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 12,
+                  padding: 6,
+                  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.14)",
+                  zIndex: 60,
+                }}
+              >
+                <DropdownMenu.Item
+                  data-testid="fragments-new"
+                  onSelect={() => {
+                    void handleCreateFragment();
+                  }}
                   style={{
-                    minWidth: 200,
-                    background: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: 12,
-                    padding: 6,
-                    boxShadow: "0 10px 24px rgba(0, 0, 0, 0.14)",
-                    zIndex: 60,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    color: "hsl(var(--foreground))",
+                    cursor: "pointer",
+                    outline: "none",
                   }}
                 >
-                  <DropdownMenu.Item
-                    data-testid="fragments-new"
-                    onSelect={() => {
-                      void handleCreateFragment();
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      fontSize: 13,
-                      color: "hsl(var(--foreground))",
-                      cursor: "pointer",
-                      outline: "none",
-                    }}
-                  >
-                    + {t("new_fragment")}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    data-testid="recipe-manage-library"
-                    onSelect={() => {
-                      openLibraryDialog("manage");
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      fontSize: 13,
-                      color: "hsl(var(--foreground))",
-                      cursor: "pointer",
-                      outline: "none",
-                    }}
-                  >
-                    {t("manage_library")}
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          </div>
+                  + {t("new_fragment")}
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  data-testid="recipe-manage-library"
+                  onSelect={() => {
+                    openLibraryDialog("manage");
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    color: "hsl(var(--foreground))",
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                >
+                  {t("manage_library")}
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       </div>
 
@@ -546,7 +570,7 @@ export function AssemblyBoard() {
             items={currentRecipeViews.map((item) => item.fragmentId)}
             strategy={verticalListSortingStrategy}
           >
-            <div style={{ display: "grid", gap: 12 }} data-testid="assembly-items">
+            <div style={{ display: "grid", gap: 8 }} data-testid="assembly-items">
               {currentRecipeViews.map((item) => (
                 <SortableFragmentCard
                   key={item.id}
@@ -585,9 +609,9 @@ export function AssemblyBoard() {
                 style={{
                   border: "1px solid hsl(var(--primary))",
                   borderRadius: 14,
-                  background: "hsl(var(--card))",
+                  background: "color-mix(in srgb, hsl(var(--primary)) 7%, hsl(var(--card)))",
                   padding: 12,
-                  boxShadow: "0 12px 28px rgba(0, 0, 0, 0.18)",
+                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.2)",
                   width: 280,
                 }}
               >

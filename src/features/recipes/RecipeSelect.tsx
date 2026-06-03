@@ -41,9 +41,9 @@ export function RecipeSelect() {
           border: "1px solid hsl(var(--border))",
           background: "hsl(var(--card))",
           color: "hsl(var(--foreground))",
-          minWidth: 152,
-          maxWidth: 190,
-          flex: 1,
+          minWidth: 104,
+          maxWidth: "100%",
+          flex: "1 1 112px",
         }}
       >
         <Select.Value

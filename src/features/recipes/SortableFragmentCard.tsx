@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as Switch from "@radix-ui/react-switch";
 import type { TFunction } from "i18next";
+import { Trash2 } from "lucide-react";
 
 type SortableFragmentCardProps = {
   id: string;
@@ -46,17 +47,21 @@ export function SortableFragmentCard({
         border: isHighlighted ? "1px solid hsl(var(--primary))" : "1px solid hsl(var(--border))",
         borderRadius: 14,
         background: isDragging
-          ? "hsl(var(--muted))"
+          ? "color-mix(in srgb, hsl(var(--primary)) 8%, hsl(var(--card)))"
           : isHighlighted
-            ? "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--card)))"
+            ? "color-mix(in srgb, hsl(var(--primary)) 6%, hsl(var(--card)))"
             : "hsl(var(--card))",
-        padding: 9,
+        padding: 8,
         minHeight: 0,
-        opacity: enabled ? 1 : 0.7,
-        boxShadow: isDragging || selected ? "var(--elevation-1)" : "none",
+        opacity: enabled ? 1 : 0.72,
+        boxShadow: isDragging
+          ? "0 14px 30px rgba(15, 23, 42, 0.16)"
+          : selected
+            ? "var(--elevation-1)"
+            : "none",
       }}
     >
-      <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "grid", gap: 5 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "start" }}>
           <button
             type="button"
@@ -117,18 +122,26 @@ export function SortableFragmentCard({
               <button
                 type="button"
                 onClick={onRemove}
+                aria-label={t("remove_from_recipe")}
+                title={t("remove_from_recipe")}
                 data-testid={`recipe-item-remove-${id}`}
                 style={{
-                  border: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
                   background: "transparent",
                   padding: 0,
-                  fontSize: 11,
                   color: "hsl(var(--muted-foreground))",
                   cursor: "pointer",
                   flexShrink: 0,
+                  marginRight: 4,
                 }}
               >
-                {t("remove_from_recipe")}
+                <Trash2 size={14} strokeWidth={1.8} aria-hidden />
               </button>
               <Switch.Root
                 checked={enabled}
@@ -167,6 +180,7 @@ export function SortableFragmentCard({
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
+                lineHeight: 1.3,
               }}
             >
               {summary}

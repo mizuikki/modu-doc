@@ -17,8 +17,8 @@ const initialUI = {
   sidebarCollapsed: false,
   splitRatio: 0.5,
   zenMode: false,
-  sidebarWidth: 200,
-  assemblyWidth: 400,
+  sidebarWidth: 180,
+  assemblyWidth: 440,
   viewMode: "split" as const,
   continuousMode: false,
   cheatsheetOpen: false,
@@ -341,6 +341,23 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "modudoc-app-store",
+      version: 1,
+      migrate: (persistedState, version) => {
+        const persisted = persistedState as { ui?: Partial<AppState["ui"]> };
+        const ui = persisted.ui;
+        const usesOldDefaultWidths = ui?.sidebarWidth === 200 && ui?.assemblyWidth === 400;
+        const hasNoStoredWidths = ui?.sidebarWidth == null && ui?.assemblyWidth == null;
+
+        if (version === 0 && (usesOldDefaultWidths || hasNoStoredWidths)) {
+          persisted.ui = {
+            ...ui,
+            sidebarWidth: initialUI.sidebarWidth,
+            assemblyWidth: initialUI.assemblyWidth,
+          };
+        }
+
+        return persisted;
+      },
       storage: createJSONStorage(() => appStoreStorage),
       partialize: (state) => ({
         ui: state.ui,
