@@ -1,3 +1,12 @@
+import {
+  Columns2,
+  Eye,
+  FilePenLine,
+  GalleryVerticalEnd,
+  History,
+  RotateCcw,
+  SquarePen,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ReadingColumn } from "@/components/layout/ReadingColumn";
@@ -34,170 +43,219 @@ export function MainPanel() {
   ).length;
   const recipeCount = recipeItems.filter((item) => item.recipeId === activeRecipeId).length;
   const workspaceFragmentCount = fragments.filter((fragment) => fragment.deletedAt === null).length;
+  const splitLeftFraction = Math.max(splitRatio, 0.2);
+  const splitRightFraction = Math.max(1 - splitLeftFraction, 0.2);
+  const iconSize = 13;
+  const segmentedStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 2,
+    flexWrap: "nowrap" as const,
+    minWidth: 0,
+    border: "1px solid hsl(var(--border))",
+    borderRadius: 999,
+    padding: 2,
+    background: "hsl(var(--card))",
+  };
+  const toolbarButtonStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    minWidth: 0,
+    height: 28,
+    padding: "0 8px",
+    borderRadius: 999,
+    border: 0,
+    background: "transparent",
+    color: "hsl(var(--foreground))",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 500,
+    lineHeight: 1,
+    whiteSpace: "nowrap" as const,
+    flexShrink: 0,
+  };
+  const compactToolbarButtonStyle = {
+    ...toolbarButtonStyle,
+    width: 28,
+    padding: 0,
+  };
+  const toolbarGroupStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "nowrap" as const,
+    minWidth: 0,
+  };
+  const mainTabs = [
+    { id: "edit", testId: "main-tab-edit", label: t("edit"), icon: SquarePen },
+    { id: "preview", testId: "main-tab-preview", label: t("preview_tab"), icon: Eye },
+    { id: "history", testId: "main-tab-history", label: t("history_tab"), icon: History },
+  ] as const;
+  const editModes = [
+    { id: "fragment", testId: "mode-fragment", label: t("edit_mode_fragment"), icon: FilePenLine },
+    {
+      id: "continuous",
+      testId: "mode-continuous",
+      label: t("edit_mode_continuous"),
+      icon: GalleryVerticalEnd,
+    },
+  ] as const;
+  const viewModes = [
+    { id: "write", testId: "view-mode-write", label: t("view_mode_write"), icon: FilePenLine },
+    { id: "split", testId: "view-mode-split", label: t("view_mode_split"), icon: Columns2 },
+    { id: "read", testId: "view-mode-read", label: t("view_mode_read"), icon: Eye },
+  ] as const;
 
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateRows: "48px minmax(0, 1fr)",
+        gridTemplateRows: "auto minmax(0, 1fr)",
         minHeight: 0,
         height: "100%",
+        width: "100%",
+        minWidth: 0,
         cursor: isResizing ? "col-resize" : undefined,
         userSelect: isResizing ? "none" : undefined,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", padding: "0 16px", gap: 10 }}>
-        <button
-          type="button"
-          onClick={() => setActiveMainTab("edit")}
-          data-testid="main-tab-edit"
-          style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid hsl(var(--border))",
-            background: activeMainTab === "edit" ? "hsl(var(--muted))" : "hsl(var(--card))",
-          }}
-        >
-          {t("edit")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveMainTab("preview")}
-          data-testid="main-tab-preview"
-          style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid hsl(var(--border))",
-            background: activeMainTab === "preview" ? "hsl(var(--muted))" : "hsl(var(--card))",
-          }}
-        >
-          {t("preview_tab")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveMainTab("history")}
-          data-testid="main-tab-history"
-          style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid hsl(var(--border))",
-            background: activeMainTab === "history" ? "hsl(var(--muted))" : "hsl(var(--card))",
-          }}
-        >
-          {t("history_tab")}
-        </button>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto minmax(0, 1fr)",
+          alignItems: "center",
+          padding: "8px 12px",
+          gap: 8,
+          width: "100%",
+          minWidth: 0,
+        }}
+      >
+        <div style={{ ...segmentedStyle, flexShrink: 0 }}>
+          {mainTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeMainTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveMainTab(tab.id)}
+                data-testid={tab.testId}
+                aria-pressed={isActive}
+                style={{
+                  ...toolbarButtonStyle,
+                  background: isActive ? "hsl(var(--muted))" : "transparent",
+                }}
+              >
+                <Icon size={iconSize} strokeWidth={2} aria-hidden />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
         {activeMainTab === "edit" ? (
           <div
-            data-testid="edit-mode-toggle"
             style={{
-              marginLeft: 6,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              border: "1px solid hsl(var(--border))",
-              borderRadius: 999,
-              padding: 2,
-              background: "hsl(var(--card))",
+              ...toolbarGroupStyle,
+              justifyContent: "flex-end",
+              width: "100%",
+              justifySelf: "end",
             }}
           >
-            <span style={{ fontSize: 12, padding: "0 6px", color: "hsl(var(--muted-foreground))" }}>
-              {t("edit_mode_label")}
-            </span>
-            {(
-              [
-                { mode: "fragment", label: t("edit_mode_fragment") },
-                { mode: "continuous", label: t("edit_mode_continuous") },
-              ] as const
-            ).map((entry) => {
-              const isActive = continuousMode === (entry.mode === "continuous");
-              return (
-                <button
-                  key={entry.mode}
-                  type="button"
-                  onClick={() => setContinuousMode(entry.mode === "continuous")}
-                  data-testid={`mode-${entry.mode}`}
-                  aria-pressed={isActive}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    border: 0,
-                    background: isActive ? "hsl(var(--primary))" : "transparent",
-                    color: isActive ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
-                    cursor: "pointer",
-                    fontSize: 13,
-                  }}
-                >
-                  {entry.label}
-                </button>
-              );
-            })}
+            <div
+              data-testid="edit-mode-toggle"
+              style={{
+                ...segmentedStyle,
+                flexShrink: 0,
+              }}
+            >
+              {editModes.map((entry) => {
+                const Icon = entry.icon;
+                const isActive = continuousMode === (entry.id === "continuous");
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => setContinuousMode(entry.id === "continuous")}
+                    data-testid={entry.testId}
+                    aria-pressed={isActive}
+                    aria-label={entry.label}
+                    title={entry.label}
+                    style={{
+                      ...(isActive ? toolbarButtonStyle : compactToolbarButtonStyle),
+                      background: isActive ? "hsl(var(--primary))" : "transparent",
+                      color: isActive ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
+                    }}
+                  >
+                    <Icon size={iconSize} strokeWidth={2} aria-hidden />
+                    {isActive ? entry.label : null}
+                  </button>
+                );
+              })}
+            </div>
+            <div
+              data-testid="view-mode-toggle"
+              style={{
+                ...segmentedStyle,
+                flexShrink: 0,
+              }}
+            >
+              {viewModes.map((entry) => {
+                const Icon = entry.icon;
+                const isActive = viewMode === entry.id;
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => setViewMode(entry.id)}
+                    data-testid={entry.testId}
+                    aria-pressed={isActive}
+                    aria-label={entry.label}
+                    title={entry.label}
+                    style={{
+                      ...(isActive ? toolbarButtonStyle : compactToolbarButtonStyle),
+                      background: isActive ? "hsl(var(--primary))" : "transparent",
+                      color: isActive ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
+                    }}
+                  >
+                    <Icon size={iconSize} strokeWidth={2} aria-hidden />
+                    {isActive ? entry.label : null}
+                  </button>
+                );
+              })}
+            </div>
+            {viewMode === "split" ? (
+              <button
+                type="button"
+                onClick={() => setSplitRatio(0.5)}
+                data-testid="reset-split-button"
+                aria-label={t("reset_split")}
+                title={t("reset_split")}
+                style={{
+                  ...compactToolbarButtonStyle,
+                  border: "1px solid hsl(var(--border))",
+                  background: "hsl(var(--card))",
+                  flexShrink: 0,
+                }}
+              >
+                <RotateCcw size={iconSize} strokeWidth={2} aria-hidden />
+              </button>
+            ) : null}
           </div>
         ) : null}
-        {activeMainTab === "edit" ? (
-          <div
-            data-testid="view-mode-toggle"
-            style={{
-              marginLeft: 6,
-              display: "inline-flex",
-              gap: 0,
-              border: "1px solid hsl(var(--border))",
-              borderRadius: 999,
-              padding: 2,
-              background: "hsl(var(--card))",
-            }}
-          >
-            {(
-              [
-                { mode: "write", label: t("view_mode_write"), icon: "✎" },
-                { mode: "split", label: t("view_mode_split"), icon: "⇅" },
-                { mode: "read", label: t("view_mode_read"), icon: "👁" },
-              ] as const
-            ).map((entry) => {
-              const isActive = viewMode === entry.mode;
-              return (
-                <button
-                  key={entry.mode}
-                  type="button"
-                  onClick={() => setViewMode(entry.mode)}
-                  data-testid={`view-mode-${entry.mode}`}
-                  aria-pressed={isActive}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    border: 0,
-                    background: isActive ? "hsl(var(--primary))" : "transparent",
-                    color: isActive ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
-                    cursor: "pointer",
-                    fontSize: 13,
-                  }}
-                >
-                  <span aria-hidden style={{ marginRight: 4 }}>
-                    {entry.icon}
-                  </span>
-                  {entry.label}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-        {activeMainTab === "edit" && viewMode === "split" ? (
-          <button
-            type="button"
-            onClick={() => setSplitRatio(0.5)}
-            style={{
-              marginLeft: 6,
-              padding: "6px 10px",
-              borderRadius: 999,
-              border: "1px solid hsl(var(--border))",
-              background: "hsl(var(--card))",
-            }}
-          >
-            {t("reset_split")}
-          </button>
-        ) : null}
-        <span style={{ marginLeft: "auto" }} />
       </div>
-      <div style={{ display: "grid", gap: 12, padding: 16, minHeight: 0, overflow: "hidden" }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          padding: 16,
+          minHeight: 0,
+          minWidth: 0,
+          width: "100%",
+          overflow: "hidden",
+        }}
+      >
         <ConflictBanner />
         {activeMainTab === "edit" ? (
           <div
@@ -206,6 +264,8 @@ export function MainPanel() {
               gap: 12,
               gridTemplateRows: "auto minmax(0, 1fr)",
               minHeight: 0,
+              minWidth: 0,
+              width: "100%",
               overflow: "hidden",
             }}
           >
@@ -216,6 +276,8 @@ export function MainPanel() {
                 justifyContent: "space-between",
                 gap: 12,
                 flexWrap: "wrap",
+                minWidth: 0,
+                width: "100%",
                 padding: "12px 14px",
                 border: "1px solid hsl(var(--border))",
                 borderRadius: 14,
@@ -223,7 +285,7 @@ export function MainPanel() {
               }}
             >
               {continuousMode ? (
-                <div style={{ display: "grid", gap: 2 }}>
+                <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
                   <strong>{t("continuous_workspace_title")}</strong>
                   <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
                     {t("continuous_workspace_hint", {
@@ -233,9 +295,9 @@ export function MainPanel() {
                   </div>
                 </div>
               ) : activeFragment ? (
-                <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
                   <strong>{activeFragment.name}</strong>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
                     <span
                       style={{
                         fontSize: 11,
@@ -289,7 +351,7 @@ export function MainPanel() {
                   </div>
                 </div>
               ) : (
-                <div style={{ display: "grid", gap: 2 }}>
+                <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
                   <strong>{t("editor_empty_title")}</strong>
                   <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
                     {t("select_fragment_to_edit")}
@@ -297,7 +359,15 @@ export function MainPanel() {
                 </div>
               )}
             </div>
-            <div style={{ minHeight: 0, overflow: "auto" }}>
+            <div
+              style={{
+                minHeight: 0,
+                minWidth: 0,
+                width: "100%",
+                overflowY: "auto",
+                overflowX: "hidden",
+              }}
+            >
               {viewMode === "write" ? (
                 <ReadingColumn>
                   {continuousMode ? <ContinuousEditor /> : <FragmentEditor />}
@@ -310,10 +380,11 @@ export function MainPanel() {
                   id="main-split-pane"
                   style={{
                     display: "grid",
-                    gridTemplateColumns: `${Math.round(splitRatio * 1000) / 10}% 10px ${
-                      Math.round((1 - splitRatio) * 1000) / 10
-                    }%`,
+                    gridTemplateColumns: `minmax(0, ${splitLeftFraction}fr) 10px minmax(0, ${splitRightFraction}fr)`,
                     minHeight: 0,
+                    minWidth: 0,
+                    width: "100%",
+                    overflow: "hidden",
                   }}
                 >
                   <ReadingColumn>

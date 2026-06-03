@@ -222,6 +222,32 @@ function identifyDimensions(targetPath) {
   return { width, height };
 }
 
+function looksLikeTauriWindowCapture(size) {
+  return size.width <= 2000 && size.height <= 1300;
+}
+
+async function captureValidatedWindow(targetPath, scenarioId) {
+  let lastSize = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (attempt > 0) {
+      await sleep(300 * attempt);
+    }
+
+    captureActiveWindow(targetPath);
+    const size = identifyDimensions(targetPath);
+    lastSize = size;
+
+    if (looksLikeTauriWindowCapture(size)) {
+      return size;
+    }
+  }
+
+  throw new Error(
+    `Captured the wrong active window for ${scenarioId}; last size was ${lastSize?.width}x${lastSize?.height}`,
+  );
+}
+
 async function main() {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
@@ -271,10 +297,9 @@ async function main() {
       try {
         const payload = await captureServer.waitForScenario(scenario.id);
         await sleep(300);
-        captureActiveWindow(framePath);
 
         const targetPath = path.join(outputDir, scenario.file);
-        const sourceSize = identifyDimensions(framePath);
+        const sourceSize = await captureValidatedWindow(framePath, scenario.id);
         await copyFile(framePath, targetPath);
         generated.push({
           scenarioId: scenario.id,

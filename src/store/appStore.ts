@@ -17,8 +17,8 @@ export const initialUI = {
   sidebarCollapsed: false,
   splitRatio: 0.5,
   zenMode: false,
-  sidebarWidth: 180,
-  assemblyWidth: 440,
+  sidebarWidth: 196,
+  assemblyWidth: 500,
   viewMode: "split" as const,
   continuousMode: false,
   cheatsheetOpen: false,
@@ -245,14 +245,14 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           ui: {
             ...state.ui,
-            sidebarWidth: Math.min(360, Math.max(160, Math.round(width))),
+            sidebarWidth: Math.min(320, Math.max(176, Math.round(width))),
           },
         })),
       setAssemblyWidth: (width) =>
         set((state) => ({
           ui: {
             ...state.ui,
-            assemblyWidth: Math.min(560, Math.max(280, Math.round(width))),
+            assemblyWidth: Math.min(620, Math.max(360, Math.round(width))),
           },
         })),
       setCompileStatus: (compileStatus) =>
@@ -351,14 +351,16 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "modudoc-app-store",
-      version: 1,
+      version: 2,
       migrate: (persistedState, version) => {
         const persisted = persistedState as { ui?: Partial<AppState["ui"]> };
         const ui = persisted.ui;
-        const usesOldDefaultWidths = ui?.sidebarWidth === 200 && ui?.assemblyWidth === 400;
+        const usesLegacyDefaultWidths =
+          (ui?.sidebarWidth === 200 && ui?.assemblyWidth === 400) ||
+          (ui?.sidebarWidth === 180 && ui?.assemblyWidth === 440);
         const hasNoStoredWidths = ui?.sidebarWidth == null && ui?.assemblyWidth == null;
 
-        if (version === 0 && (usesOldDefaultWidths || hasNoStoredWidths)) {
+        if (version < 2 && (usesLegacyDefaultWidths || hasNoStoredWidths)) {
           persisted.ui = {
             ...ui,
             sidebarWidth: initialUI.sidebarWidth,

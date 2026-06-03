@@ -38,8 +38,8 @@ export function App() {
             testId="column-splitter-sidebar"
             currentPx={sidebarWidth}
             onResize={setSidebarWidth}
-            minPx={160}
-            maxPx={360}
+            minPx={176}
+            maxPx={320}
           />
         ) : null}
         <section className="panel" style={{ minWidth: 0 }}>
@@ -51,8 +51,8 @@ export function App() {
             testId="column-splitter-assembly"
             currentPx={assemblyWidth}
             onResize={setAssemblyWidth}
-            minPx={280}
-            maxPx={560}
+            minPx={360}
+            maxPx={620}
           />
         ) : null}
         <section className="panel" style={{ minWidth: 0 }}>

@@ -15,13 +15,34 @@ export function FragmentPreview() {
 
   return (
     <div style={{ padding: 16, borderTop: "1px solid hsl(var(--border))" }}>
-      <h3>{t("preview")}</h3>
-      <div className="prose prose-sm max-w-none">
-        {fragment ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-        ) : (
-          <p>{t("no_fragment_selected")}</p>
-        )}
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <h3 style={{ margin: 0 }}>{t("preview")}</h3>
+          {fragment ? (
+            <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+              {fragment.name}
+            </div>
+          ) : null}
+        </div>
+        <div
+          style={{
+            border: "1px solid hsl(var(--border))",
+            borderRadius: 18,
+            padding: "18px 20px",
+            minHeight: 240,
+            background:
+              "linear-gradient(180deg, hsl(var(--card)), color-mix(in srgb, hsl(var(--muted)) 18%, hsl(var(--card))))",
+            boxShadow: "var(--elevation-1)",
+          }}
+        >
+          <div className="prose prose-sm max-w-none">
+            {fragment ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            ) : (
+              <p>{t("no_fragment_selected")}</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
