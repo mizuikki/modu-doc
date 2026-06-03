@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
+import { isScreenshotMode } from "@/app/screenshotMode";
 import { useAppStore } from "@/store/appStore";
 import {
   refreshWorkspaceBundleToStore,
@@ -47,6 +48,9 @@ export function useWorkspaceStatusEvents() {
   const setCompileStatus = useAppStore((state) => state.setCompileStatus);
 
   useEffect(() => {
+    if (isScreenshotMode()) {
+      return;
+    }
     let unlisten: (() => void) | undefined;
     void listen<WorkspaceStatusEventPayload>("workspace-status-updated", (event) => {
       const rawPayload = event.payload;

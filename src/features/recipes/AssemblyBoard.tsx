@@ -19,6 +19,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, CopyPlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getScreenshotDialogMode, isScreenshotMode } from "@/app/screenshotMode";
 import { useAppDialog } from "@/components/dialog/DialogProvider";
 import { useToast } from "@/components/toast/ToastProvider";
 import { FragmentList } from "@/features/fragments/FragmentList";
@@ -100,6 +101,18 @@ export function AssemblyBoard() {
     }
     setActiveRecipe(currentRecipeId);
   }, [activeRecipeId, currentRecipeId, setActiveRecipe]);
+
+  useEffect(() => {
+    if (!isScreenshotMode()) {
+      return;
+    }
+    const dialogMode = getScreenshotDialogMode();
+    if (dialogMode === "insert") {
+      setLibraryMode(dialogMode);
+      setLibraryQuery("");
+      setLibraryDialogOpen(true);
+    }
+  }, []);
 
   const currentRecipeItems = useMemo<RecipeItemRecord[]>(
     () =>

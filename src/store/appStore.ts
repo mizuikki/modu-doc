@@ -11,7 +11,7 @@ import { createCompileReducers } from "./reducers/compile";
 import { createSnapshotReducers } from "./reducers/snapshots";
 import type { AppState } from "./types";
 
-const initialUI = {
+export const initialUI = {
   theme: "light" as const,
   activeMainTab: "edit" as const,
   sidebarCollapsed: false,
@@ -24,7 +24,17 @@ const initialUI = {
   cheatsheetOpen: false,
 };
 
+function isScreenshotStoreMode() {
+  if (!("location" in globalThis) || !globalThis.location) {
+    return false;
+  }
+  return new URLSearchParams(globalThis.location.search).has("screenshot");
+}
+
 function browserStorage() {
+  if (isScreenshotStoreMode()) {
+    return null;
+  }
   if ("localStorage" in globalThis && globalThis.localStorage) {
     return globalThis.localStorage;
   }

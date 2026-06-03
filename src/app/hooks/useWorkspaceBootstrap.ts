@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { applyScreenshotScenario, isScreenshotMode } from "@/app/screenshotMode";
 import { useAppStore } from "@/store/appStore";
 import {
   refreshWorkspaceBundleToStore,
@@ -12,6 +13,10 @@ export function useWorkspaceBootstrap() {
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
 
   useEffect(() => {
+    if (isScreenshotMode()) {
+      applyScreenshotScenario();
+      return;
+    }
     void refreshWorkspaceListToStore({ loadWorkspaces, setWorkspaceList }).then(() => {
       void refreshWorkspaceBundleToStore({
         workspaceId: useAppStore.getState().activeWorkspaceId,
@@ -21,6 +26,9 @@ export function useWorkspaceBootstrap() {
   }, [loadWorkspaces, setWorkspaceBundle, setWorkspaceList]);
 
   useEffect(() => {
+    if (isScreenshotMode()) {
+      return;
+    }
     void refreshWorkspaceBundleToStore({ workspaceId: activeWorkspaceId, setWorkspaceBundle });
   }, [activeWorkspaceId, setWorkspaceBundle]);
 }
