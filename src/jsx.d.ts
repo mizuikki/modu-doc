@@ -12,3 +12,13 @@ declare global {
     interface IntrinsicElements extends ReactJSX.IntrinsicElements {}
   }
 }
+
+// Vendor-prefixed CSS mask properties missing from React's CSSProperties.
+type MaskModeValue = "alpha" | "luminance" | "match-source" | "match-source-or-alpha";
+
+declare module "react" {
+  interface CSSProperties {
+    WebkitMaskImage?: string;
+    WebkitMaskMode?: MaskModeValue;
+  }
+}

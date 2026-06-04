@@ -202,10 +202,13 @@ export function SortableFragmentCard({
             <div
               style={{
                 fontSize: 11,
-                color: "hsl(var(--muted-foreground))",
+                color: "hsl(var(--muted-foreground-strong))",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
-                textOverflow: "ellipsis",
+                maskImage: "linear-gradient(to right, rgba(0,0,0,1) 85%, rgba(0,0,0,0))",
+                WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 85%, rgba(0,0,0,0))",
+                maskMode: "alpha",
+                WebkitMaskMode: "alpha",
                 lineHeight: 1.3,
               }}
             >

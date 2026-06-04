@@ -28,6 +28,7 @@ import { SortableFragmentCard } from "@/features/recipes/SortableFragmentCard";
 import { createFragment } from "@/lib/api/fragments";
 import { activateRecipe, createRecipe, updateRecipeItems } from "@/lib/api/recipes";
 import { normalizeAppError } from "@/lib/appError";
+import { summarizeForPreview } from "@/lib/markdownPreview";
 import { scheduleWorkspaceSync } from "@/lib/syncScheduler";
 import { applyWorkspaceWriteError } from "@/lib/workspaceWrite";
 import { useAppStore } from "@/store/appStore";
@@ -135,10 +136,14 @@ export function AssemblyBoard() {
 
   const currentRecipeViews = useMemo(
     () =>
-      currentRecipeItems.map((item) => ({
-        ...item,
-        fragment: activeFragmentsById.get(item.fragmentId) ?? null,
-      })),
+      currentRecipeItems.map((item) => {
+        const fragment = activeFragmentsById.get(item.fragmentId) ?? null;
+        return {
+          ...item,
+          fragment,
+          summary: summarizeForPreview(fragment?.content ?? ""),
+        };
+      }),
     [activeFragmentsById, currentRecipeItems],
   );
 
@@ -584,7 +589,7 @@ export function AssemblyBoard() {
                   key={item.id}
                   id={item.fragmentId}
                   name={item.fragment?.name ?? t("unknown_fragment")}
-                  summary={item.fragment?.content.trim() || t("empty_fragment")}
+                  summary={item.summary || t("empty_fragment")}
                   enabled={item.enabled}
                   active={item.fragmentId === activeDragId}
                   selected={item.fragmentId === activeFragmentId}
@@ -628,10 +633,17 @@ export function AssemblyBoard() {
                   style={{
                     fontSize: 12,
                     marginTop: 8,
-                    color: "hsl(var(--muted-foreground))",
+                    color: "hsl(var(--muted-foreground-strong))",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    maskImage: "linear-gradient(to right, rgba(0,0,0,1) 85%, rgba(0,0,0,0))",
+                    WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 85%, rgba(0,0,0,0))",
+                    maskMode: "alpha",
+                    WebkitMaskMode: "alpha",
                   }}
                 >
-                  {activeDragItem.fragment?.content || t("empty_fragment")}
+                  {summarizeForPreview(activeDragItem.fragment?.content ?? "") ||
+                    t("empty_fragment")}
                 </div>
               </div>
             ) : null}
