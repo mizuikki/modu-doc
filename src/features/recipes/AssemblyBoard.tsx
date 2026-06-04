@@ -583,7 +583,10 @@ export function AssemblyBoard() {
             items={currentRecipeViews.map((item) => item.fragmentId)}
             strategy={verticalListSortingStrategy}
           >
-            <div style={{ display: "grid", gap: 8 }} data-testid="assembly-items">
+            <div
+              style={{ display: "grid", gap: 8, alignContent: "start" }}
+              data-testid="assembly-items"
+            >
               {currentRecipeViews.map((item) => (
                 <SortableFragmentCard
                   key={item.id}

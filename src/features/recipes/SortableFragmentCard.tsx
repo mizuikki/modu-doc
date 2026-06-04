@@ -69,7 +69,7 @@ export function SortableFragmentCard({
             : isHovered
               ? "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--card)))"
               : "hsl(var(--card))",
-        padding: 8,
+        padding: 12,
         minHeight: 0,
         opacity: enabled ? 1 : 0.72,
         boxShadow: isDragging
