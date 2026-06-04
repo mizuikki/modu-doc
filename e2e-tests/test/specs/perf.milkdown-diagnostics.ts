@@ -12,15 +12,19 @@ import {
   findLastEvent,
   markPerf,
   measureScenario,
+  type PerfEvent,
   readAppVersion,
   snapshotPerfEvents,
-  type PerfEvent,
   waitForPerfEvent,
   writePerfReport,
 } from "../support/perf";
 import { tauriInvoke, waitForTauriBridge } from "../support/tauri";
 import { safeClick, safeSetValue, selectWorkspaceById } from "../support/ui";
-import { createAndSelectWorkspace, loadWorkspace, type WorkspaceLoadResult } from "../support/workspace";
+import {
+  createAndSelectWorkspace,
+  loadWorkspace,
+  type WorkspaceLoadResult,
+} from "../support/workspace";
 
 type WorkspaceSummary = WorkspaceLoadResult["workspace"];
 type FragmentSummary = WorkspaceLoadResult["fragments"][number];
@@ -53,8 +57,9 @@ function uniqueName(prefix: string) {
 }
 
 function repeatParagraph(seed: string, count: number) {
-  return Array.from({ length: count }, (_, index) => `${seed} paragraph ${index + 1}.`)
-    .join("\n\n");
+  return Array.from({ length: count }, (_, index) => `${seed} paragraph ${index + 1}.`).join(
+    "\n\n",
+  );
 }
 
 function buildMarkdownDocument(title: string, targetBytes: number) {
@@ -111,11 +116,15 @@ async function waitForEditorDocument(documentId: string, fragmentName: string, t
     async () => {
       const events = await snapshotPerfEvents();
       return Boolean(
-        findLastEvent(events, "milkdown: replace done", (event) => hasDocumentId(event, documentId)) ||
+        findLastEvent(events, "milkdown: replace done", (event) =>
+          hasDocumentId(event, documentId),
+        ) ||
           findLastEvent(events, "fragment editor: document bound", (event) =>
             hasDocumentId(event, documentId),
           ) ||
-          findLastEvent(events, "milkdown: editor ready", (event) => hasDocumentId(event, documentId)),
+          findLastEvent(events, "milkdown: editor ready", (event) =>
+            hasDocumentId(event, documentId),
+          ),
       );
     },
     { timeout: timeoutMs, interval: 100, timeoutMsg: `editor not bound: ${fragmentName}` },
@@ -313,14 +322,17 @@ describe("Milkdown performance diagnostics", () => {
         },
         settle: async () => {
           const events = await snapshotPerfEvents();
-          const workspaceName =
-            eventPayloadRecord(findLastEvent(events, "wdio:workspace-name"))?.workspaceName;
+          const workspaceName = eventPayloadRecord(
+            findLastEvent(events, "wdio:workspace-name"),
+          )?.workspaceName;
           if (typeof workspaceName !== "string") {
             throw new Error("missing workspace name");
           }
           await browser.waitUntil(
             async () => {
-              const workspace = (await listWorkspaces()).find((entry) => entry.name === workspaceName);
+              const workspace = (await listWorkspaces()).find(
+                (entry) => entry.name === workspaceName,
+              );
               if (!workspace) {
                 return false;
               }
@@ -350,15 +362,18 @@ describe("Milkdown performance diagnostics", () => {
         },
         settle: async () => {
           const events = await snapshotPerfEvents();
-          const fragmentName =
-            eventPayloadRecord(findLastEvent(events, "wdio:fragment-name"))?.fragmentName;
+          const fragmentName = eventPayloadRecord(
+            findLastEvent(events, "wdio:fragment-name"),
+          )?.fragmentName;
           if (typeof fragmentName !== "string") {
             throw new Error("missing fragment name");
           }
           const bundle = await browser.waitUntil(
             async () => {
               const nextBundle = await loadWorkspace(context.workflowWorkspaceId);
-              return nextBundle.fragments.some((entry) => entry.name === fragmentName) ? nextBundle : false;
+              return nextBundle.fragments.some((entry) => entry.name === fragmentName)
+                ? nextBundle
+                : false;
             },
             { timeout: 30000, interval: 200 },
           );
@@ -403,7 +418,11 @@ describe("Milkdown performance diagnostics", () => {
           await safeClick(`[data-testid='recipe-item-select-${context.fragments.largeA.id}']`);
         },
         settle: async () => {
-          await waitForEditorDocument(context.fragments.largeA.id, context.fragments.largeA.name, 30000);
+          await waitForEditorDocument(
+            context.fragments.largeA.id,
+            context.fragments.largeA.name,
+            30000,
+          );
         },
         analyze: (events) => summarizeSwitchSample(events, context.fragments.largeA.id),
       }),
@@ -503,7 +522,9 @@ describe("Milkdown performance diagnostics", () => {
           await safeClick(`[data-testid='recipe-item-select-${context.fragments.autosave.id}']`);
           await waitForFragmentLabel(context.fragments.autosave.name);
           const bundle = await loadWorkspace(context.analysisWorkspace.id);
-          const fragment = bundle.fragments.find((entry) => entry.id === context.fragments.autosave.id);
+          const fragment = bundle.fragments.find(
+            (entry) => entry.id === context.fragments.autosave.id,
+          );
           const suffix = ` autosave-${iteration}`;
           if (!fragment) {
             throw new Error("autosave fragment missing");
@@ -519,7 +540,9 @@ describe("Milkdown performance diagnostics", () => {
         },
         settle: async () => {
           const events = await snapshotPerfEvents();
-          const expected = eventPayloadRecord(findLastEvent(events, "wdio:autosave-expected"))?.content;
+          const expected = eventPayloadRecord(
+            findLastEvent(events, "wdio:autosave-expected"),
+          )?.content;
           if (typeof expected !== "string") {
             throw new Error("missing autosave expected content");
           }
@@ -527,8 +550,8 @@ describe("Milkdown performance diagnostics", () => {
             async () => {
               const bundle = await loadWorkspace(context.analysisWorkspace.id);
               return (
-                bundle.fragments.find((entry) => entry.id === context.fragments.autosave.id)?.content ===
-                expected
+                bundle.fragments.find((entry) => entry.id === context.fragments.autosave.id)
+                  ?.content === expected
               );
             },
             { timeout: 30000, interval: 200 },
@@ -555,7 +578,9 @@ describe("Milkdown performance diagnostics", () => {
             (event) => eventPayloadRecord(event)?.workspaceId === context.analysisWorkspace.id,
             20000,
           );
-          await $("[data-testid='preview-open-target-folder']").waitForDisplayed({ timeout: 20000 });
+          await $("[data-testid='preview-open-target-folder']").waitForDisplayed({
+            timeout: 20000,
+          });
         },
         analyze: (events) => {
           const start = findLastEvent(events, "wdio:scenario-start");

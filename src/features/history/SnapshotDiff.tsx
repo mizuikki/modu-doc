@@ -73,9 +73,7 @@ function diffSegment(left: string, right: string, segmentId: string): DiffRow[] 
   const tailLeft = leftLines.slice(li);
   const tailRight = rightLines.slice(ri);
   const lcs = computeLcsTable(tailLeft, tailRight);
-  rows.push(
-    ...backtrackLcs(tailLeft, tailRight, lcs, leftNum, rightNum, segmentId, counter),
-  );
+  rows.push(...backtrackLcs(tailLeft, tailRight, lcs, leftNum, rightNum, segmentId, counter));
   return rows;
 }
 

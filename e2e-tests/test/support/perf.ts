@@ -190,7 +190,10 @@ export async function readAppVersion() {
 export async function writePerfReport(filename: string, report: Record<string, unknown>) {
   const outputDir =
     process.env.MODUDOC_E2E_PERF_OUTPUT ||
-    path.join(process.env.MODUDOC_E2E_RUN_DIR || path.join(projectRoot, "tmp", "modudoc-e2e"), "perf");
+    path.join(
+      process.env.MODUDOC_E2E_RUN_DIR || path.join(projectRoot, "tmp", "modudoc-e2e"),
+      "perf",
+    );
   await mkdir(outputDir, { recursive: true });
   const reportPath = path.join(outputDir, filename);
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");

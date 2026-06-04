@@ -14,7 +14,6 @@ const AUTO_SAVE_DELAY_MS = 800;
 export function FragmentEditor() {
   const { t } = useTranslation();
   const toast = useToast();
-  const activeFragmentId = useAppStore((state) => state.activeFragmentId);
   const fragment = useAppStore(selectActiveFragment);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
   const updateEditorDraft = useAppStore((state) => state.updateEditorDraft);
@@ -67,7 +66,11 @@ export function FragmentEditor() {
       setValue(fragment.content);
       void logDebugPerf("fragment editor: document bound", {
         documentId: fragment.id,
-        reason: fragmentChanged ? "fragment_changed" : storeMatchesEditor ? "store_matches" : "clean",
+        reason: fragmentChanged
+          ? "fragment_changed"
+          : storeMatchesEditor
+            ? "store_matches"
+            : "clean",
         valueBytes: fragment.content.length,
       });
     }
@@ -119,10 +122,7 @@ export function FragmentEditor() {
       }
 
       lastFailedAutoSaveRef.current = null;
-      if (
-        loadedFragmentIdRef.current === targetFragment.id &&
-        valueRef.current === nextValue
-      ) {
+      if (loadedFragmentIdRef.current === targetFragment.id && valueRef.current === nextValue) {
         dirtyRef.current = false;
       }
       clearEditorDraft(targetFragment.id);
@@ -157,6 +157,7 @@ export function FragmentEditor() {
     };
   }, [activeWorkspace, fragment]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: persistFragment is a useEffectEvent with a stable identity and must not be in deps
   useEffect(() => {
     if (!fragment || value === fragment.content) {
       return;

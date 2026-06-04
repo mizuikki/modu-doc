@@ -1,5 +1,5 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { replaceAll } from "@milkdown/utils";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { logDebugPerf } from "@/lib/debugPerf";
 
 type CrepeBuilderClass = typeof import("@milkdown/crepe/builder")["CrepeBuilder"];
