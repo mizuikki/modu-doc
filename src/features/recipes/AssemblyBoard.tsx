@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, CopyPlus, Plus } from "lucide-react";
+import { ChevronDown, CopyPlus, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getScreenshotDialogMode, isScreenshotMode } from "@/app/screenshotMode";
@@ -406,10 +406,7 @@ export function AssemblyBoard() {
             <div
               style={{
                 display: "inline-flex",
-                minWidth: 0,
-                maxWidth: "100%",
-                flexShrink: 1,
-                flexBasis: 170,
+                flexShrink: 0,
               }}
             >
               <button
@@ -420,7 +417,6 @@ export function AssemblyBoard() {
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 6,
-                  minWidth: 0,
                   border: "1px solid hsl(var(--primary))",
                   borderRight: 0,
                   borderRadius: "10px 0 0 10px",
@@ -431,16 +427,7 @@ export function AssemblyBoard() {
                 }}
               >
                 <Plus size={14} strokeWidth={2} aria-hidden />
-                <span
-                  style={{
-                    minWidth: 0,
-                    maxWidth: 104,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {t("add_fragment")}
-                </span>
+                {t("add_fragment")}
               </button>
               <DropdownMenu.Trigger asChild>
                 <button
@@ -696,7 +683,7 @@ export function AssemblyBoard() {
             >
               <div style={{ display: "grid", gap: 4 }}>
                 <Dialog.Title style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-                  {libraryMode === "insert" ? t("library_insert_title") : t("library_manage_title")}
+                  {t("library_dialog_title")}
                 </Dialog.Title>
                 <Dialog.Description
                   style={{ margin: 0, fontSize: 12, color: "hsl(var(--muted-foreground))" }}
@@ -711,37 +698,44 @@ export function AssemblyBoard() {
                   type="button"
                   data-testid="fragment-library-close"
                   aria-label={t("close")}
+                  title={t("close")}
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
                     border: "1px solid hsl(var(--border))",
                     background: "hsl(var(--card))",
-                    borderRadius: 999,
-                    padding: "4px 10px",
-                    fontSize: 12,
                     color: "hsl(var(--muted-foreground))",
                     cursor: "pointer",
+                    padding: 0,
+                    flexShrink: 0,
                   }}
                 >
-                  {t("close")}
+                  <X size={14} strokeWidth={1.8} aria-hidden />
                 </button>
               </Dialog.Close>
             </div>
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
+                display: "grid",
                 gap: 8,
                 padding: "12px 18px",
                 borderBottom: "1px solid hsl(var(--border))",
-                flexWrap: "wrap",
               }}
             >
               <div
                 style={{
                   display: "inline-flex",
-                  gap: 6,
+                  alignSelf: "start",
+                  alignItems: "center",
+                  gap: 2,
                   border: "1px solid hsl(var(--border))",
                   borderRadius: 999,
                   padding: 2,
+                  background: "hsl(var(--card))",
                 }}
               >
                 <button
@@ -750,18 +744,25 @@ export function AssemblyBoard() {
                   onClick={() => setLibraryMode("insert")}
                   aria-pressed={libraryMode === "insert"}
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minWidth: 0,
+                    height: 28,
+                    padding: "0 8px",
                     border: 0,
                     borderRadius: 999,
-                    padding: "6px 10px",
-                    background: libraryMode === "insert" ? "hsl(var(--primary))" : "transparent",
-                    color:
-                      libraryMode === "insert"
-                        ? "hsl(var(--primary-foreground))"
-                        : "hsl(var(--foreground))",
+                    background: libraryMode === "insert" ? "hsl(var(--muted))" : "transparent",
+                    color: "hsl(var(--foreground))",
                     cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    lineHeight: 1,
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
                   }}
                 >
-                  {t("library_insert_mode")}
+                  {t("library_add_to_recipe")}
                 </button>
                 <button
                   type="button"
@@ -769,21 +770,35 @@ export function AssemblyBoard() {
                   onClick={() => setLibraryMode("manage")}
                   aria-pressed={libraryMode === "manage"}
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minWidth: 0,
+                    height: 28,
+                    padding: "0 8px",
                     border: 0,
                     borderRadius: 999,
-                    padding: "6px 10px",
-                    background: libraryMode === "manage" ? "hsl(var(--primary))" : "transparent",
-                    color:
-                      libraryMode === "manage"
-                        ? "hsl(var(--primary-foreground))"
-                        : "hsl(var(--foreground))",
+                    background: libraryMode === "manage" ? "hsl(var(--muted))" : "transparent",
+                    color: "hsl(var(--foreground))",
                     cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    lineHeight: 1,
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
                   }}
                 >
                   {t("manage_library")}
                 </button>
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
                 <input
                   value={libraryQuery}
                   onChange={(event) => setLibraryQuery(event.target.value)}
@@ -791,7 +806,8 @@ export function AssemblyBoard() {
                   placeholder={t("library_search_placeholder")}
                   aria-label={t("search")}
                   style={{
-                    minWidth: 220,
+                    flex: "1 1 220px",
+                    minWidth: 180,
                     padding: "8px 10px",
                     borderRadius: 10,
                     border: "1px solid hsl(var(--border))",
@@ -807,8 +823,13 @@ export function AssemblyBoard() {
                   style={{
                     border: "1px solid hsl(var(--border))",
                     borderRadius: 10,
-                    padding: "6px 10px",
+                    padding: "8px 12px",
                     background: "hsl(var(--card))",
+                    color: "hsl(var(--foreground))",
+                    cursor: activeWorkspaceId ? "pointer" : "not-allowed",
+                    opacity: activeWorkspaceId ? 1 : 0.6,
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
                   }}
                 >
                   + {t("new_fragment")}
@@ -833,6 +854,7 @@ export function AssemblyBoard() {
                 <FragmentList
                   rootTestId="fragment-library-manage-list"
                   hideHeader
+                  showDeletedSection
                   searchQuery={libraryQuery}
                   onAddFragment={(fragmentId) => {
                     void appendFragmentToRecipe(fragmentId);

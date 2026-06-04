@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SyncStatusBadge } from "@/features/sync/SyncStatusBadge";
@@ -119,8 +120,11 @@ export function StatusBar() {
           aria-label={t(zenMode ? "exit_zen_mode" : "zen_mode")}
           aria-pressed={zenMode}
           style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
             padding: "4px 10px",
-            borderRadius: 999,
+            borderRadius: 8,
             border: "1px solid hsl(var(--border))",
             background: zenMode ? "hsl(var(--primary))" : "hsl(var(--card))",
             color: zenMode ? "hsl(var(--primary-foreground))" : "inherit",
@@ -128,7 +132,7 @@ export function StatusBar() {
             fontSize: 12,
           }}
         >
-          {zenMode ? "⤡" : "⤢"} {t("zen_mode")}
+          {t("zen_mode")}
         </button>
         <button
           type="button"
@@ -138,16 +142,21 @@ export function StatusBar() {
           aria-label={t("create_snapshot")}
           title={t("create_snapshot")}
           style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
             padding: "4px 10px",
-            borderRadius: 999,
+            borderRadius: 8,
             border: "1px solid hsl(var(--border))",
             background: "hsl(var(--card))",
             cursor: activeWorkspaceId ? "pointer" : "not-allowed",
             opacity: activeWorkspaceId ? 1 : 0.5,
             fontSize: 12,
+            color: "hsl(var(--foreground))",
           }}
         >
-          ⏱ {t("create_snapshot")}
+          <Plus aria-hidden size={12} strokeWidth={2} />
+          {t("create_snapshot")}
         </button>
       </div>
     </div>

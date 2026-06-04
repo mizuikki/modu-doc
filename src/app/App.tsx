@@ -6,6 +6,7 @@ import { StatusBar } from "@/components/layout/StatusBar";
 import { KeyboardCheatsheet } from "@/features/help/KeyboardCheatsheet";
 import { AssemblyBoard } from "@/features/recipes/AssemblyBoard";
 import { MainPanel } from "@/features/workspaces/MainPanel";
+import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
 import { useAppStore } from "@/store/appStore";
 
 export function App() {
@@ -14,6 +15,8 @@ export function App() {
   const assemblyWidth = useAppStore((state) => state.ui.assemblyWidth);
   const setSidebarWidth = useAppStore((state) => state.setSidebarWidth);
   const setAssemblyWidth = useAppStore((state) => state.setAssemblyWidth);
+  const settingsDialogOpen = useAppStore((state) => state.ui.settingsDialogOpen);
+  const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
 
   useZenModeShortcut();
 
@@ -63,6 +66,7 @@ export function App() {
         <StatusBar />
       </footer>
       <KeyboardCheatsheet />
+      <WorkspaceSettingsDialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen} />
     </div>
   );
 }

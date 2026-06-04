@@ -234,6 +234,7 @@ const screenshotScenarioDefault: ScreenshotScenario = {
     sidebarCollapsed: false,
     zenMode: false,
     cheatsheetOpen: false,
+    settingsDialogOpen: false,
   },
   libraryDialog: null,
 };

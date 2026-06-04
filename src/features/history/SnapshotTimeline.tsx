@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
@@ -41,7 +42,23 @@ export function SnapshotTimeline() {
           onClick={handleCreateSnapshot}
           disabled={!activeWorkspaceId}
           data-testid="history-create-snapshot"
+          aria-label={t("create_snapshot")}
+          title={t("create_snapshot")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "4px 10px",
+            borderRadius: 8,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+            cursor: activeWorkspaceId ? "pointer" : "not-allowed",
+            opacity: activeWorkspaceId ? 1 : 0.5,
+            fontSize: 12,
+            color: "hsl(var(--foreground))",
+          }}
         >
+          <Plus aria-hidden size={12} strokeWidth={2} />
           {t("create_snapshot")}
         </button>
       </div>

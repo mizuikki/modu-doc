@@ -409,7 +409,9 @@ export function SnapshotDiff() {
                     {isCollapsed ? "▸" : "▾"} {t("fragments")} {segment.index + 1}
                   </span>
                   <span style={{ fontSize: 11 }}>
-                    {segment.rows.filter((row) => row.kind !== "same").length} changes
+                    {t("changes_count", {
+                      count: segment.rows.filter((row) => row.kind !== "same").length,
+                    })}
                   </span>
                 </button>
                 {isCollapsed ? null : (
@@ -439,7 +441,7 @@ export function SnapshotDiff() {
                               fontStyle: "italic",
                             }}
                           >
-                            (empty)
+                            {t("empty_diff")}
                           </td>
                         </tr>
                       ) : (
@@ -519,9 +521,16 @@ export function SnapshotDiff() {
 
       <div
         style={{
+          position: "sticky",
+          bottom: 0,
           display: "flex",
           justifyContent: "flex-end",
           gap: 8,
+          padding: "8px 10px",
+          marginInline: -10,
+          background: "color-mix(in srgb, hsl(var(--background)) 88%, transparent)",
+          backdropFilter: "blur(6px)",
+          borderTop: "1px solid hsl(var(--border))",
         }}
       >
         <button
@@ -532,12 +541,13 @@ export function SnapshotDiff() {
           data-testid="history-restore-snapshot"
           style={{
             padding: "6px 14px",
-            borderRadius: 999,
+            borderRadius: 8,
             border: "1px solid hsl(var(--primary))",
             background: "hsl(var(--primary))",
             color: "hsl(var(--primary-foreground))",
             fontSize: 12,
             fontWeight: 600,
+            cursor: "pointer",
           }}
         >
           {t("restore_snapshot")}

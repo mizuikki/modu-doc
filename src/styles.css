@@ -86,6 +86,20 @@ textarea {
   font: inherit;
 }
 
+button[data-testid^="nav-"] {
+  /* biome-ignore lint/complexity/noImportantStyles: WebView focus ring override */
+  outline: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: WebView focus ring override */
+  box-shadow: none !important;
+}
+
+button[data-testid^="nav-"]:focus-visible {
+  /* biome-ignore lint/complexity/noImportantStyles: ensure keyboard focus ring wins over reset */
+  outline: 2px solid hsl(var(--ring)) !important;
+  /* biome-ignore lint/complexity/noImportantStyles: ensure keyboard focus ring wins over reset */
+  outline-offset: 2px !important;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
@@ -98,7 +112,6 @@ textarea {
   grid-template-columns: var(--sidebar-w) 10px var(--assembly-w) 10px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
-  padding-bottom: var(--status-bar-height);
 }
 
 .panel {
@@ -144,11 +157,7 @@ textarea {
   font-size: 12px;
   color: hsl(var(--muted-foreground));
   background: hsl(var(--card));
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 30;
+  flex-shrink: 0;
 }
 
 .panel-scroll {

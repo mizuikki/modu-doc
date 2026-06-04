@@ -139,7 +139,15 @@ export function FragmentList({
     }
   };
 
-  const handleDeleteFragment = async (fragmentId: string) => {
+  const handleDeleteFragment = async (fragmentId: string, fragmentName: string) => {
+    const ok = await dialog.confirm({
+      title: t("delete_fragment_confirm_title"),
+      description: `${t("confirm_delete_fragment")}\n\n${fragmentName}`,
+      confirmText: t("delete_fragment"),
+      cancelText: t("cancel"),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await softDeleteFragment(fragmentId);
     } catch (error) {
@@ -305,8 +313,17 @@ export function FragmentList({
                 )}
                 <button
                   type="button"
-                  onClick={() => void handleDeleteFragment(fragment.id)}
+                  onClick={() => void handleDeleteFragment(fragment.id, fragment.name)}
                   data-testid={`fragment-delete-${fragment.id}`}
+                  style={{
+                    color: "hsl(8 70% 45%)",
+                    border: "1px solid color-mix(in srgb, hsl(8 70% 45%) 25%, transparent)",
+                    background: "transparent",
+                    borderRadius: 8,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
                 >
                   {t("delete_fragment")}
                 </button>

@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import brandLogo from "@/assets/modudoc-logo.png";
 import { CommandPalette } from "@/features/commands/CommandPalette";
 import { GlobalSearch } from "@/features/search/GlobalSearch";
-import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
 import { tMaybe } from "@/i18n/tMaybe";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveWorkspace } from "@/store/selectors";
@@ -27,6 +26,7 @@ export function Header() {
   const theme = useAppStore((state) => state.ui.theme);
   const setTheme = useAppStore((state) => state.setTheme);
   const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
+  const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const language = i18n.resolvedLanguage ?? i18n.language;
@@ -189,23 +189,20 @@ export function Header() {
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
-        <WorkspaceSettingsDialog
-          trigger={
-            <button
-              type="button"
-              disabled={!activeWorkspaceId}
-              data-testid="header-settings"
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid hsl(var(--border))",
-                background: "hsl(var(--card))",
-              }}
-            >
-              {t("settings")}
-            </button>
-          }
-        />
+        <button
+          type="button"
+          disabled={!activeWorkspaceId}
+          data-testid="header-settings"
+          onClick={() => setSettingsDialogOpen(true)}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+          }}
+        >
+          {t("settings")}
+        </button>
         <button
           type="button"
           data-testid="header-more"

@@ -19,6 +19,7 @@ export const initialUI = {
   sidebarWidth: 196,
   assemblyWidth: 500,
   cheatsheetOpen: false,
+  settingsDialogOpen: false,
 };
 
 type PersistedUiState = Partial<AppState["ui"]> & {
@@ -247,6 +248,13 @@ export const useAppStore = create<AppState>()(
           ui: {
             ...state.ui,
             cheatsheetOpen: !state.ui.cheatsheetOpen,
+          },
+        })),
+      setSettingsDialogOpen: (settingsDialogOpen) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            settingsDialogOpen,
           },
         })),
       setSidebarWidth: (width) =>

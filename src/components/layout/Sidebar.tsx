@@ -1,11 +1,9 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppDialog } from "@/components/dialog/DialogProvider";
 import { useToast } from "@/components/toast/ToastProvider";
 import { WorkspaceSelect } from "@/features/workspaces/WorkspaceSelect";
-import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
 import { tMaybe } from "@/i18n/tMaybe";
 import { exportWorkspace, importMarkdownFile, importWorkspacePackage } from "@/lib/api/packages";
 import { createWorkspace } from "@/lib/api/workspaces";
@@ -21,6 +19,7 @@ export function Sidebar() {
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace);
   const setActiveMainTab = useAppStore((state) => state.setActiveMainTab);
+  const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
   const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
   const setCompileStatus = useAppStore((state) => state.setCompileStatus);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
@@ -28,8 +27,8 @@ export function Sidebar() {
   const recipeItems = useAppStore((state) => state.recipeItems);
   const snapshots = useAppStore((state) => state.snapshots);
   const activeRecipeId = useAppStore((state) => state.activeRecipeId);
+  const activeMainTab = useAppStore((state) => state.ui.activeMainTab);
   const recipes = useAppStore((state) => state.recipes);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const fragmentsCount = fragments.filter(
     (entry) => entry.workspaceId === activeWorkspaceId && entry.deletedAt === null,
@@ -121,11 +120,25 @@ export function Sidebar() {
     justifyContent: "space-between",
     padding: "var(--space-2) var(--space-3)",
     borderRadius: "var(--radius-md)",
-    border: "1px solid hsl(var(--border))",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "hsl(var(--border))",
     background: "hsl(var(--card))",
     color: "hsl(var(--foreground))",
     cursor: "pointer",
-  };
+    position: "relative",
+    outline: "none",
+    boxShadow: "none",
+  } as const;
+
+  const navButtonActiveStyle = {
+    ...navButtonStyle,
+    borderColor: "transparent",
+    background: "color-mix(in srgb, hsl(var(--primary)) 5%, hsl(var(--card)))",
+  } as const;
+  function activeNavStyle(tab: "edit" | "preview" | "history") {
+    return activeMainTab === tab ? navButtonActiveStyle : navButtonStyle;
+  }
 
   const badgeStyle = {
     fontSize: 11,
@@ -164,8 +177,24 @@ export function Sidebar() {
           type="button"
           onClick={() => setActiveMainTab("edit")}
           data-testid="nav-assembly"
-          style={navButtonStyle}
+          data-active={activeMainTab === "edit" ? "true" : "false"}
+          aria-current={activeMainTab === "edit" ? "page" : undefined}
+          style={activeNavStyle("edit")}
         >
+          {activeMainTab === "edit" ? (
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                left: -1,
+                top: 6,
+                bottom: 6,
+                width: 3,
+                borderRadius: 3,
+                background: "hsl(var(--primary))",
+              }}
+            />
+          ) : null}
           <span>{t("assembly")}</span>
           <span data-testid="nav-assembly-count" style={badgeStyle}>
             {t("sidebar_nav_assembly_count", { enabled: assemblyEnabled, total: assemblyTotal })}
@@ -175,8 +204,24 @@ export function Sidebar() {
           type="button"
           onClick={() => setActiveMainTab("preview")}
           data-testid="nav-preview"
-          style={navButtonStyle}
+          data-active={activeMainTab === "preview" ? "true" : "false"}
+          aria-current={activeMainTab === "preview" ? "page" : undefined}
+          style={activeNavStyle("preview")}
         >
+          {activeMainTab === "preview" ? (
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                left: -1,
+                top: 6,
+                bottom: 6,
+                width: 3,
+                borderRadius: 3,
+                background: "hsl(var(--primary))",
+              }}
+            />
+          ) : null}
           <span>{t("preview_tab")}</span>
           <span data-testid="nav-preview-count" style={badgeStyle}>
             {t("sidebar_nav_fragments_count", { count: fragmentsCount })}
@@ -186,8 +231,24 @@ export function Sidebar() {
           type="button"
           onClick={() => setActiveMainTab("history")}
           data-testid="nav-history"
-          style={navButtonStyle}
+          data-active={activeMainTab === "history" ? "true" : "false"}
+          aria-current={activeMainTab === "history" ? "page" : undefined}
+          style={activeNavStyle("history")}
         >
+          {activeMainTab === "history" ? (
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                left: -1,
+                top: 6,
+                bottom: 6,
+                width: 3,
+                borderRadius: 3,
+                background: "hsl(var(--primary))",
+              }}
+            />
+          ) : null}
           <span>{t("history")}</span>
           <span data-testid="nav-history-count" style={badgeStyle}>
             {t("sidebar_nav_snapshots_count", { count: snapshotsCount })}
@@ -242,7 +303,7 @@ export function Sidebar() {
               data-testid="sidebar-workspace-settings"
               disabled={!activeWorkspaceId}
               onSelect={() => {
-                setSettingsOpen(true);
+                setSettingsDialogOpen(true);
               }}
               style={{
                 ...dropdownItemStyle,
@@ -292,16 +353,48 @@ export function Sidebar() {
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
-      <WorkspaceSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-      <div
-        style={{
-          marginTop: "var(--space-4)",
-          fontSize: 12,
-          color: "hsl(var(--muted-foreground))",
-        }}
-      >
-        {activeWorkspace?.status ? tMaybe(t, activeWorkspace.status) : t("no_workspace_selected")}
-      </div>
+      {activeWorkspace?.status === "missing_target" ? (
+        <button
+          type="button"
+          onClick={() => setSettingsDialogOpen(true)}
+          data-testid="sidebar-status-missing-target"
+          style={{
+            marginTop: "var(--space-4)",
+            alignSelf: "flex-start",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "2px 8px",
+            borderRadius: 6,
+            border: "1px solid color-mix(in srgb, hsl(8 70% 45%) 35%, hsl(var(--border)))",
+            background: "color-mix(in srgb, hsl(8 70% 45%) 8%, hsl(var(--card)))",
+            color: "hsl(8 70% 40%)",
+            fontSize: 12,
+            cursor: "pointer",
+            transition: "background 120ms, border-color 120ms",
+          }}
+          onMouseEnter={(event) => {
+            event.currentTarget.style.background =
+              "color-mix(in srgb, hsl(8 70% 45%) 14%, hsl(var(--card)))";
+          }}
+          onMouseLeave={(event) => {
+            event.currentTarget.style.background =
+              "color-mix(in srgb, hsl(8 70% 45%) 8%, hsl(var(--card)))";
+          }}
+        >
+          {tMaybe(t, activeWorkspace.status)}
+        </button>
+      ) : (
+        <div
+          style={{
+            marginTop: "var(--space-4)",
+            fontSize: 12,
+            color: "hsl(var(--muted-foreground))",
+          }}
+        >
+          {activeWorkspace?.status ? tMaybe(t, activeWorkspace.status) : t("no_workspace_selected")}
+        </div>
+      )}
     </div>
   );
 }

@@ -26,6 +26,7 @@ function resetStore() {
       sidebarWidth: 196,
       assemblyWidth: 500,
       cheatsheetOpen: false,
+      settingsDialogOpen: false,
     },
   });
 }

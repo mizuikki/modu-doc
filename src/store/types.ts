@@ -82,6 +82,7 @@ export type AppState = {
     sidebarWidth: number;
     assemblyWidth: number;
     cheatsheetOpen: boolean;
+    settingsDialogOpen: boolean;
   };
   hydrate: (
     initial: Pick<AppState, "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots">,
@@ -106,6 +107,7 @@ export type AppState = {
   toggleZenMode: () => void;
   setCheatsheetOpen: (open: boolean) => void;
   toggleCheatsheet: () => void;
+  setSettingsDialogOpen: (open: boolean) => void;
   setSidebarWidth: (width: number) => void;
   setAssemblyWidth: (width: number) => void;
   setCompileStatus: (status: CompileStatus) => void;

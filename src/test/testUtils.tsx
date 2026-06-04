@@ -28,6 +28,7 @@ export function resetAppStore() {
       sidebarWidth: 196,
       assemblyWidth: 500,
       cheatsheetOpen: false,
+      settingsDialogOpen: false,
     },
   });
 }

@@ -10,6 +10,7 @@ import { selectActiveWorkspace } from "@/store/selectors";
 
 export function WorkspacePreview() {
   const { t } = useTranslation();
+  const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
   const activeRecipeId = useAppStore((state) => state.activeRecipeId);
   const fragments = useAppStore((state) => state.fragments);
@@ -96,7 +97,10 @@ export function WorkspacePreview() {
                   {activeWorkspace?.name ?? t("no_workspace")}
                 </div>
                 <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                  {t("last_written_at")}: {activeWorkspace?.lastCompiledAt ?? t("missing_target")}
+                  {t("last_written_at")}:{" "}
+                  {activeWorkspace?.lastCompiledAt
+                    ? new Date(activeWorkspace.lastCompiledAt).toLocaleString()
+                    : t("never_compiled")}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -129,9 +133,18 @@ export function WorkspacePreview() {
                     fontSize: 12,
                     padding: "4px 10px",
                     borderRadius: 999,
-                    border: "1px solid hsl(var(--border))",
-                    background: "hsl(var(--card))",
-                    color: "hsl(var(--muted-foreground))",
+                    border:
+                      activeWorkspace?.status === "missing_target"
+                        ? "1px solid hsl(8 70% 45%)"
+                        : "1px solid hsl(var(--border))",
+                    background:
+                      activeWorkspace?.status === "missing_target"
+                        ? "color-mix(in srgb, hsl(8 70% 45%) 10%, transparent)"
+                        : "hsl(var(--card))",
+                    color:
+                      activeWorkspace?.status === "missing_target"
+                        ? "hsl(8 70% 40%)"
+                        : "hsl(var(--muted-foreground))",
                   }}
                 >
                   {t("status")}:{" "}
@@ -152,7 +165,27 @@ export function WorkspacePreview() {
                 }}
               >
                 <strong>{t("current_target")}:</strong>{" "}
-                {activeWorkspace?.targetPath ?? t("missing_target")}
+                {activeWorkspace?.targetPath ? (
+                  activeWorkspace.targetPath
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSettingsDialogOpen(true)}
+                    data-testid="preview-set-target"
+                    style={{
+                      border: "1px solid hsl(var(--primary))",
+                      background: "hsl(var(--primary))",
+                      color: "hsl(var(--primary-foreground))",
+                      borderRadius: 8,
+                      padding: "4px 10px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("set_compile_target")}
+                  </button>
+                )}
               </div>
             </div>
             <button
