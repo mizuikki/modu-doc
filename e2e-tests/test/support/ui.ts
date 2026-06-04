@@ -140,3 +140,60 @@ export async function selectWorkspaceById(workspaceId: string, timeoutMs = 20000
     { timeout: timeoutMs, interval: 200 },
   );
 }
+
+export async function openSidebarMore(timeoutMs = 20000) {
+  const trigger = await $("[data-testid='sidebar-more-trigger']");
+  await ensureInteractable(trigger, timeoutMs);
+  await safeClick("[data-testid='sidebar-more-trigger']", timeoutMs);
+  const content = await $("[data-testid='sidebar-more-content']");
+  await browser.waitUntil(async () => await content.isExisting(), {
+    timeout: timeoutMs,
+    interval: 100,
+  });
+}
+
+export async function openAddFragmentMenu(timeoutMs = 20000) {
+  const trigger = await $("[data-testid='recipe-add-fragment-menu']");
+  await ensureInteractable(trigger, timeoutMs);
+  await safeClick("[data-testid='recipe-add-fragment-menu']", timeoutMs);
+  const content = await $("[data-testid='recipe-add-fragment-menu-content']");
+  await browser.waitUntil(async () => await content.isExisting(), {
+    timeout: timeoutMs,
+    interval: 100,
+  });
+}
+
+export async function openCommandPalette(timeoutMs = 20000) {
+  const trigger = await $("[data-testid='header-more']");
+  await ensureInteractable(trigger, timeoutMs);
+  await safeClick("[data-testid='header-more']", timeoutMs);
+  const input = await $("[data-testid='command-palette-input']");
+  await browser.waitUntil(async () => await input.isExisting(), {
+    timeout: timeoutMs,
+    interval: 100,
+  });
+}
+
+export async function runCommandPaletteCommand(labelSubstring: string, timeoutMs = 20000) {
+  await openCommandPalette(timeoutMs);
+  await safeSetValue("[data-testid='command-palette-input']", labelSubstring, timeoutMs);
+  await browser.keys("Enter");
+  await browser.waitUntil(
+    async () => !(await $("[data-testid='command-palette-input']").isExisting()),
+    { timeout: timeoutMs, interval: 100 },
+  );
+}
+
+export async function createWorkspaceViaUI(name: string, timeoutMs = 20000) {
+  await openSidebarMore(timeoutMs);
+  await safeClick("[data-testid='sidebar-new-workspace']", timeoutMs);
+  await safeSetValue("[data-testid='app-prompt-input']", name, timeoutMs);
+  await safeClick("[data-testid='app-dialog-confirm']", timeoutMs);
+}
+
+export async function createFragmentViaUI(name: string, timeoutMs = 20000) {
+  await openAddFragmentMenu(timeoutMs);
+  await safeClick("[data-testid='fragments-new']", timeoutMs);
+  await safeSetValue("[data-testid='app-prompt-input']", name, timeoutMs);
+  await safeClick("[data-testid='app-dialog-confirm']", timeoutMs);
+}

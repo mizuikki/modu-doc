@@ -945,6 +945,31 @@ export const config: Options.WebdriverIO = {
       // ignore
     }
   },
+  beforeTest: async () => {
+    // Reset shared UI state between tests so a prior spec's leftover modal,
+    // dropdown, or zen-mode flag cannot break the next one. Click handlers
+    // and dropdown triggers are no-ops if the corresponding UI isn't open.
+    await browser.execute(() => {
+      document.activeElement?.blur?.();
+    });
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await browser.keys("Escape");
+    }
+    const zenMain = await $(".app-main");
+    if (await zenMain.isExisting()) {
+      const zen = await zenMain.getAttribute("data-zen");
+      if (zen === "true") {
+        const toggle = await $("[data-testid='zen-toggle']");
+        if (await toggle.isExisting()) {
+          try {
+            await toggle.click();
+          } catch {
+            // ignore - next spec will surface the failure if zen is still on
+          }
+        }
+      }
+    }
+  },
   afterSession: () => {
     cleanupChildProcess(tauriDriver);
     tauriDriver = undefined;

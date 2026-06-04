@@ -4,6 +4,7 @@ import path from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { tauriInvoke } from "../support/tauri";
 import {
+  createWorkspaceViaUI,
   dismissWorkspaceStatus,
   safeClick,
   safeSetValue,
@@ -63,9 +64,7 @@ describe("ModuDoc workflows", () => {
     const targetPath = path.join(tempDir, "workspace.md");
     const exportPath = path.join(tempDir, "workspace.agentpack");
     const workspaceName = `E2E Workspace ${Date.now()}`;
-    await safeClick("[data-testid='sidebar-new-workspace']");
-    await safeSetValue("[data-testid='app-prompt-input']", workspaceName);
-    await safeClick("[data-testid='app-dialog-confirm']");
+    await createWorkspaceViaUI(workspaceName);
 
     await browser.waitUntil(async () => {
       const workspaces = await tauriInvoke<WorkspaceLoadResult["workspace"][]>("list_workspaces");
@@ -361,7 +360,7 @@ describe("ModuDoc workflows", () => {
     });
     await selectWorkspaceById(workspace.id);
 
-    await safeClick("button*=Workspace settings");
+    await safeClick("[data-testid='header-settings']");
     await safeSetValue("[data-testid='workspace-settings-name']", `${workspaceName} Updated`);
     await safeClick("[data-testid='workspace-settings-save']");
 

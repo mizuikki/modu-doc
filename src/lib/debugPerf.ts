@@ -31,7 +31,10 @@ export async function logDebugPerf(label: string, payload?: DebugPerfPayload) {
     return;
   }
 
-  markE2ePerf(label, normalizePayload(payload));
+  // Hand the e2e collector the structured payload so consumers can read
+  // fields like `documentId` directly. The Tauri debug bridge gets the
+  // stringified form below because it crosses a serialization boundary.
+  markE2ePerf(label, payload ?? null);
 
   if (!import.meta.env.DEV) {
     return;

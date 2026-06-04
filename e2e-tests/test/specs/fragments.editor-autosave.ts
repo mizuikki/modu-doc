@@ -1,6 +1,6 @@
 import { expect } from "@wdio/globals";
 import { setFragmentEditorContent } from "../support/editor";
-import { safeClick, safeSetValue } from "../support/ui";
+import { createFragmentViaUI, safeClick } from "../support/ui";
 import { createAndSelectWorkspace, loadWorkspace } from "../support/workspace";
 
 describe("Fragments", () => {
@@ -9,9 +9,7 @@ describe("Fragments", () => {
     const workspace = await createAndSelectWorkspace({ name: workspaceName, targetPath: null });
 
     const fragmentName = `Autosave fragment ${Date.now()}`;
-    await safeClick("[data-testid='fragments-new']");
-    await safeSetValue("[data-testid='app-prompt-input']", fragmentName);
-    await safeClick("[data-testid='app-dialog-confirm']");
+    await createFragmentViaUI(fragmentName);
 
     const bundleForSelect = await loadWorkspace(workspace.id);
     const created = bundleForSelect.fragments.find((entry) => entry.name === fragmentName);

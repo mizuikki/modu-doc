@@ -40,5 +40,12 @@ describe("Command palette", () => {
       timeout: 10000,
       interval: 100,
     });
+
+    // Reset zen mode so the sidebar stays visible for subsequent tests.
+    await safeClick("[data-testid='zen-toggle']");
+    await browser.waitUntil(async () => (await readZenAttribute()) === "false", {
+      timeout: 10000,
+      interval: 100,
+    });
   });
 });

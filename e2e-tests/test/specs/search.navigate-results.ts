@@ -44,7 +44,7 @@ describe("Global search", () => {
     await safeSetValue("[data-testid='global-search-input']", keyword);
     await safeClick(`[data-testid='global-search-result-recipe-${recipe.id}']`);
     await expect($(`[data-testid='main-tab-edit']`)).toBeDisplayed();
-    await expect($(`div*=${recipeName}`)).toBeDisplayed();
+    await expect($(`[data-testid='recipe-select'][title*='${recipeName}']`)).toBeDisplayed();
 
     await safeSetValue("[data-testid='global-search-input']", keyword);
     await safeClick(`[data-testid='global-search-result-snapshot-${snapshot.id}']`);

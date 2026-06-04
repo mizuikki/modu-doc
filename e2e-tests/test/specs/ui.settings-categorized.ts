@@ -7,7 +7,7 @@ describe("Workspace settings navigation", () => {
     const workspaceName = `E2E Settings ${Date.now()}`;
     await createAndSelectWorkspace({ name: workspaceName, targetPath: null });
 
-    await safeClick("button*=Workspace settings");
+    await safeClick("[data-testid='header-settings']");
 
     const generalNav = await $("[data-testid='workspace-settings-nav-general']");
     const syncNav = await $("[data-testid='workspace-settings-nav-sync']");
