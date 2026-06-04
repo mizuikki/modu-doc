@@ -36,57 +36,155 @@ function splitSegments(text: string): string[] {
 function diffSegment(left: string, right: string, segmentId: string): DiffRow[] {
   const leftLines = left.length > 0 ? left.split("\n") : [];
   const rightLines = right.length > 0 ? right.split("\n") : [];
-  const max = Math.max(leftLines.length, rightLines.length);
+  const leftLen = leftLines.length;
+  const rightLen = rightLines.length;
+
   const rows: DiffRow[] = [];
   let leftNum = 0;
   let rightNum = 0;
   let counter = 0;
 
-  for (let index = 0; index < max; index += 1) {
-    const leftLine = leftLines[index];
-    const rightLine = rightLines[index];
-    if (leftLine === rightLine) {
-      if (leftLine !== undefined) {
-        leftNum += 1;
-        rightNum += 1;
-        counter += 1;
-        rows.push({
-          id: `${segmentId}-row-${counter}`,
-          kind: "same",
-          leftText: leftLine,
-          rightText: rightLine,
-          leftLineNumber: leftNum,
-          rightLineNumber: rightNum,
-        });
+  // Fast path: most history diffs share a long identical prefix. Walk the
+  // common head so we only build a LCS table for the diverging tail.
+  let li = 0;
+  let ri = 0;
+  while (li < leftLen && ri < rightLen && leftLines[li] === rightLines[ri]) {
+    leftNum += 1;
+    rightNum += 1;
+    counter += 1;
+    rows.push({
+      id: `${segmentId}-row-${counter}`,
+      kind: "same",
+      leftText: leftLines[li],
+      rightText: rightLines[ri],
+      leftLineNumber: leftNum,
+      rightLineNumber: rightNum,
+    });
+    li += 1;
+    ri += 1;
+  }
+
+  if (li >= leftLen && ri >= rightLen) {
+    return rows;
+  }
+
+  // Tail: use a real LCS so the result is correct for shifted content rather
+  // than the previous naive index-by-index walk that mis-aligned lines.
+  const tailLeft = leftLines.slice(li);
+  const tailRight = rightLines.slice(ri);
+  const lcs = computeLcsTable(tailLeft, tailRight);
+  rows.push(
+    ...backtrackLcs(tailLeft, tailRight, lcs, leftNum, rightNum, segmentId, counter),
+  );
+  return rows;
+}
+
+function computeLcsTable(left: string[], right: string[]): Uint32Array {
+  const width = right.length + 1;
+  const table = new Uint32Array((left.length + 1) * width);
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      if (left[i - 1] === right[j - 1]) {
+        table[i * width + j] = table[(i - 1) * width + (j - 1)] + 1;
+      } else {
+        const up = table[(i - 1) * width + j];
+        const leftValue = table[i * width + (j - 1)];
+        table[i * width + j] = up >= leftValue ? up : leftValue;
       }
+    }
+  }
+  return table;
+}
+
+function backtrackLcs(
+  left: string[],
+  right: string[],
+  table: Uint32Array,
+  startLeftNum: number,
+  startRightNum: number,
+  segmentId: string,
+  startCounter: number,
+): DiffRow[] {
+  const width = right.length + 1;
+  const out: DiffRow[] = [];
+  let i = left.length;
+  let j = right.length;
+  let leftNum = startLeftNum;
+  let rightNum = startRightNum;
+  let counter = startCounter;
+  while (i > 0 && j > 0) {
+    if (left[i - 1] === right[j - 1]) {
+      leftNum += 1;
+      rightNum += 1;
+      counter += 1;
+      out.push({
+        id: `${segmentId}-row-${counter}`,
+        kind: "same",
+        leftText: left[i - 1],
+        rightText: right[j - 1],
+        leftLineNumber: leftNum,
+        rightLineNumber: rightNum,
+      });
+      i -= 1;
+      j -= 1;
       continue;
     }
-    if (leftLine !== undefined) {
+    if (table[(i - 1) * width + j] >= table[i * width + (j - 1)]) {
       leftNum += 1;
       counter += 1;
-      rows.push({
+      out.push({
         id: `${segmentId}-row-${counter}`,
         kind: "remove",
-        leftText: leftLine,
+        leftText: left[i - 1],
         rightText: null,
         leftLineNumber: leftNum,
         rightLineNumber: null,
       });
-    }
-    if (rightLine !== undefined) {
+      i -= 1;
+    } else {
       rightNum += 1;
       counter += 1;
-      rows.push({
+      out.push({
         id: `${segmentId}-row-${counter}`,
         kind: "add",
         leftText: null,
-        rightText: rightLine,
+        rightText: right[j - 1],
         leftLineNumber: null,
         rightLineNumber: rightNum,
       });
+      j -= 1;
     }
   }
-
+  while (i > 0) {
+    leftNum += 1;
+    counter += 1;
+    out.push({
+      id: `${segmentId}-row-${counter}`,
+      kind: "remove",
+      leftText: left[i - 1],
+      rightText: null,
+      leftLineNumber: leftNum,
+      rightLineNumber: null,
+    });
+    i -= 1;
+  }
+  while (j > 0) {
+    rightNum += 1;
+    counter += 1;
+    out.push({
+      id: `${segmentId}-row-${counter}`,
+      kind: "add",
+      leftText: null,
+      rightText: right[j - 1],
+      leftLineNumber: null,
+      rightLineNumber: rightNum,
+    });
+    j -= 1;
+  }
+  const rows: DiffRow[] = [];
+  for (let k = out.length - 1; k >= 0; k -= 1) {
+    rows.push(out[k]);
+  }
   return rows;
 }
 

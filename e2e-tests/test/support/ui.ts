@@ -35,7 +35,31 @@ export async function dismissWorkspaceStatus() {
 export async function ensureInteractable(element: WebdriverIO.Element, timeoutMs = 20000) {
   await element.waitForExist({ timeout: timeoutMs });
   await element.waitForDisplayed({ timeout: timeoutMs });
-  await element.scrollIntoView({ block: "center", inline: "center" });
+  try {
+    await element.scrollIntoView({ block: "center", inline: "center" });
+  } catch {
+    // WebDriver's scrollIntoView can fail with "move target out of bounds" on
+    // nested scroll containers. Fall back to a JS-driven scroll on the
+    // nearest scrollable ancestor so the element is brought into view.
+    await browser.execute((target) => {
+      const elementNode = target as HTMLElement | null;
+      if (!elementNode) return;
+      const rect = elementNode.getBoundingClientRect();
+      if (rect.top >= 0 && rect.bottom <= window.innerHeight) return;
+      let parent: HTMLElement | null = elementNode.parentElement;
+      while (parent && parent !== document.body) {
+        const overflowY = window.getComputedStyle(parent).overflowY;
+        if (overflowY === "auto" || overflowY === "scroll") {
+          const parentRect = parent.getBoundingClientRect();
+          const offset = rect.top - parentRect.top;
+          parent.scrollTop += offset - parent.clientHeight / 2;
+          return;
+        }
+        parent = parent.parentElement;
+      }
+      elementNode.scrollIntoView({ block: "center", inline: "center" });
+    }, element);
+  }
   await element.waitForEnabled({ timeout: timeoutMs });
 }
 

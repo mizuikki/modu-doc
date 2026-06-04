@@ -123,15 +123,23 @@ export function AssemblyBoard() {
     [currentRecipeId, recipeItems],
   );
 
+  const activeFragmentsById = useMemo(() => {
+    const map = new Map<string, (typeof fragments)[number]>();
+    for (const fragment of fragments) {
+      if (fragment.deletedAt === null) {
+        map.set(fragment.id, fragment);
+      }
+    }
+    return map;
+  }, [fragments]);
+
   const currentRecipeViews = useMemo(
     () =>
       currentRecipeItems.map((item) => ({
         ...item,
-        fragment:
-          fragments.find((entry) => entry.id === item.fragmentId && entry.deletedAt === null) ??
-          null,
+        fragment: activeFragmentsById.get(item.fragmentId) ?? null,
       })),
-    [currentRecipeItems, fragments],
+    [activeFragmentsById, currentRecipeItems],
   );
 
   const activeDragItem =

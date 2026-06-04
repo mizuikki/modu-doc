@@ -19,21 +19,33 @@ export function WorkspacePreview() {
     (item) => item.recipeId === activeRecipeId && item.enabled,
   ).length;
 
+  const fragmentsById = useMemo(() => {
+    const map = new Map<string, (typeof fragments)[number]>();
+    for (const fragment of fragments) {
+      if (fragment.deletedAt === null) {
+        map.set(fragment.id, fragment);
+      }
+    }
+    return map;
+  }, [fragments]);
+
   const compiled = useMemo(() => {
-    const activeFragments = fragments.filter((fragment) => fragment.deletedAt === null);
-    const activeFragmentIds = new Set(activeFragments.map((fragment) => fragment.id));
-    const fragmentContentById = new Map(
-      activeFragments.map((fragment) => [fragment.id, fragment.content]),
-    );
     const orderedItems = recipeItems
       .filter((item) => item.recipeId === activeRecipeId && item.enabled)
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder);
-    return orderedItems
-      .filter((item) => activeFragmentIds.has(item.fragmentId))
-      .map((item) => fragmentContentById.get(item.fragmentId) ?? "")
-      .join("\n\n");
-  }, [activeRecipeId, fragments, recipeItems]);
+    if (orderedItems.length === 0) {
+      return "";
+    }
+    const parts: string[] = [];
+    for (const item of orderedItems) {
+      const fragment = fragmentsById.get(item.fragmentId);
+      if (fragment) {
+        parts.push(fragment.content);
+      }
+    }
+    return parts.join("\n\n");
+  }, [activeRecipeId, fragmentsById, recipeItems]);
 
   useEffect(() => {
     void logDebugPerf("main-tab ready:preview", {
