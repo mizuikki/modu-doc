@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isScreenshotMode } from "@/app/screenshotMode";
 import { useToast } from "@/components/toast/ToastProvider";
 import { updateFragment } from "@/lib/api/fragments";
 import { logDebugPerf } from "@/lib/debugPerf";
@@ -84,6 +85,9 @@ export function FragmentEditor() {
       source: "auto" | "blur",
     ) => {
       if (!targetFragment) {
+        return;
+      }
+      if (isScreenshotMode()) {
         return;
       }
       if (source === "auto" && lastFailedAutoSaveRef.current === nextValue) {
