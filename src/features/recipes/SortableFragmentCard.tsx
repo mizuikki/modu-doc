@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import * as Switch from "@radix-ui/react-switch";
 import type { TFunction } from "i18next";
 import { Trash2 } from "lucide-react";
+import { useState } from "react";
 
 type SortableFragmentCardProps = {
   id: string;
@@ -33,24 +34,41 @@ export function SortableFragmentCard({
     id,
   });
 
+  const [isHovered, setIsHovered] = useState(false);
+
   const isDisabled = !enabled;
   const dragColor = isDisabled ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))";
   const isHighlighted = active || selected;
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: card contains nested interactive controls (drag handle, remove, toggle)
     <div
       ref={setNodeRef}
       data-testid={`recipe-item-${id}`}
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
+        cursor: "pointer",
         border: isHighlighted ? "1px solid hsl(var(--primary))" : "1px solid hsl(var(--border))",
         borderRadius: 14,
         background: isDragging
           ? "color-mix(in srgb, hsl(var(--primary)) 8%, hsl(var(--card)))"
           : isHighlighted
             ? "color-mix(in srgb, hsl(var(--primary)) 6%, hsl(var(--card)))"
-            : "hsl(var(--card))",
+            : isHovered
+              ? "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--card)))"
+              : "hsl(var(--card))",
         padding: 8,
         minHeight: 0,
         opacity: enabled ? 1 : 0.72,
@@ -67,6 +85,7 @@ export function SortableFragmentCard({
             type="button"
             aria-label="Drag fragment"
             data-testid={`recipe-item-drag-${id}`}
+            onClick={(e) => e.stopPropagation()}
             {...attributes}
             {...listeners}
             style={{
@@ -94,7 +113,10 @@ export function SortableFragmentCard({
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button
                 type="button"
-                onClick={onSelect}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect();
+                }}
                 data-testid={`recipe-item-select-${id}`}
                 style={{
                   border: 0,
@@ -121,7 +143,10 @@ export function SortableFragmentCard({
               </button>
               <button
                 type="button"
-                onClick={onRemove}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
                 aria-label={t("remove_from_recipe")}
                 title={t("remove_from_recipe")}
                 data-testid={`recipe-item-remove-${id}`}
@@ -146,6 +171,7 @@ export function SortableFragmentCard({
               <Switch.Root
                 checked={enabled}
                 onCheckedChange={onToggle}
+                onClick={(e) => e.stopPropagation()}
                 data-testid={`recipe-item-toggle-${id}`}
                 aria-label={enabled ? t("switch_to_disable") : t("switch_to_enable")}
                 style={{
