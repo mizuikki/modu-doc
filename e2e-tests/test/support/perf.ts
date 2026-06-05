@@ -144,8 +144,8 @@ export async function measureScenario(options: MeasureScenarioOptions): Promise<
   const totalIterations = options.iterations + options.warmupIterations;
 
   for (let iteration = 0; iteration < totalIterations; iteration += 1) {
-    await options.prepare?.(iteration);
     await clearPerfEvents();
+    await options.prepare?.(iteration);
     await markPerf("wdio:scenario-start", {
       scenario: options.name,
       iteration,

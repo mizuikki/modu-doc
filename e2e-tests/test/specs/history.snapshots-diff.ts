@@ -11,24 +11,18 @@ describe("History", () => {
     const fragmentName = `Snapshot fragment ${Date.now()}`;
     await createFragmentViaUI(fragmentName);
 
-    await browser.waitUntil(
-      async () => {
-        const bundle = await loadWorkspace(workspace.id);
-        return bundle.fragments.some((entry) => entry.name === fragmentName);
-      },
-      { timeout: 20000, interval: 200 },
-    );
-    const bundleAfterCreate = await loadWorkspace(workspace.id);
-    const created = bundleAfterCreate.fragments.find((entry) => entry.name === fragmentName);
-    if (!created) throw new Error("fragment not created");
-    await safeClick(`[data-testid='fragment-select-${created.id}']`);
-
+    // createFragmentViaUI auto-attaches the new fragment to the recipe and
+    // makes it the active fragment, so the editor underneath is already
+    // pointing at the right document. No library dialog round-trip needed.
     await setFragmentEditorContent("v1");
+    // Milkdown normalises the document to markdown on save, which appends a
+    // trailing newline. Compare with the typed text after trimming instead
+    // of an exact match.
     await browser.waitUntil(
       async () => {
         const bundle = await loadWorkspace(workspace.id);
         const fragment = bundle.fragments.find((entry) => entry.name === fragmentName);
-        return fragment?.content === "v1";
+        return fragment?.content?.trim() === "v1";
       },
       { timeout: 30000, interval: 250 },
     );
@@ -50,18 +44,18 @@ describe("History", () => {
       async () => {
         const bundle = await loadWorkspace(workspace.id);
         const fragment = bundle.fragments.find((entry) => entry.name === fragmentName);
-        return fragment?.content === "v2";
+        return fragment?.content?.trim() === "v2";
       },
       { timeout: 30000, interval: 250 },
     );
 
     await safeClick("[data-testid='main-tab-history']");
-    await browser.waitUntil(async () => await $("pre*=- v1").isDisplayed(), {
+    await browser.waitUntil(async () => await $("td*=- v1").isExisting(), {
       timeout: 20000,
       interval: 250,
     });
-    await expect($("pre*=- v1")).toBeDisplayed();
-    await expect($("pre*=+ v2")).toBeDisplayed();
+    await expect($("td*=- v1")).toBeDisplayed();
+    await expect($("td*=+ v2")).toBeDisplayed();
 
     const bundleForRestore = await loadWorkspace(workspace.id);
     const snapshot = bundleForRestore.snapshots?.[0];
@@ -72,7 +66,7 @@ describe("History", () => {
       async () => {
         const bundle = await loadWorkspace(workspace.id);
         const fragment = bundle.fragments.find((entry) => entry.name === fragmentName);
-        return fragment?.content === "v1";
+        return fragment?.content?.trim() === "v1";
       },
       { timeout: 30000, interval: 250 },
     );

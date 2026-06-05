@@ -622,7 +622,11 @@ export const config: Options.WebdriverIO = {
   waitforTimeout: 20000,
   mochaOpts: {
     ui: "bdd",
-    timeout: 120000,
+    // The Milkdown performance diagnostics spec runs multiple scenarios
+    // across warmup + iterations, and can exceed two minutes on slow CI
+    // runners. Bump the global mocha timeout to give that spec enough
+    // headroom; all other specs are far below this bound.
+    timeout: 600000,
   },
   capabilities: windowsAttachEnabled
     ? [

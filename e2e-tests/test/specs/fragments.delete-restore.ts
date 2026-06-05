@@ -1,4 +1,4 @@
-import { createFragmentViaUI, safeClick } from "../support/ui";
+import { createFragmentViaUI, openLibraryDialog, safeClick } from "../support/ui";
 import { createAndSelectWorkspace, loadWorkspace } from "../support/workspace";
 
 describe("Fragments", () => {
@@ -14,7 +14,16 @@ describe("Fragments", () => {
     if (!fragment) {
       throw new Error("fragment not created");
     }
+
+    // Open the library dialog in manage mode so the deleted section is visible
+    // alongside the active fragment list (both share the same FragmentList).
+    // The newly created fragment is auto-attached to the recipe, so the default
+    // "insert" mode (filterMode=not_in_recipe) would hide it.
+    await openLibraryDialog("manage");
+
     await safeClick(`[data-testid='fragment-delete-${fragment.id}']`);
+    // The delete action opens a confirmation dialog that must be accepted.
+    await safeClick("[data-testid='app-dialog-confirm']");
 
     await browser.waitUntil(
       async () => !(await $(`[data-testid='fragment-select-${fragment.id}']`).isExisting()),
@@ -35,6 +44,8 @@ describe("Fragments", () => {
     );
 
     await safeClick(`[data-testid='fragment-select-${fragment.id}']`);
+    // Close the library dialog so its overlay doesn't block interactions.
+    await safeClick("[data-testid='fragment-library-close']");
     await browser.waitUntil(
       async () => (await $("label[for='fragment-editor']").getText()).includes(fragmentName),
       {

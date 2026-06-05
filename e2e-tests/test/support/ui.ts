@@ -10,26 +10,32 @@ function isWindowsAttachMode() {
 }
 
 export async function dismissWorkspaceStatus() {
-  const popover = await $("[data-testid='workspace-status-popover']");
-  if (!(await popover.isExisting())) return;
-
-  const close = await $("[data-testid='workspace-status-close']");
-  if (await close.isExisting()) {
-    try {
-      await close.click();
-    } catch {
-      await browser.execute(() => {
-        (
-          document.querySelector("[data-testid='workspace-status-close']") as HTMLElement | null
-        )?.click();
-      });
-    }
-  }
-
-  await browser.waitUntil(async () => !(await popover.isExisting()), {
-    timeout: 5000,
-    interval: 100,
-  });
+  // The popover can re-render in response to fresh status events fired by the
+  // test's own actions (e.g. autosave, recipe updates), so a single close click
+  // is not enough. Drain it by clicking close in a loop until the message has
+  // stayed cleared for one full check cycle or we hit the timeout.
+  await browser.waitUntil(
+    async () => {
+      const popover = await $("[data-testid='workspace-status-popover']");
+      if (!(await popover.isExisting())) {
+        return true;
+      }
+      const close = await $("[data-testid='workspace-status-close']");
+      if (await close.isExisting()) {
+        try {
+          await close.click();
+        } catch {
+          await browser.execute(() => {
+            (
+              document.querySelector("[data-testid='workspace-status-close']") as HTMLElement | null
+            )?.click();
+          });
+        }
+      }
+      return false;
+    },
+    { timeout: 10000, interval: 100 },
+  );
 }
 
 export async function ensureInteractable(element: WebdriverIO.Element, timeoutMs = 20000) {
@@ -161,6 +167,23 @@ export async function openAddFragmentMenu(timeoutMs = 20000) {
     timeout: timeoutMs,
     interval: 100,
   });
+}
+
+export async function openLibraryDialog(mode: "insert" | "manage" = "insert", timeoutMs = 20000) {
+  const trigger = (await $("[data-testid='recipe-add-fragment']").isExisting())
+    ? "[data-testid='recipe-add-fragment']"
+    : "[data-testid='recipe-empty-add-fragment']";
+  await safeClick(trigger, timeoutMs);
+  const dialog = await $("[data-testid='fragment-library-dialog']");
+  await browser.waitUntil(async () => await dialog.isExisting(), {
+    timeout: timeoutMs,
+    interval: 100,
+  });
+  if (mode === "manage") {
+    await safeClick("[data-testid='fragment-library-mode-manage']", timeoutMs);
+  } else {
+    await safeClick("[data-testid='fragment-library-mode-insert']", timeoutMs);
+  }
 }
 
 export async function openCommandPalette(timeoutMs = 20000) {

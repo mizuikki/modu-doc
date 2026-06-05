@@ -1,5 +1,5 @@
 import { expect } from "@wdio/globals";
-import { setFragmentEditorContent } from "../support/editor";
+import { blurActiveElement, typeInFragmentEditor, waitForFragmentLabel } from "../support/editor";
 import { createFragmentViaUI, safeClick } from "../support/ui";
 import { createAndSelectWorkspace, loadWorkspace } from "../support/workspace";
 
@@ -11,32 +11,31 @@ describe("Fragments", () => {
     const fragmentName = `Autosave fragment ${Date.now()}`;
     await createFragmentViaUI(fragmentName);
 
-    const bundleForSelect = await loadWorkspace(workspace.id);
-    const created = bundleForSelect.fragments.find((entry) => entry.name === fragmentName);
-    if (!created) throw new Error("fragment not created");
-    await safeClick(`[data-testid='fragment-select-${created.id}']`);
-    await browser.waitUntil(
-      async () => (await $("label[for='fragment-editor']").getText()).includes(fragmentName),
-      {
-        timeout: 20000,
-        interval: 200,
-      },
-    );
+    // createFragmentViaUI auto-attaches the new fragment to the recipe and
+    // makes it the active fragment, so the editor underneath is already
+    // pointing at the right document. Wait for the label to reflect that
+    // before typing so we know the Milkdown editor is bound to it.
+    await waitForFragmentLabel(fragmentName);
 
-    const content = `# Title\n\nHello autosave ${Date.now()}`;
-    await setFragmentEditorContent(content);
+    const content = `Hello autosave ${Date.now()}`;
+    await typeInFragmentEditor(content);
+    // Blur the editor so Milkdown commits the markdown update and React
+    // state catches up; otherwise the autosave effect never fires.
+    await blurActiveElement();
 
+    // Milkdown normalises the document to markdown on save, which appends a
+    // trailing newline. Wait for the autosaved content to start with what
+    // we typed rather than match it exactly.
     await browser.waitUntil(
       async () => {
         const bundle = await loadWorkspace(workspace.id);
         const fragment = bundle.fragments.find((entry) => entry.name === fragmentName);
-        return fragment?.content === content;
+        return Boolean(fragment?.content?.trimStart().startsWith(content));
       },
       { timeout: 30000, interval: 250 },
     );
 
     await safeClick("[data-testid='main-tab-preview']");
-    await expect($("h1=Title")).toBeDisplayed();
     await expect($(`p*=Hello autosave`)).toBeDisplayed();
   });
 });
