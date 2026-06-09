@@ -1,61 +1,117 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
-import { debugLog } from "@/lib/debug";
+import { pickFirstVisibleDocument } from "./activation";
 import {
-  selectActiveRecipeId,
-  selectFirstActiveFragmentId,
-  selectFirstActiveFragmentIdForRecipe,
-} from "./activation";
+  initialUI,
+  RIGHT_PANEL_WIDTH_MAX,
+  RIGHT_PANEL_WIDTH_MIN,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_MIN,
+} from "./defaults";
 import { applyLoadedWorkspaceState } from "./loadState";
-import { createCompileReducers } from "./reducers/compile";
-import { createSnapshotReducers } from "./reducers/snapshots";
-import type { AppState } from "./types";
+import type { AppState, CenterMode, HydrateInput, RightPanelTab, UiState } from "./types";
 
-export const initialUI = {
-  theme: "light" as const,
-  activeMainTab: "edit" as const,
-  sidebarCollapsed: false,
-  zenMode: false,
-  sidebarWidth: 196,
-  assemblyWidth: 500,
-  cheatsheetOpen: false,
-  settingsDialogOpen: false,
-};
+export {
+  initialUI,
+  RIGHT_PANEL_WIDTH_MAX,
+  RIGHT_PANEL_WIDTH_MIN,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_MIN,
+} from "./defaults";
 
-type PersistedUiState = Partial<AppState["ui"]> & {
+const VALID_THEMES = new Set<UiState["theme"]>(["light", "dark", "system"]);
+const VALID_CENTER_MODES = new Set<CenterMode>(["edit", "split", "preview", "history"]);
+const VALID_RIGHT_PANEL_TABS = new Set<RightPanelTab>(["fragments", "recipes", "snapshots"]);
+
+function simpleHash(content: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < content.length; i++) {
+    h ^= content.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+type PersistedUiState = Partial<UiState> & {
   splitRatio?: number;
-  viewMode?: "write" | "split" | "read";
+  viewMode?: string;
   continuousMode?: boolean;
+  activeMainTab?: string;
+  sidebarCollapsed?: boolean;
+  assemblyWidth?: number;
 };
 
 type PersistedAppStateForMigration = {
   ui?: PersistedUiState;
+  activeWorkspaceId?: string | null;
+  activeDocumentId?: string | null;
+  // Legacy fields that are no longer persisted but may exist in old storage.
+  activeRecipeId?: string | null;
+  activeFragmentId?: string | null;
+  editorDrafts?: unknown;
+  compileStatus?: string;
+  workspaceStatusMessage?: string | null;
+  snapshots?: unknown;
 };
 
 export function migratePersistedAppState(persistedState: unknown, version: number) {
   const persisted = (persistedState as PersistedAppStateForMigration | undefined) ?? {};
-  const ui = persisted.ui;
-  const usesLegacyDefaultWidths =
-    (ui?.sidebarWidth === 200 && ui?.assemblyWidth === 400) ||
-    (ui?.sidebarWidth === 180 && ui?.assemblyWidth === 440);
-  const hasNoStoredWidths = ui?.sidebarWidth == null && ui?.assemblyWidth == null;
 
-  const migratedUi: PersistedUiState | undefined = ui
-    ? {
-        ...ui,
-      }
-    : undefined;
-
-  if (migratedUi && version < 2 && (usesLegacyDefaultWidths || hasNoStoredWidths)) {
-    migratedUi.sidebarWidth = initialUI.sidebarWidth;
-    migratedUi.assemblyWidth = initialUI.assemblyWidth;
+  if (persisted.ui) {
+    const ui = persisted.ui;
+    // Strip legacy UI fields that no longer exist in the v4 shape.
+    delete ui.splitRatio;
+    delete ui.viewMode;
+    delete ui.continuousMode;
+    delete ui.activeMainTab;
+    delete ui.sidebarCollapsed;
+    delete ui.assemblyWidth;
+    persisted.ui = {
+      ...initialUI,
+      ...ui,
+      theme: VALID_THEMES.has(ui.theme as UiState["theme"])
+        ? (ui.theme as UiState["theme"])
+        : initialUI.theme,
+      centerMode: VALID_CENTER_MODES.has(ui.centerMode as CenterMode)
+        ? (ui.centerMode as CenterMode)
+        : initialUI.centerMode,
+      sidebarWidth:
+        typeof ui.sidebarWidth === "number" && Number.isFinite(ui.sidebarWidth)
+          ? clamp(ui.sidebarWidth, SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX)
+          : initialUI.sidebarWidth,
+      rightPanelWidth:
+        typeof ui.rightPanelWidth === "number" && Number.isFinite(ui.rightPanelWidth)
+          ? clamp(ui.rightPanelWidth, RIGHT_PANEL_WIDTH_MIN, RIGHT_PANEL_WIDTH_MAX)
+          : initialUI.rightPanelWidth,
+      rightPanelTab: VALID_RIGHT_PANEL_TABS.has(ui.rightPanelTab as RightPanelTab)
+        ? (ui.rightPanelTab as RightPanelTab)
+        : initialUI.rightPanelTab,
+      rightPanelCollapsed:
+        typeof ui.rightPanelCollapsed === "boolean"
+          ? ui.rightPanelCollapsed
+          : initialUI.rightPanelCollapsed,
+      zenMode: typeof ui.zenMode === "boolean" ? ui.zenMode : initialUI.zenMode,
+      cheatsheetOpen:
+        typeof ui.cheatsheetOpen === "boolean" ? ui.cheatsheetOpen : initialUI.cheatsheetOpen,
+      settingsDialogOpen:
+        typeof ui.settingsDialogOpen === "boolean"
+          ? ui.settingsDialogOpen
+          : initialUI.settingsDialogOpen,
+    };
   }
 
-  if (migratedUi) {
-    delete migratedUi.splitRatio;
-    delete migratedUi.viewMode;
-    delete migratedUi.continuousMode;
-    persisted.ui = migratedUi;
+  // v4 migration: drop legacy activeRecipeId/activeFragmentId and other removed
+  // persisted fields. activeDocumentId is preserved.
+  if (version < 4) {
+    delete persisted.activeRecipeId;
+    delete persisted.activeFragmentId;
+    delete persisted.compileStatus;
+    delete persisted.workspaceStatusMessage;
+    delete persisted.snapshots;
   }
 
   return persisted;
@@ -68,7 +124,7 @@ function isScreenshotStoreMode() {
   return new URLSearchParams(globalThis.location.search).has("screenshot");
 }
 
-function browserStorage() {
+function browserStorage(): Storage | null {
   if (isScreenshotStoreMode()) {
     return null;
   }
@@ -78,7 +134,7 @@ function browserStorage() {
   return null;
 }
 
-const appStoreStorage: StateStorage = {
+export const appStoreStorage: StateStorage = {
   getItem: (key) => browserStorage()?.getItem(key) ?? null,
   setItem: (key, value) => {
     browserStorage()?.setItem(key, value);
@@ -90,131 +146,167 @@ const appStoreStorage: StateStorage = {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       workspaces: [],
       activeWorkspaceId: null,
-      activeRecipeId: null,
-      activeFragmentId: null,
-      selectedSnapshotId: null,
+
+      documents: [],
+      activeDocumentId: null,
+
       fragments: [],
       recipes: [],
       recipeItems: [],
-      snapshots: [],
-      editorDrafts: {},
-      compileStatus: "idle",
-      workspaceStatusMessage: null,
+
+      snapshotsByDocumentId: {},
+      selectedSnapshotId: null,
+
+      documentDrafts: {},
+      documentProcessStatus: {},
+      documentStatusMessage: {},
+
       ui: initialUI,
-      hydrate: (initial) =>
+
+      hydrate: (input: HydrateInput) =>
+        set((state) => {
+          const nextActiveDocument = pickFirstVisibleDocument(
+            input.documents,
+            input.activeDocumentId ?? state.activeDocumentId,
+          );
+          return {
+            workspaces: input.workspaces,
+            activeWorkspaceId: input.activeWorkspaceId ?? state.activeWorkspaceId,
+            documents: input.documents,
+            fragments: input.fragments,
+            recipes: input.recipes,
+            recipeItems: input.recipeItems,
+            snapshotsByDocumentId: input.snapshotsByDocumentId,
+            activeDocumentId: nextActiveDocument?.id ?? null,
+            selectedSnapshotId: nextActiveDocument
+              ? (input.snapshotsByDocumentId[nextActiveDocument.id]?.[0]?.id ?? null)
+              : null,
+            documentDrafts: {},
+            documentProcessStatus: {},
+            documentStatusMessage: {},
+            ui: state.ui,
+          };
+        }),
+
+      loadWorkspaceBundle: (input) =>
         set((state) => ({
-          ...state,
-          ...applyLoadedWorkspaceState(state, initial),
-          editorDrafts: {},
-          compileStatus: "idle",
-          workspaceStatusMessage: null,
-          ui: state.ui,
+          ...applyLoadedWorkspaceState(state, input),
+          documentDrafts: {},
+          documentProcessStatus: {},
+          documentStatusMessage: {},
         })),
-      loadWorkspaces: (initial) =>
-        set((state) => ({
-          ...state,
-          ...applyLoadedWorkspaceState(state, initial),
-          ui: state.ui,
-        })),
+
       setWorkspaceList: (workspaces) =>
-        set((state) => ({
-          workspaces,
-          activeWorkspaceId:
-            state.activeWorkspaceId &&
-            workspaces.some((workspace) => workspace.id === state.activeWorkspaceId)
-              ? state.activeWorkspaceId
-              : (workspaces[0]?.id ?? null),
-        })),
-      setWorkspaceBundle: (bundle) =>
-        set((state) => ({
-          ...bundle,
-          activeRecipeId:
-            state.activeRecipeId &&
-            bundle.recipes.some((recipe) => recipe.id === state.activeRecipeId)
-              ? state.activeRecipeId
-              : (bundle.recipes.find((recipe) => recipe.isActive)?.id ??
-                bundle.recipes[0]?.id ??
-                null),
-          activeFragmentId:
-            state.activeFragmentId &&
-            bundle.fragments.some(
-              (fragment) => fragment.id === state.activeFragmentId && fragment.deletedAt === null,
-            )
-              ? state.activeFragmentId
-              : (bundle.fragments.find((fragment) => fragment.deletedAt === null)?.id ?? null),
-          selectedSnapshotId:
-            state.selectedSnapshotId &&
-            bundle.snapshots.some((snapshot) => snapshot.id === state.selectedSnapshotId)
-              ? state.selectedSnapshotId
-              : (bundle.snapshots[0]?.id ?? null),
-        })),
-      updateWorkspaceSummary: (workspaceId, patch) =>
-        set((state) => ({
-          workspaces: state.workspaces.map((workspace) =>
-            workspace.id === workspaceId
-              ? {
-                  ...workspace,
-                  ...patch,
-                }
-              : workspace,
-          ),
-        })),
+        set((state) => {
+          const currentActive = state.activeWorkspaceId;
+          const stillActive =
+            currentActive && workspaces.some((w) => w.id === currentActive)
+              ? currentActive
+              : (workspaces[0]?.id ?? null);
+          const activeWorkspaceId = stillActive;
+          // When the active workspace is being removed (or the list becomes
+          // empty), also clear the document and snapshot selection so the
+          // store does not point at orphaned ids.
+          const activeDocumentId = activeWorkspaceId ? state.activeDocumentId : null;
+          const selectedSnapshotId = activeWorkspaceId ? state.selectedSnapshotId : null;
+          return {
+            workspaces,
+            activeWorkspaceId,
+            activeDocumentId,
+            selectedSnapshotId,
+          };
+        }),
+
       setActiveWorkspace: (workspaceId) =>
+        set(() => ({
+          activeWorkspaceId: workspaceId,
+        })),
+
+      setActiveDocument: (documentId) =>
         set((state) => {
-          debugLog("workspace:set_active", { workspaceId: workspaceId ?? null });
-          if (!workspaceId) {
-            return {
-              activeWorkspaceId: null,
-              activeRecipeId: null,
-              activeFragmentId: null,
-              selectedSnapshotId: null,
-            };
+          if (documentId === state.activeDocumentId) {
+            return { selectedSnapshotId: state.selectedSnapshotId };
           }
-          const nextRecipeId = selectActiveRecipeId({
-            recipes: state.recipes,
-            workspaceId,
-            preferredRecipeId: state.activeRecipeId,
-          });
-          const nextFragmentId = selectFirstActiveFragmentId({
-            fragments: state.fragments,
-            workspaceId,
-          });
+          const snapshots = documentId ? (state.snapshotsByDocumentId[documentId] ?? []) : [];
           return {
-            activeWorkspaceId: workspaceId,
-            activeRecipeId: nextRecipeId,
-            activeFragmentId: nextFragmentId,
-            selectedSnapshotId: state.snapshots[0]?.id ?? null,
+            activeDocumentId: documentId,
+            selectedSnapshotId: snapshots[0]?.id ?? null,
           };
         }),
-      setActiveRecipe: (recipeId) =>
-        set((state) => {
-          debugLog("recipe:set_active", { recipeId: recipeId ?? null });
-          const recipe = state.recipes.find((entry) => entry.id === recipeId) ?? null;
-          const firstActiveFragment = recipe
-            ? (selectFirstActiveFragmentIdForRecipe({
-                fragments: state.fragments,
-                recipeItems: state.recipeItems,
-                recipeId: recipe.id,
-                preferredFragmentId: state.activeFragmentId,
-              }) ?? state.activeFragmentId)
-            : state.activeFragmentId;
-          return {
-            activeRecipeId: recipeId,
-            activeWorkspaceId: recipe?.workspaceId ?? state.activeWorkspaceId,
-            activeFragmentId: firstActiveFragment,
-          };
-        }),
-      setActiveFragment: (fragmentId) => set(() => ({ activeFragmentId: fragmentId })),
-      setActiveMainTab: (tab) =>
+
+      updateDocumentDraft: (documentId, content) =>
         set((state) => ({
-          ui: {
-            ...state.ui,
-            activeMainTab: tab,
+          documentDrafts: {
+            ...state.documentDrafts,
+            [documentId]: content,
+          },
+          documentProcessStatus: {
+            ...state.documentProcessStatus,
+            [documentId]: "editing",
           },
         })),
+
+      flushDocumentDraft: (documentId) =>
+        set((state) => {
+          const draft = state.documentDrafts[documentId];
+          if (draft === undefined) {
+            return state;
+          }
+          return {
+            documents: state.documents.map((doc) =>
+              doc.id === documentId
+                ? {
+                    ...doc,
+                    content: draft,
+                    contentHash: simpleHash(draft),
+                  }
+                : doc,
+            ),
+            documentProcessStatus: {
+              ...state.documentProcessStatus,
+              [documentId]: "saving",
+            },
+          };
+        }),
+
+      clearDocumentDraft: (documentId) =>
+        set((state) => {
+          if (!(documentId in state.documentDrafts)) {
+            return state;
+          }
+          const nextDrafts: Record<string, string> = { ...state.documentDrafts };
+          delete nextDrafts[documentId];
+          return { documentDrafts: nextDrafts };
+        }),
+
+      patchDocument: (documentId, patch) =>
+        set((state) => ({
+          documents: state.documents.map((doc) =>
+            doc.id === documentId ? { ...doc, ...patch } : doc,
+          ),
+        })),
+
+      setDocumentProcessStatus: (documentId, status) =>
+        set((state) => ({
+          documentProcessStatus: {
+            ...state.documentProcessStatus,
+            [documentId]: status,
+          },
+        })),
+
+      setDocumentStatusMessage: (documentId, message) =>
+        set((state) => ({
+          documentStatusMessage: {
+            ...state.documentStatusMessage,
+            [documentId]: message,
+          },
+        })),
+
+      setSelectedSnapshot: (snapshotId) => set({ selectedSnapshotId: snapshotId }),
+
       setTheme: (theme) =>
         set((state) => ({
           ui: {
@@ -222,6 +314,15 @@ export const useAppStore = create<AppState>()(
             theme,
           },
         })),
+
+      setCenterMode: (mode: CenterMode) =>
+        set((state) => ({
+          ui: {
+            ...state.ui,
+            centerMode: mode,
+          },
+        })),
+
       setZenMode: (zenMode) =>
         set((state) => ({
           ui: {
@@ -229,6 +330,7 @@ export const useAppStore = create<AppState>()(
             zenMode,
           },
         })),
+
       toggleZenMode: () =>
         set((state) => ({
           ui: {
@@ -236,13 +338,15 @@ export const useAppStore = create<AppState>()(
             zenMode: !state.ui.zenMode,
           },
         })),
-      setCheatsheetOpen: (cheatsheetOpen) =>
+
+      setCheatsheetOpen: (open) =>
         set((state) => ({
           ui: {
             ...state.ui,
-            cheatsheetOpen,
+            cheatsheetOpen: open,
           },
         })),
+
       toggleCheatsheet: () =>
         set((state) => ({
           ui: {
@@ -250,128 +354,64 @@ export const useAppStore = create<AppState>()(
             cheatsheetOpen: !state.ui.cheatsheetOpen,
           },
         })),
-      setSettingsDialogOpen: (settingsDialogOpen) =>
+
+      setSettingsDialogOpen: (open) =>
         set((state) => ({
           ui: {
             ...state.ui,
-            settingsDialogOpen,
+            settingsDialogOpen: open,
           },
         })),
+
       setSidebarWidth: (width) =>
         set((state) => ({
           ui: {
             ...state.ui,
-            sidebarWidth: Math.min(320, Math.max(176, Math.round(width))),
+            sidebarWidth: clamp(width, SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX),
           },
         })),
-      setAssemblyWidth: (width) =>
+
+      setRightPanelWidth: (width) =>
         set((state) => ({
           ui: {
             ...state.ui,
-            assemblyWidth: Math.min(620, Math.max(360, Math.round(width))),
+            rightPanelWidth: clamp(width, RIGHT_PANEL_WIDTH_MIN, RIGHT_PANEL_WIDTH_MAX),
           },
         })),
-      setCompileStatus: (compileStatus) =>
-        set({
-          compileStatus,
-        }),
-      updateEditorDraft: (fragmentId, content) =>
+
+      setRightPanelTab: (tab: RightPanelTab) =>
         set((state) => ({
-          compileStatus: "editing",
-          editorDrafts: {
-            ...state.editorDrafts,
-            [fragmentId]: content,
+          ui: {
+            ...state.ui,
+            rightPanelTab: tab,
           },
         })),
-      flushEditorDraft: (fragmentId) =>
-        set((state) => {
-          const draft = state.editorDrafts[fragmentId];
-          if (draft === undefined) {
-            return state;
-          }
-          return {
-            fragments: state.fragments.map((fragment) =>
-              fragment.id === fragmentId
-                ? {
-                    ...fragment,
-                    content: draft,
-                  }
-                : fragment,
-            ),
-            compileStatus: "saving",
-          };
-        }),
-      clearEditorDraft: (fragmentId) =>
-        set((state) => {
-          if (!(fragmentId in state.editorDrafts)) {
-            return state;
-          }
-          const { [fragmentId]: _removed, ...editorDrafts } = state.editorDrafts;
-          return {
-            editorDrafts,
-          };
-        }),
-      restoreFragmentContent: (fragmentId, content) =>
+
+      setRightPanelCollapsed: (collapsed) =>
         set((state) => ({
-          fragments: state.fragments.map((fragment) =>
-            fragment.id === fragmentId
-              ? {
-                  ...fragment,
-                  content,
-                }
-              : fragment,
-          ),
+          ui: {
+            ...state.ui,
+            rightPanelCollapsed: collapsed,
+          },
         })),
-      reorderRecipeItems: (recipeId, orderedFragmentIds) =>
-        set((state) => {
-          const targetItems = state.recipeItems.filter((item) => item.recipeId === recipeId);
-          const rewritten = state.recipeItems.map((item) => {
-            if (item.recipeId !== recipeId) return item;
-            const sortOrder = orderedFragmentIds.indexOf(item.fragmentId);
-            return {
-              ...item,
-              sortOrder: sortOrder < 0 ? item.sortOrder : sortOrder,
-            };
-          });
-          const nextActiveFragment =
-            (state.activeFragmentId &&
-            targetItems.some(
-              (item) =>
-                item.fragmentId === state.activeFragmentId &&
-                orderedFragmentIds.includes(item.fragmentId),
-            )
-              ? state.activeFragmentId
-              : orderedFragmentIds.find((fragmentId) =>
-                  targetItems.some((item) => item.fragmentId === fragmentId),
-                )) ?? state.activeFragmentId;
-          return {
-            recipeItems: rewritten,
-            compileStatus: "compiling",
-            activeRecipeId: recipeId,
-            activeFragmentId: nextActiveFragment,
-          };
-        }),
-      toggleRecipeItem: (recipeId, fragmentId, enabled) =>
+
+      toggleRightPanelCollapsed: () =>
         set((state) => ({
-          recipeItems: state.recipeItems.map((item) =>
-            item.recipeId === recipeId && item.fragmentId === fragmentId
-              ? { ...item, enabled }
-              : item,
-          ),
-          compileStatus: "compiling",
+          ui: {
+            ...state.ui,
+            rightPanelCollapsed: !state.ui.rightPanelCollapsed,
+          },
         })),
-      ...createCompileReducers(set, get),
-      ...createSnapshotReducers(set),
-      setSelectedSnapshot: (snapshotId) => set({ selectedSnapshotId: snapshotId }),
-      setWorkspaceStatusMessage: (message) => set({ workspaceStatusMessage: message }),
     }),
     {
       name: "modudoc-app-store",
-      version: 3,
+      version: 5,
       migrate: migratePersistedAppState,
       storage: createJSONStorage(() => appStoreStorage),
       partialize: (state) => ({
         ui: state.ui,
+        activeWorkspaceId: state.activeWorkspaceId,
+        activeDocumentId: state.activeDocumentId,
       }),
     },
   ),

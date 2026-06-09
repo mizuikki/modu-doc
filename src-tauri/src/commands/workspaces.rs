@@ -1,19 +1,20 @@
 use super::*;
+use std::collections::HashMap;
 
 #[tauri::command]
 pub async fn list_workspaces(state: State<'_, db::DbState>) -> Result<Vec<Workspace>, String> {
     let started = std::time::Instant::now();
     crate::debug_log!("[rust] list_workspaces start");
     let rows = sqlx::query_as::<_, WorkspaceRow>(
-    r#"
-    SELECT id, name, target_path, default_recipe_id, status, last_compiled_at, last_compiled_hash, created_at, updated_at
-    FROM workspaces
-    ORDER BY created_at ASC
-    "#,
-  )
-  .fetch_all(pool(&state))
-  .await
-  .map_err(crate::error::normalize_error)?;
+        r#"
+        SELECT id, name, created_at, updated_at
+        FROM workspaces
+        ORDER BY created_at ASC
+        "#,
+    )
+    .fetch_all(pool(&state))
+    .await
+    .map_err(crate::error::normalize_error)?;
     crate::debug_log!(
         "[rust] list_workspaces done rows={} took={:.1}ms",
         rows.len(),
@@ -27,85 +28,58 @@ pub async fn create_workspace(
     app: AppHandle,
     state: State<'_, db::DbState>,
     name: String,
-    target_path: Option<String>,
+    initial_document_name: Option<String>,
 ) -> Result<Workspace, String> {
     let id = Uuid::new_v4().to_string();
-    let default_recipe_id = Uuid::new_v4().to_string();
+    let document_id = Uuid::new_v4().to_string();
     let timestamp = now();
-    if let Some(path) = target_path.as_deref() {
-        crate::services::workspace::WorkspaceService::validate_target_path(path)?;
-    }
-    let status = crate::services::workspace::WorkspaceService::status_for_target_path(
-        target_path.as_deref(),
-    );
+    let document_name = initial_document_name
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "Main.md".to_string());
+
     let mut tx = pool(&state)
         .begin()
         .await
         .map_err(crate::error::normalize_error)?;
-    sqlx::query(
-    r#"
-    INSERT INTO workspaces (id, name, target_path, default_recipe_id, status, created_at, updated_at)
-    VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6)
-    "#,
-  )
-  .bind(&id)
-  .bind(&name)
-  .bind(&target_path)
-  .bind(status)
-  .bind(&timestamp)
-  .bind(&timestamp)
-  .execute(&mut *tx)
-  .await
-  .map_err(crate::error::normalize_error)?;
+
     sqlx::query(
         r#"
-    INSERT INTO recipes (id, workspace_id, name, description, is_active, created_at, updated_at)
-    VALUES (?1, ?2, 'Default', '', 1, ?3, ?4)
-    "#,
+        INSERT INTO workspaces (id, name, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4)
+        "#,
     )
-    .bind(&default_recipe_id)
     .bind(&id)
+    .bind(&name)
     .bind(&timestamp)
     .bind(&timestamp)
     .execute(&mut *tx)
     .await
     .map_err(crate::error::normalize_error)?;
-    sqlx::query("UPDATE workspaces SET default_recipe_id = ?2, updated_at = ?3 WHERE id = ?1")
-        .bind(&id)
-        .bind(&default_recipe_id)
-        .bind(&timestamp)
-        .execute(&mut *tx)
-        .await
-        .map_err(crate::error::normalize_error)?;
-    tx.commit().await.map_err(crate::error::normalize_error)?;
 
-    if let Some(path) = &target_path {
-        let watcher_service = app
-            .state::<Arc<crate::services::watcher::WatcherService>>()
-            .inner()
-            .clone();
-        let watcher_state = app
-            .state::<crate::services::watcher::WatcherState>()
-            .clone();
-        let _ = watcher_service
-            .watch_workspace(
-                pool(&state).clone(),
-                id.clone(),
-                Path::new(path).to_path_buf(),
-                watcher_state.inner().clone(),
-            )
-            .await;
-    }
+    sqlx::query(
+        r#"
+        INSERT INTO documents (
+            id, workspace_id, name, content, content_hash,
+            target_path, file_status, sort_order, created_at, updated_at
+        )
+        VALUES (?1, ?2, ?3, '', '', NULL, 'missing_target', 0, ?4, ?5)
+        "#,
+    )
+    .bind(&document_id)
+    .bind(&id)
+    .bind(&document_name)
+    .bind(&timestamp)
+    .bind(&timestamp)
+    .execute(&mut *tx)
+    .await
+    .map_err(crate::error::normalize_error)?;
+
+    tx.commit().await.map_err(crate::error::normalize_error)?;
 
     emit_workspace_status_for(&app, "workspace_created", &id);
     Ok(Workspace {
         id,
         name,
-        target_path,
-        default_recipe_id: Some(default_recipe_id),
-        status: status.to_string(),
-        last_compiled_at: None,
-        last_compiled_hash: None,
         created_at: timestamp.clone(),
         updated_at: timestamp,
     })
@@ -117,86 +91,42 @@ pub async fn update_workspace(
     state: State<'_, db::DbState>,
     id: String,
     name: Option<String>,
-    target_path: Option<String>,
-    clear_target_path: Option<bool>,
 ) -> Result<Workspace, String> {
     let current = sqlx::query_as::<_, WorkspaceRow>(
-    r#"
-    SELECT id, name, target_path, default_recipe_id, status, last_compiled_at, last_compiled_hash, created_at, updated_at
-    FROM workspaces WHERE id = ?1
-    "#,
-  )
-  .bind(&id)
-  .fetch_one(pool(&state))
-  .await
-  .map_err(crate::error::normalize_error)?;
+        r#"
+        SELECT id, name, created_at, updated_at
+        FROM workspaces WHERE id = ?1
+        "#,
+    )
+    .bind(&id)
+    .fetch_one(pool(&state))
+    .await
+    .map_err(crate::error::normalize_error)?;
 
-    let current_target = current.target_path.clone();
-    let updated_name = name.unwrap_or(current.name);
-    let updated_target = resolve_updated_target_path(
-        current_target.clone(),
-        target_path,
-        clear_target_path.unwrap_or(false),
-    );
-    if let Some(path) = updated_target.as_deref() {
-        crate::services::workspace::WorkspaceService::validate_target_path(path)?;
-    }
-    let status = crate::services::workspace::WorkspaceService::status_for_target_path(
-        updated_target.as_deref(),
-    );
+    let updated_name = name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(current.name.clone());
     let timestamp = now();
 
     sqlx::query(
         r#"
-    UPDATE workspaces
-    SET name = ?2, target_path = ?3, status = ?4, updated_at = ?5
-    WHERE id = ?1
-    "#,
+        UPDATE workspaces
+        SET name = ?2, updated_at = ?3
+        WHERE id = ?1
+        "#,
     )
     .bind(&id)
     .bind(&updated_name)
-    .bind(&updated_target)
-    .bind(status)
     .bind(&timestamp)
     .execute(pool(&state))
     .await
     .map_err(crate::error::normalize_error)?;
 
-    let watcher_service = app
-        .state::<Arc<crate::services::watcher::WatcherService>>()
-        .inner()
-        .clone();
-    if updated_target != current_target {
-        watcher_service.unwatch_workspace(&id);
-    }
-
-    if let Some(path) = &updated_target {
-        let watcher_state = app
-            .state::<crate::services::watcher::WatcherState>()
-            .clone();
-        watcher_state.mark_ignored(
-            path.clone(),
-            current.last_compiled_hash.clone().unwrap_or_default(),
-        );
-        let _ = watcher_service
-            .watch_workspace(
-                pool(&state).clone(),
-                id.clone(),
-                Path::new(path).to_path_buf(),
-                watcher_state.inner().clone(),
-            )
-            .await;
-    }
-
     emit_workspace_status_for(&app, "workspace_updated", &id);
     Ok(Workspace {
         id,
         name: updated_name,
-        target_path: updated_target,
-        default_recipe_id: current.default_recipe_id,
-        status: status.to_string(),
-        last_compiled_at: current.last_compiled_at,
-        last_compiled_hash: current.last_compiled_hash,
         created_at: current.created_at,
         updated_at: timestamp,
     })
@@ -213,9 +143,6 @@ pub async fn delete_workspace(
         .execute(pool(&state))
         .await
         .map_err(crate::error::normalize_error)?;
-    app.state::<Arc<crate::services::watcher::WatcherService>>()
-        .inner()
-        .unwatch_workspace(&id);
     emit_workspace_status_for(&app, "workspace_deleted", &id);
     Ok(())
 }
@@ -228,37 +155,61 @@ pub async fn load_workspace(
     let started = std::time::Instant::now();
     crate::debug_log!("[rust] load_workspace start id={}", id);
 
-    let workspace = sqlx::query_as::<_, WorkspaceRow>(
-    r#"
-    SELECT id, name, target_path, default_recipe_id, status, last_compiled_at, last_compiled_hash, created_at, updated_at
-    FROM workspaces WHERE id = ?1
-    "#,
-  )
-  .bind(&id)
-  .fetch_one(pool(&state))
-  .await
-  .map_err(crate::error::normalize_error)?
-  .into();
+    let workspace: Workspace = sqlx::query_as::<_, WorkspaceRow>(
+        r#"
+        SELECT id, name, created_at, updated_at
+        FROM workspaces WHERE id = ?1
+        "#,
+    )
+    .bind(&id)
+    .fetch_one(pool(&state))
+    .await
+    .map_err(crate::error::normalize_error)?
+    .into();
     crate::debug_log!(
         "[rust] load_workspace workspace row took={:.1}ms",
         started.elapsed().as_secs_f64() * 1000.0
     );
 
+    let documents: Vec<Document> = sqlx::query_as::<_, DocumentRow>(
+        r#"
+        SELECT id, workspace_id, name, content, content_hash, target_path,
+               file_status, last_written_at, last_written_hash, sort_order,
+               deleted_at, description, created_at, updated_at
+        FROM documents
+        WHERE workspace_id = ?1
+        ORDER BY (deleted_at IS NOT NULL) ASC, sort_order ASC, created_at ASC
+        "#,
+    )
+    .bind(&id)
+    .fetch_all(pool(&state))
+    .await
+    .map_err(crate::error::normalize_error)?
+    .into_iter()
+    .map(Document::from)
+    .collect();
+    crate::debug_log!(
+        "[rust] load_workspace documents={} took={:.1}ms",
+        documents.len(),
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+
     let fragments: Vec<Fragment> = sqlx::query_as::<_, FragmentRow>(
-    r#"
-    SELECT id, workspace_id, name, content, content_hash, sort_order, is_archived, deleted_at, created_at, updated_at
-    FROM fragments
-    WHERE workspace_id = ?1
-    ORDER BY deleted_at IS NOT NULL ASC, sort_order ASC, created_at ASC
-    "#,
-  )
-  .bind(&id)
-  .fetch_all(pool(&state))
-  .await
-  .map_err(crate::error::normalize_error)?
-  .into_iter()
-  .map(Fragment::from)
-  .collect();
+        r#"
+        SELECT id, workspace_id, name, content, content_hash, tags, category,
+               sort_order, deleted_at, created_at, updated_at
+        FROM fragments
+        WHERE workspace_id = ?1
+        ORDER BY (deleted_at IS NOT NULL) ASC, sort_order ASC, created_at ASC
+        "#,
+    )
+    .bind(&id)
+    .fetch_all(pool(&state))
+    .await
+    .map_err(crate::error::normalize_error)?
+    .into_iter()
+    .map(Fragment::from)
+    .collect();
     crate::debug_log!(
         "[rust] load_workspace fragments={} took={:.1}ms",
         fragments.len(),
@@ -267,11 +218,11 @@ pub async fn load_workspace(
 
     let recipes: Vec<Recipe> = sqlx::query_as::<_, RecipeRow>(
         r#"
-    SELECT id, workspace_id, name, description, is_active, created_at, updated_at
-    FROM recipes
-    WHERE workspace_id = ?1
-    ORDER BY created_at ASC
-    "#,
+        SELECT id, workspace_id, name, description, deleted_at, created_at, updated_at
+        FROM recipes
+        WHERE workspace_id = ?1
+        ORDER BY created_at ASC
+        "#,
     )
     .bind(&id)
     .fetch_all(pool(&state))
@@ -288,11 +239,11 @@ pub async fn load_workspace(
 
     let recipe_items: Vec<RecipeItem> = sqlx::query_as::<_, RecipeItemRow>(
         r#"
-    SELECT id, recipe_id, fragment_id, enabled, sort_order
-    FROM recipe_items
-    WHERE recipe_id IN (SELECT id FROM recipes WHERE workspace_id = ?1)
-    ORDER BY sort_order ASC, id ASC
-    "#,
+        SELECT id, recipe_id, fragment_id, enabled, sort_order
+        FROM recipe_items
+        WHERE recipe_id IN (SELECT id FROM recipes WHERE workspace_id = ?1)
+        ORDER BY sort_order ASC, id ASC
+        "#,
     )
     .bind(&id)
     .fetch_all(pool(&state))
@@ -307,26 +258,30 @@ pub async fn load_workspace(
         started.elapsed().as_secs_f64() * 1000.0
     );
 
-    let snapshots: Vec<Snapshot> = sqlx::query_as::<_, SnapshotSummaryRow>(
-    r#"
-    SELECT id, workspace_id, recipe_id, label, compiled_text, compiled_hash, created_at
-    FROM snapshots
-    WHERE workspace_id = ?1
-    ORDER BY created_at DESC
-    "#,
-  )
-  .bind(&id)
-  .fetch_all(pool(&state))
-  .await
-  .map_err(crate::error::normalize_error)?
-  .into_iter()
-  .map(Snapshot::from)
-  .collect();
-    let compiled_text_bytes: usize = snapshots.iter().map(|snapshot| snapshot.compiled_text.len()).sum();
+    let snapshot_rows = sqlx::query_as::<_, SnapshotRow>(
+        r#"
+        SELECT id, document_id, label, content, content_hash, created_at
+        FROM snapshots
+        WHERE document_id IN (SELECT id FROM documents WHERE workspace_id = ?1)
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(&id)
+    .fetch_all(pool(&state))
+    .await
+    .map_err(crate::error::normalize_error)?;
+
+    let mut snapshots: HashMap<String, Vec<Snapshot>> = HashMap::new();
+    for row in snapshot_rows {
+        snapshots
+            .entry(row.document_id.clone())
+            .or_default()
+            .push(Snapshot::from(row));
+    }
     crate::debug_log!(
-        "[rust] load_workspace snapshots={} compiled_text_bytes={} took={:.1}ms",
+        "[rust] load_workspace snapshot_groups={} total_snapshots={} took={:.1}ms",
         snapshots.len(),
-        compiled_text_bytes,
+        snapshots.values().map(|items| items.len()).sum::<usize>(),
         started.elapsed().as_secs_f64() * 1000.0
     );
     crate::debug_log!(
@@ -337,6 +292,7 @@ pub async fn load_workspace(
 
     Ok(WorkspaceLoadResult {
         workspace,
+        documents,
         fragments,
         recipes,
         recipe_items,
@@ -344,88 +300,170 @@ pub async fn load_workspace(
     })
 }
 
-pub(crate) async fn insert_fragment(
-    pool: &SqlitePool,
-    workspace_id: &str,
-    name: &str,
-    content: &str,
-    attach_to_recipe: bool,
-) -> Result<Fragment, String> {
-    let id = Uuid::new_v4().to_string();
-    let timestamp = now();
-    let content_hash = hash(content);
-    let sort_order =
-        crate::services::fragment::FragmentService::next_sort_order(pool, workspace_id).await?;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+    use sqlx::SqlitePool;
+    use std::collections::HashMap;
+    use std::str::FromStr;
 
-    sqlx::query(
-    r#"
-    INSERT INTO fragments (id, workspace_id, name, content, content_hash, sort_order, is_archived, created_at, updated_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8)
-    "#,
-  )
-  .bind(&id)
-  .bind(workspace_id)
-  .bind(name)
-  .bind(content)
-  .bind(&content_hash)
-  .bind(sort_order)
-  .bind(&timestamp)
-  .bind(&timestamp)
-  .execute(pool)
-  .await
-  .map_err(crate::error::normalize_error)?;
-
-    if attach_to_recipe {
-        let workspace = sqlx::query_as::<_, WorkspaceRow>(
-      "SELECT id, name, target_path, default_recipe_id, status, last_compiled_at, last_compiled_hash, created_at, updated_at FROM workspaces WHERE id = ?1",
-    )
-    .bind(workspace_id)
-    .fetch_one(pool)
-    .await
-    .map_err(crate::error::normalize_error)?;
-        let recipe_id = if let Some(default_recipe_id) = workspace.default_recipe_id {
-            Some(default_recipe_id)
-        } else {
-            sqlx::query_scalar::<_, String>(
-        "SELECT id FROM recipes WHERE workspace_id = ?1 ORDER BY is_active DESC, created_at ASC LIMIT 1",
-      )
-      .bind(workspace_id)
-      .fetch_optional(pool)
-      .await
-      .map_err(crate::error::normalize_error)?
-        };
-        if let Some(recipe_id) = recipe_id {
-            let sort_order =
-                crate::services::fragment::FragmentService::next_recipe_item_sort_order(
-                    pool, &recipe_id,
-                )
-                .await?;
-            sqlx::query(
-                r#"
-        INSERT INTO recipe_items (id, recipe_id, fragment_id, enabled, sort_order)
-        VALUES (?1, ?2, ?3, 1, ?4)
-        "#,
-            )
-            .bind(Uuid::new_v4().to_string())
-            .bind(&recipe_id)
-            .bind(&id)
-            .bind(sort_order)
-            .execute(pool)
+    async fn test_pool() -> SqlitePool {
+        let connect_options = SqliteConnectOptions::from_str("sqlite::memory:")
+            .expect("connect options")
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(connect_options)
             .await
-            .map_err(crate::error::normalize_error)?;
-        }
+            .expect("pool");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("migration");
+        pool
     }
 
-    Ok(Fragment {
-        id,
-        workspace_id: workspace_id.to_string(),
-        name: name.to_string(),
-        content: content.to_string(),
-        content_hash,
-        sort_order,
-        is_archived: false,
-        deleted_at: None,
-        created_at: timestamp.clone(),
-        updated_at: timestamp,
-    })
+    #[tokio::test]
+    async fn create_workspace_inserts_first_main_document() {
+        let pool = test_pool().await;
+        let timestamp = "2026-06-09T10:00:00Z".to_string();
+        let workspace_id = "ws-main";
+        let document_id = "doc-main";
+
+        let mut tx = pool.begin().await.expect("tx");
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind(workspace_id)
+        .bind("Main Workspace")
+        .bind(&timestamp)
+        .bind(&timestamp)
+        .execute(&mut *tx)
+        .await
+        .expect("workspace");
+        sqlx::query(
+            r#"
+            INSERT INTO documents (
+                id, workspace_id, name, content, content_hash,
+                target_path, file_status, sort_order, created_at, updated_at
+            )
+            VALUES (?1, ?2, 'Main.md', '', '', NULL, 'missing_target', 0, ?3, ?4)
+            "#,
+        )
+        .bind(document_id)
+        .bind(workspace_id)
+        .bind(&timestamp)
+        .bind(&timestamp)
+        .execute(&mut *tx)
+        .await
+        .expect("document");
+        tx.commit().await.expect("commit");
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM documents WHERE workspace_id = ?1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count");
+        assert_eq!(count, 1);
+
+        let (name, file_status, target_path, sort_order): (String, String, Option<String>, i64) =
+            sqlx::query_as(
+                r#"
+                SELECT name, file_status, target_path, sort_order
+                FROM documents WHERE id = ?1
+                "#,
+            )
+            .bind(document_id)
+            .fetch_one(&pool)
+            .await
+            .expect("document row");
+        assert_eq!(name, "Main.md");
+        assert_eq!(file_status, "missing_target");
+        assert!(target_path.is_none());
+        assert_eq!(sort_order, 0);
+    }
+
+    #[tokio::test]
+    async fn load_workspace_groups_snapshots_by_document_id() {
+        let pool = test_pool().await;
+        let timestamp = "2026-06-09T10:00:00Z".to_string();
+        let workspace_id = "ws-snap";
+
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind(workspace_id)
+        .bind("Snap Workspace")
+        .bind(&timestamp)
+        .bind(&timestamp)
+        .execute(&pool)
+        .await
+        .expect("workspace");
+
+        for (doc_id, doc_name) in [("doc-a", "A.md"), ("doc-b", "B.md")] {
+            sqlx::query(
+                r#"
+                INSERT INTO documents (
+                    id, workspace_id, name, content, content_hash,
+                    target_path, file_status, sort_order, created_at, updated_at
+                )
+                VALUES (?1, ?2, ?3, '', '', NULL, 'missing_target', 0, ?4, ?5)
+                "#,
+            )
+            .bind(doc_id)
+            .bind(workspace_id)
+            .bind(doc_name)
+            .bind(&timestamp)
+            .bind(&timestamp)
+            .execute(&pool)
+            .await
+            .expect("document");
+        }
+
+        for (snap_id, doc_id) in [
+            ("snap-a-1", "doc-a"),
+            ("snap-a-2", "doc-a"),
+            ("snap-b-1", "doc-b"),
+        ] {
+            sqlx::query(
+                r#"
+                INSERT INTO snapshots (id, document_id, label, content, content_hash, created_at)
+                VALUES (?1, ?2, NULL, '', '', ?3)
+                "#,
+            )
+            .bind(snap_id)
+            .bind(doc_id)
+            .bind(&timestamp)
+            .execute(&pool)
+            .await
+            .expect("snapshot");
+        }
+
+        let snapshot_rows = sqlx::query_as::<_, SnapshotRow>(
+            r#"
+            SELECT id, document_id, label, content, content_hash, created_at
+            FROM snapshots
+            WHERE document_id IN (SELECT id FROM documents WHERE workspace_id = ?1)
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(workspace_id)
+        .fetch_all(&pool)
+        .await
+        .expect("snapshot rows");
+
+        let mut snapshots: HashMap<String, Vec<Snapshot>> = HashMap::new();
+        for row in snapshot_rows {
+            snapshots
+                .entry(row.document_id.clone())
+                .or_default()
+                .push(Snapshot::from(row));
+        }
+
+        assert_eq!(snapshots.len(), 2);
+        assert_eq!(snapshots.get("doc-a").map(|items| items.len()), Some(2));
+        assert_eq!(snapshots.get("doc-b").map(|items| items.len()), Some(1));
+    }
 }

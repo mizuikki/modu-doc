@@ -1,36 +1,42 @@
-import type {
-  AppState,
-  Fragment,
-  Recipe,
-  RecipeItem,
-  SnapshotSummary,
-  WorkspaceSummary,
-} from "./types";
+import { isDocumentVisible } from "./activation";
+import type { AppState, DocumentSummary, SnapshotSummary } from "./types";
 
-export function selectActiveWorkspace(state: AppState): WorkspaceSummary | null {
-  return state.workspaces.find((entry) => entry.id === state.activeWorkspaceId) ?? null;
+export function selectActiveWorkspace(state: AppState) {
+  return state.workspaces.find((w) => w.id === state.activeWorkspaceId) ?? null;
 }
 
-export function selectActiveFragment(state: AppState): Fragment | null {
-  return state.fragments.find((entry) => entry.id === state.activeFragmentId) ?? null;
+export function selectActiveDocument(state: AppState): DocumentSummary | null {
+  if (!state.activeDocumentId) return null;
+  return state.documents.find((d) => d.id === state.activeDocumentId) ?? null;
 }
 
-export function selectActiveRecipe(state: AppState): Recipe | null {
-  return state.recipes.find((entry) => entry.id === state.activeRecipeId) ?? null;
+export function selectVisibleDocuments(state: AppState): DocumentSummary[] {
+  return state.documents.filter(isDocumentVisible);
 }
 
-export function selectActiveRecipeItem(state: AppState): RecipeItem | null {
-  if (!state.activeRecipeId || !state.activeFragmentId) {
-    return null;
-  }
-  return (
-    state.recipeItems.find(
-      (entry) =>
-        entry.recipeId === state.activeRecipeId && entry.fragmentId === state.activeFragmentId,
-    ) ?? null
-  );
+export function selectVisibleFragments(state: AppState) {
+  return state.fragments.filter((f) => f.deletedAt === null);
 }
 
-export function selectSelectedSnapshot(state: AppState): SnapshotSummary | null {
-  return state.snapshots.find((entry) => entry.id === state.selectedSnapshotId) ?? null;
+export function selectActiveDocumentSnapshots(state: AppState): SnapshotSummary[] {
+  if (!state.activeDocumentId) return [];
+  return state.snapshotsByDocumentId[state.activeDocumentId] ?? [];
+}
+
+export function selectActiveDocumentDraft(state: AppState): string | null {
+  if (!state.activeDocumentId) return null;
+  const draft = state.documentDrafts[state.activeDocumentId];
+  if (draft !== undefined) return draft;
+  const doc = selectActiveDocument(state);
+  return doc ? doc.content : null;
+}
+
+export function selectActiveDocumentProcessStatus(state: AppState) {
+  if (!state.activeDocumentId) return "idle" as const;
+  return state.documentProcessStatus[state.activeDocumentId] ?? "idle";
+}
+
+export function selectActiveDocumentStatusMessage(state: AppState): string | null {
+  if (!state.activeDocumentId) return null;
+  return state.documentStatusMessage[state.activeDocumentId] ?? null;
 }

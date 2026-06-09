@@ -14,8 +14,6 @@ describe("api/errors", () => {
 
   it("normalizes nested payload shapes", () => {
     expect(normalizeApiErrorCode({ payload: "invalid_target_path" })).toBe("invalid_target_path");
-    expect(normalizeApiErrorCode({ message: "missing_workspace_or_recipe" })).toBe(
-      "missing_workspace_or_recipe",
-    );
+    expect(normalizeApiErrorCode({ message: "workspace_not_found" })).toBe("workspace_not_found");
   });
 });

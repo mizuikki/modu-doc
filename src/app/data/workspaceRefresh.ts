@@ -1,32 +1,24 @@
-import type { AppState } from "@/store/types";
-import { fetchWorkspaceBundle, fetchWorkspaceSummaries } from "./workspaceData";
+import { useAppStore } from "@/store/appStore";
+import { fetchWorkspaceBundle, fetchWorkspaces } from "./workspaceData";
 
-export async function refreshWorkspaceListToStore(args: {
-  loadWorkspaces: AppState["hydrate"];
-  setWorkspaceList: AppState["setWorkspaceList"];
-}): Promise<void> {
-  const summaries = await fetchWorkspaceSummaries();
-  if (summaries.length === 0) {
-    args.loadWorkspaces({
-      workspaces: [],
-      fragments: [],
-      recipes: [],
-      recipeItems: [],
-      snapshots: [],
-    });
-    return;
-  }
-  args.setWorkspaceList(summaries);
+/**
+ * Refresh the workspace list and push it into the store. No-op if there is
+ * already a hydrated list.
+ */
+export async function refreshWorkspaceListToStore(): Promise<void> {
+  await fetchWorkspaces();
 }
 
-export async function refreshWorkspaceBundleToStore(args: {
-  workspaceId: string | null;
-  setWorkspaceBundle: AppState["setWorkspaceBundle"];
-}): Promise<void> {
-  if (!args.workspaceId) {
-    args.setWorkspaceBundle({ fragments: [], recipes: [], recipeItems: [], snapshots: [] });
+/**
+ * Refresh the active workspace bundle (documents, fragments, recipes,
+ * recipe items, snapshots) into the store. If no workspace is active, the
+ * store is left untouched.
+ */
+export async function refreshWorkspaceBundleToStore(
+  workspaceId: string | null = useAppStore.getState().activeWorkspaceId,
+): Promise<void> {
+  if (!workspaceId) {
     return;
   }
-  const bundle = await fetchWorkspaceBundle(args.workspaceId);
-  args.setWorkspaceBundle(bundle);
+  await fetchWorkspaceBundle(workspaceId);
 }

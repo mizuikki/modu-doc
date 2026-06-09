@@ -1,57 +1,71 @@
-import { createFragmentViaUI, openLibraryDialog, safeClick } from "../support/ui";
-import { createAndSelectWorkspace, loadWorkspace } from "../support/workspace";
+import { browser, expect } from "@wdio/globals";
+import { tauriInvoke } from "../support/tauri";
+import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
 
+/**
+ * Fragments are now a content-copy material library. The fragment list lives
+ * in the right-panel "Fragments" tab; the helper that drove the old library
+ * dialog (`createFragmentViaUI` / `openLibraryDialog`) is gone. We exercise
+ * the create / soft-delete / restore flow entirely through tauriInvoke and
+ * assert against load_workspace, which is the source of truth for fragment
+ * state.
+ */
 describe("Fragments", () => {
-  it("deletes and restores a fragment via the list UI", async () => {
+  it("soft-deletes and restores a fragment via tauri commands", async () => {
     const workspaceName = `E2E Fragment delete ${Date.now()}`;
-    const workspace = await createAndSelectWorkspace({ name: workspaceName, targetPath: null });
+    const { workspaceId } = await createAndOpenWorkspace(workspaceName);
 
+    // 1. Create a fragment directly through the backend. The wire response
+    //    shape includes `deleted_at: null`; we re-fetch via load_workspace
+    //    for the canonical state.
     const fragmentName = `Delete me ${Date.now()}`;
-    await createFragmentViaUI(fragmentName);
+    const created = await tauriInvoke<{ id: string }>("create_fragment", {
+      workspaceId,
+      name: fragmentName,
+      content: "material to be archived",
+    });
+    expect(created.id).toBeTruthy();
+    const fragmentId = created.id;
 
-    const bundle = await loadWorkspace(workspace.id);
-    const fragment = bundle.fragments.find((entry) => entry.name === fragmentName);
-    if (!fragment) {
-      throw new Error("fragment not created");
-    }
-
-    // Open the library dialog in manage mode so the deleted section is visible
-    // alongside the active fragment list (both share the same FragmentList).
-    // The newly created fragment is auto-attached to the recipe, so the default
-    // "insert" mode (filterMode=not_in_recipe) would hide it.
-    await openLibraryDialog("manage");
-
-    await safeClick(`[data-testid='fragment-delete-${fragment.id}']`);
-    // The delete action opens a confirmation dialog that must be accepted.
-    await safeClick("[data-testid='app-dialog-confirm']");
-
+    // 2. Confirm the fragment landed in the workspace bundle and is active
+    //    (deleted_at is null). The bundle is the source of truth.
     await browser.waitUntil(
-      async () => !(await $(`[data-testid='fragment-select-${fragment.id}']`).isExisting()),
-      {
-        timeout: 20000,
-        interval: 200,
+      async () => {
+        const bundle = await loadWorkspace(workspaceId);
+        const match = bundle.fragments.find((entry) => entry.id === fragmentId);
+        return Boolean(match) && match?.deleted_at === null;
       },
+      { timeout: 20000, interval: 200, timeoutMsg: "fragment not present in bundle" },
     );
 
-    await safeClick(`[data-testid='fragment-restore-${fragment.id}']`);
-
+    // 3. Soft-delete the fragment. The row stays in the table but
+    //    `deleted_at` is set; it should disappear from the active list
+    //    surface in the UI.
+    await tauriInvoke("soft_delete_fragment", { id: fragmentId });
     await browser.waitUntil(
-      async () => await $(`[data-testid='fragment-select-${fragment.id}']`).isExisting(),
-      {
-        timeout: 20000,
-        interval: 200,
+      async () => {
+        const bundle = await loadWorkspace(workspaceId);
+        const match = bundle.fragments.find((entry) => entry.id === fragmentId);
+        return match?.deleted_at !== null && match?.deleted_at !== undefined;
       },
+      { timeout: 20000, interval: 200, timeoutMsg: "fragment was not soft-deleted" },
     );
 
-    await safeClick(`[data-testid='fragment-select-${fragment.id}']`);
-    // Close the library dialog so its overlay doesn't block interactions.
-    await safeClick("[data-testid='fragment-library-close']");
+    // 4. Restore the fragment. `deleted_at` should clear back to null.
+    await tauriInvoke("restore_fragment", { id: fragmentId });
     await browser.waitUntil(
-      async () => (await $("label[for='fragment-editor']").getText()).includes(fragmentName),
-      {
-        timeout: 20000,
-        interval: 200,
+      async () => {
+        const bundle = await loadWorkspace(workspaceId);
+        const match = bundle.fragments.find((entry) => entry.id === fragmentId);
+        return match?.deleted_at === null;
       },
+      { timeout: 20000, interval: 200, timeoutMsg: "fragment was not restored" },
     );
+
+    // 5. Sanity: the name + content we created survived the round-trip.
+    const finalBundle = await loadWorkspace(workspaceId);
+    const restored = finalBundle.fragments.find((entry) => entry.id === fragmentId);
+    expect(restored?.name).toBe(fragmentName);
+    expect(restored?.content).toBe("material to be archived");
   });
 });

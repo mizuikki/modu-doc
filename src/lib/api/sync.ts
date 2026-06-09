@@ -1,17 +1,22 @@
+import type { ConflictPolicy } from "./documents";
 import { tauriInvoke } from "./tauri";
+import type { DocumentWire } from "./types";
 
-export type ConflictPolicy =
-  | "import_as_fragment"
-  | "overwrite_target"
-  | "backup_then_overwrite"
-  | "safe_sync";
+// Backwards-compat re-export so consumers that imported ConflictPolicy from
+// `./sync` keep working. (See `documents.ts` for the canonical definition.)
+export type { ConflictPolicy };
 
-export async function writeTargetFile(args: {
-  workspaceId: string;
-  conflictPolicy: ConflictPolicy;
-}) {
-  await tauriInvoke("write_target_file", {
-    workspaceId: args.workspaceId,
-    conflictPolicy: args.conflictPolicy,
-  });
+export async function writeDocument(args: { id: string }) {
+  return await tauriInvoke<DocumentWire>("write_document_to_file", { id: args.id });
+}
+
+export async function checkConflict(id: string) {
+  return await tauriInvoke<{ has_conflict: boolean; external_content_hash: string | null }>(
+    "check_document_conflict",
+    { id },
+  );
+}
+
+export async function resolveConflict(args: { id: string; policy: ConflictPolicy }) {
+  return await tauriInvoke<DocumentWire>("resolve_document_conflict", args);
 }

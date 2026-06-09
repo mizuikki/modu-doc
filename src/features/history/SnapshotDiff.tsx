@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
-import { restoreSnapshot } from "@/lib/api/snapshots";
 import { normalizeAppError } from "@/lib/appError";
 import { logDebugPerf } from "@/lib/debugPerf";
 import { useAppStore } from "@/store/appStore";
+import { selectActiveDocument } from "@/store/selectors";
 
 type RowKind = "same" | "remove" | "add";
 
@@ -206,37 +206,32 @@ function buildSegments(leftText: string, rightText: string): Segment[] {
   return segments;
 }
 
+/**
+ * Document-first snapshot diff: compares the active document's draft (or
+ * saved content) against the selected snapshot for the active document.
+ * Snapshots are now per-document, not per-workspace, so the "right side"
+ * of the diff is the document being edited, and the "left side" is the
+ * historical snapshot.
+ */
 export function SnapshotDiff() {
   const { t } = useTranslation();
   const toast = useToast();
-  const snapshots = useAppStore((state) => state.snapshots);
+  const activeDocument = useAppStore(selectActiveDocument);
+  const snapshotsByDocumentId = useAppStore((state) => state.snapshotsByDocumentId);
   const selectedSnapshotId = useAppStore((state) => state.selectedSnapshotId);
-  const fragments = useAppStore((state) => state.fragments);
-  const recipeItems = useAppStore((state) => state.recipeItems);
-  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
+  const documentDrafts = useAppStore((state) => state.documentDrafts);
+
+  const snapshots = activeDocument ? (snapshotsByDocumentId[activeDocument.id] ?? []) : [];
+  const snapshot = snapshots.find((entry) => entry.id === selectedSnapshotId) ?? null;
 
   const currentText = useMemo(() => {
-    const activeFragments = fragments.filter((fragment) => fragment.deletedAt === null);
-    const activeFragmentIds = new Set(activeFragments.map((fragment) => fragment.id));
-    const orderedItems = recipeItems
-      .filter((item) => item.recipeId === activeRecipeId && item.enabled)
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-    return orderedItems
-      .filter((item) => activeFragmentIds.has(item.fragmentId))
-      .map(
-        (item) =>
-          activeFragments.find((fragment) => fragment.id === item.fragmentId)?.content ?? "",
-      )
-      .join("\n\n---\n\n");
-  }, [activeRecipeId, fragments, recipeItems]);
-
-  const snapshot =
-    snapshots.find((entry) => entry.id === selectedSnapshotId) ?? snapshots[0] ?? null;
+    if (!activeDocument) return "";
+    return documentDrafts[activeDocument.id] ?? activeDocument.content;
+  }, [activeDocument, documentDrafts]);
 
   const segments = useMemo(
-    () => buildSegments(snapshot?.compiledText ?? "", currentText),
-    [currentText, snapshot?.compiledText],
+    () => buildSegments(snapshot?.content ?? "", currentText),
+    [currentText, snapshot?.content],
   );
 
   useEffect(() => {
@@ -245,7 +240,7 @@ export function SnapshotDiff() {
     }
     void logDebugPerf("main-tab ready:history", {
       snapshotId: snapshot.id,
-      compiledBytes: snapshot.compiledText.length,
+      contentBytes: snapshot.content.length,
       segmentCount: segments.length,
     });
   }, [segments.length, snapshot]);
@@ -275,7 +270,7 @@ export function SnapshotDiff() {
 
   const handleCopy = async () => {
     if (!snapshot) return;
-    const text = snapshot.compiledText;
+    const text = snapshot.content;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
@@ -292,15 +287,6 @@ export function SnapshotDiff() {
       toast.success(t("copy_success"));
     } catch (error) {
       toast.error(normalizeAppError(error), t("copy_failed"));
-    }
-  };
-
-  const handleRestore = async () => {
-    if (!snapshot) return;
-    try {
-      await restoreSnapshot(snapshot.id);
-    } catch (error) {
-      toast.error(normalizeAppError(error), t("action_failed"));
     }
   };
 
@@ -517,41 +503,6 @@ export function SnapshotDiff() {
             );
           })
         )}
-      </div>
-
-      <div
-        style={{
-          position: "sticky",
-          bottom: 0,
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: 8,
-          padding: "8px 10px",
-          marginInline: -10,
-          background: "color-mix(in srgb, hsl(var(--background)) 88%, transparent)",
-          backdropFilter: "blur(6px)",
-          borderTop: "1px solid hsl(var(--border))",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            void handleRestore();
-          }}
-          data-testid="history-restore-snapshot"
-          style={{
-            padding: "6px 14px",
-            borderRadius: 8,
-            border: "1px solid hsl(var(--primary))",
-            background: "hsl(var(--primary))",
-            color: "hsl(var(--primary-foreground))",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          {t("restore_snapshot")}
-        </button>
       </div>
     </div>
   );

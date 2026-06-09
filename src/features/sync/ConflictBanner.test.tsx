@@ -4,54 +4,72 @@ import { useAppStore } from "@/store/appStore";
 import { AppTestProviders, resetAppStore } from "@/test/testUtils";
 import { ConflictBanner } from "./ConflictBanner";
 
-const { writeTargetFile } = vi.hoisted(() => ({
-  writeTargetFile: vi.fn(async () => undefined),
-}));
-
-const { updateWorkspace } = vi.hoisted(() => ({
-  updateWorkspace: vi.fn(async () => ({
-    id: "workspace-a",
-    name: "Workspace A",
+const { resolveDocumentConflict, writeDocumentToFile } = vi.hoisted(() => ({
+  resolveDocumentConflict: vi.fn(async () => ({
+    id: "doc-a",
+    workspace_id: "workspace-a",
+    name: "Main",
+    content: "Updated body",
+    content_hash: "",
     target_path: "/tmp/example.md",
-    default_recipe_id: null,
-    status: "dirty",
-    last_compiled_at: null,
-    last_compiled_hash: null,
+    file_status: "ready",
+    last_written_at: "t",
+    last_written_hash: "h",
+    sort_order: 0,
+    deleted_at: null,
+    description: null,
     created_at: "t",
     updated_at: "t",
   })),
+  writeDocumentToFile: vi.fn(async () => undefined),
 }));
 
-vi.mock("@/lib/api/sync", () => ({
-  writeTargetFile,
-}));
-
-vi.mock("@/lib/api/workspaces", () => ({
-  updateWorkspace,
+vi.mock("@/lib/api/documents", () => ({
+  resolveDocumentConflict,
+  writeDocumentToFile,
+  createDocument: vi.fn(),
+  updateDocument: vi.fn(),
+  softDeleteDocument: vi.fn(),
+  restoreDocument: vi.fn(),
+  deleteDocumentPermanently: vi.fn(),
+  reorderDocuments: vi.fn(),
+  checkDocumentConflict: vi.fn(),
 }));
 
 describe("ConflictBanner", () => {
   beforeEach(() => {
-    writeTargetFile.mockClear();
-    updateWorkspace.mockClear();
+    resolveDocumentConflict.mockClear();
+    writeDocumentToFile.mockClear();
     resetAppStore();
     useAppStore.setState({
       workspaces: [
         {
           id: "workspace-a",
           name: "Workspace A",
-          targetPath: "/tmp/example.md",
-          defaultRecipeId: null,
-          status: "conflicted",
-          lastCompiledAt: null,
-          lastCompiledHash: null,
           createdAt: "t",
           updatedAt: "t",
         },
       ],
       activeWorkspaceId: "workspace-a",
-      compileStatus: "conflicted",
-      workspaceStatusMessage: "external_conflict",
+      documents: [
+        {
+          id: "doc-a",
+          workspaceId: "workspace-a",
+          name: "Main",
+          content: "Body",
+          contentHash: "",
+          targetPath: "/tmp/example.md",
+          fileStatus: "conflicted",
+          lastWrittenAt: null,
+          lastWrittenHash: null,
+          sortOrder: 0,
+          deletedAt: null,
+          description: null,
+          createdAt: "t",
+          updatedAt: "t",
+        },
+      ],
+      activeDocumentId: "doc-a",
     });
   });
 
@@ -59,71 +77,63 @@ describe("ConflictBanner", () => {
     cleanup();
   });
 
-  it("invokes writeTargetFile on resolve action", async () => {
+  it("renders nothing when the active document is not conflicted", () => {
+    useAppStore.setState((state) => ({
+      documents: state.documents.map((doc) =>
+        doc.id === "doc-a" ? { ...doc, fileStatus: "ready" } : doc,
+      ),
+    }));
+
     render(
       <AppTestProviders>
         <ConflictBanner />
       </AppTestProviders>,
     );
 
-    const importButton = screen.getByTestId("conflict-import-as-fragment");
-    fireEvent.click(importButton);
+    expect(screen.queryByTestId("conflict-banner")).toBeNull();
+  });
 
-    expect(writeTargetFile).toHaveBeenCalledWith({
-      workspaceId: "workspace-a",
-      conflictPolicy: "import_as_fragment",
+  it("invokes resolveDocumentConflict for the import policy", async () => {
+    render(
+      <AppTestProviders>
+        <ConflictBanner />
+      </AppTestProviders>,
+    );
+
+    fireEvent.click(screen.getByTestId("conflict-import-as-fragment"));
+
+    expect(resolveDocumentConflict).toHaveBeenCalledWith({
+      id: "doc-a",
+      policy: "import_external",
     });
   });
 
-  it("opens settings dialog at sync section on choose target", async () => {
-    useAppStore.setState({
-      compileStatus: "error",
-      workspaceStatusMessage: "target_missing",
-    });
-
+  it("writes the document back to the file when overwriting", async () => {
     render(
       <AppTestProviders>
         <ConflictBanner />
       </AppTestProviders>,
     );
 
-    fireEvent.click(screen.getByTestId("conflict-choose-target"));
-
-    const syncNav = await screen.findByTestId("workspace-settings-nav-sync");
-    expect(syncNav.dataset.active).toBe("true");
-    const autoSync = await screen.findByTestId("workspace-settings-auto-sync");
-    expect(autoSync).toBeTruthy();
-  });
-
-  it("persists target path from the settings dialog general section", async () => {
-    useAppStore.setState({
-      compileStatus: "error",
-      workspaceStatusMessage: "target_missing",
-    });
-
-    render(
-      <AppTestProviders>
-        <ConflictBanner />
-      </AppTestProviders>,
-    );
-
-    fireEvent.click(screen.getByTestId("conflict-choose-target"));
-
-    const generalNav = await screen.findByTestId("workspace-settings-nav-general");
-    fireEvent.click(generalNav);
-
-    const targetInput = await screen.findByTestId("workspace-settings-target");
-    fireEvent.change(targetInput, { target: { value: "/tmp/rebound.md" } });
-
-    fireEvent.click(screen.getByTestId("workspace-settings-save"));
+    fireEvent.click(screen.getByTestId("conflict-overwrite-target"));
 
     await waitFor(() => {
-      expect(updateWorkspace).toHaveBeenCalledWith({
-        id: "workspace-a",
-        name: "Workspace A",
-        targetPath: "/tmp/rebound.md",
-        clearTargetPath: false,
+      expect(resolveDocumentConflict).toHaveBeenCalledWith({
+        id: "doc-a",
+        policy: "overwrite_external",
       });
+      expect(writeDocumentToFile).toHaveBeenCalledWith("doc-a");
     });
+  });
+
+  it("does not call writeDocumentToFile for import_external", async () => {
+    render(
+      <AppTestProviders>
+        <ConflictBanner />
+      </AppTestProviders>,
+    );
+
+    fireEvent.click(screen.getByTestId("conflict-import-as-fragment"));
+    expect(writeDocumentToFile).not.toHaveBeenCalled();
   });
 });

@@ -15,34 +15,46 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            // workspace
             commands::list_workspaces,
             commands::create_workspace,
             commands::update_workspace,
             commands::delete_workspace,
             commands::load_workspace,
-            commands::search_workspace_content,
+            // documents (the new primary surface)
+            commands::create_document,
+            commands::update_document,
+            commands::soft_delete_document,
+            commands::restore_document,
+            commands::delete_document_permanently,
+            commands::reorder_documents,
+            commands::write_document_to_file,
+            commands::check_document_conflict,
+            commands::resolve_document_conflict,
+            // fragments
             commands::create_fragment,
             commands::update_fragment,
             commands::soft_delete_fragment,
             commands::restore_fragment,
+            // recipes (advanced)
             commands::create_recipe,
-            commands::activate_recipe,
             commands::update_recipe_items,
-            commands::compile_workspace,
-            commands::compile_fragments_with_markers,
-            commands::write_target_file,
-            commands::import_markdown_file,
-            commands::export_workspace,
-            commands::import_workspace_package,
+            commands::generate_document_from_recipe,
+            commands::insert_recipe_into_document,
+            commands::replace_document_with_recipe,
+            // snapshots (per document)
             commands::create_snapshot,
-            commands::list_snapshots,
+            commands::list_document_snapshots,
             commands::restore_snapshot,
+            // misc
+            commands::search_workspace_content,
             commands::open_target_in_file_manager,
             commands::debug_log_frontend,
+            // settings
             commands::get_setting,
             commands::set_setting,
             commands::list_settings,
-            commands::delete_setting
+            commands::delete_setting,
         ])
         .setup(move |app| {
             crate::debug_log!(

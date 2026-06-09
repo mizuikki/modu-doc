@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppDialog } from "@/components/dialog/DialogProvider";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -12,6 +13,7 @@ type FragmentListProps = {
   hideHeader?: boolean;
   onAddFragment?: (fragmentId: string) => void;
   onCreateFragment?: () => Promise<void> | void;
+  onViewFragment?: (fragmentId: string) => void;
   rootTestId?: string;
   searchQuery?: string;
   showDeletedSection?: boolean;
@@ -47,6 +49,7 @@ export function FragmentList({
   hideHeader = false,
   onAddFragment,
   onCreateFragment,
+  onViewFragment,
   rootTestId = "content-manager-fragments",
   searchQuery = "",
   showDeletedSection = true,
@@ -56,11 +59,21 @@ export function FragmentList({
   const dialog = useAppDialog();
   const toast = useToast();
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
   const fragments = useAppStore((state) => state.fragments);
   const recipeItems = useAppStore((state) => state.recipeItems);
-  const activeFragmentId = useAppStore((state) => state.activeFragmentId);
-  const setActiveFragment = useAppStore((state) => state.setActiveFragment);
+  const [viewingFragmentId, setViewingFragmentId] = useState<string | null>(null);
+
+  // Resolve the active recipe (first non-deleted recipe in the workspace) for
+  // "in-recipe" / "not-in-recipe" filtering, but only when the consumer cares
+  // about it. This used to be `activeRecipeId` from the global store; in the
+  // new model recipes are an advanced feature and the active recipe is local
+  // state inside the right panel that owns the assembly view.
+  const activeRecipeId = useAppStore((state) => {
+    const recipes = state.recipes.filter(
+      (recipe) => recipe.workspaceId === state.activeWorkspaceId && recipe.deletedAt === null,
+    );
+    return recipes[0]?.id ?? null;
+  });
 
   const activeRecipeItems = activeRecipeId
     ? recipeItems
@@ -132,7 +145,6 @@ export function FragmentList({
         workspaceId: activeWorkspaceId,
         name,
         content: "",
-        attachToRecipe: true,
       });
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
@@ -161,6 +173,11 @@ export function FragmentList({
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
+  };
+
+  const handleSelect = (fragmentId: string) => {
+    setViewingFragmentId(fragmentId);
+    onViewFragment?.(fragmentId);
   };
 
   return (
@@ -230,7 +247,7 @@ export function FragmentList({
         {orderedActiveFragments.map((fragment) => {
           const recipeItem = activeRecipeItemByFragmentId.get(fragment.id);
           const preview = fragment.content.trim() || t("empty_fragment");
-          const isSelected = fragment.id === activeFragmentId;
+          const isSelected = fragment.id === viewingFragmentId;
           return (
             <div
               key={fragment.id}
@@ -250,7 +267,7 @@ export function FragmentList({
             >
               <button
                 type="button"
-                onClick={() => setActiveFragment(fragment.id)}
+                onClick={() => handleSelect(fragment.id)}
                 data-testid={`fragment-select-${fragment.id}`}
                 style={{
                   border: 0,

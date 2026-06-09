@@ -88,7 +88,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn migration_makes_snapshot_recipe_required() {
+    async fn migration_makes_snapshot_document_required() {
         let temp_dir = tempdir().expect("temp dir");
         let db_path = temp_dir.path().join("modudoc.sqlite");
         let connect_options =
@@ -108,12 +108,130 @@ mod tests {
             .await
             .expect("migration");
         let not_null: i64 = sqlx::query_scalar(
-            "SELECT `notnull` FROM pragma_table_info('snapshots') WHERE name = 'recipe_id'",
+            "SELECT `notnull` FROM pragma_table_info('snapshots') WHERE name = 'document_id'",
         )
         .fetch_one(&pool)
         .await
-        .expect("recipe id notnull");
+        .expect("document id notnull");
         assert_eq!(not_null, 1);
+    }
+
+    #[tokio::test]
+    async fn migration_enforces_document_file_status_check_constraint() {
+        let temp_dir = tempdir().expect("temp dir");
+        let db_path = temp_dir.path().join("modudoc.sqlite");
+        let connect_options =
+            SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path.display()))
+                .expect("connect options")
+                .create_if_missing(true)
+                .foreign_keys(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Normal);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(connect_options)
+            .await
+            .expect("pool");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("migration");
+
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind("ws-check")
+        .bind("Check")
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await
+        .expect("workspace");
+
+        let valid: Result<sqlx::sqlite::SqliteQueryResult, _> = sqlx::query(
+            "INSERT INTO documents (id, workspace_id, name, file_status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .bind("doc-valid")
+        .bind("ws-check")
+        .bind("Main.md")
+        .bind("ready")
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await;
+        assert!(valid.is_ok(), "valid file_status should insert");
+
+        let invalid: Result<sqlx::sqlite::SqliteQueryResult, _> = sqlx::query(
+            "INSERT INTO documents (id, workspace_id, name, file_status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .bind("doc-invalid")
+        .bind("ws-check")
+        .bind("Bad.md")
+        .bind("not_a_real_status")
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await;
+        assert!(invalid.is_err(), "invalid file_status must be rejected by CHECK");
+    }
+
+    #[tokio::test]
+    async fn migration_enforces_target_path_uniqueness() {
+        let temp_dir = tempdir().expect("temp dir");
+        let db_path = temp_dir.path().join("modudoc.sqlite");
+        let connect_options =
+            SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path.display()))
+                .expect("connect options")
+                .create_if_missing(true)
+                .foreign_keys(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Normal);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(connect_options)
+            .await
+            .expect("pool");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("migration");
+
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind("ws-unique")
+        .bind("Unique")
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await
+        .expect("workspace");
+
+        sqlx::query(
+            "INSERT INTO documents (id, workspace_id, name, target_path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .bind("doc-first")
+        .bind("ws-unique")
+        .bind("First.md")
+        .bind("/tmp/shared.md")
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await
+        .expect("first insert");
+
+        let dup: Result<sqlx::sqlite::SqliteQueryResult, _> = sqlx::query(
+            "INSERT INTO documents (id, workspace_id, name, target_path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .bind("doc-second")
+        .bind("ws-unique")
+        .bind("Second.md")
+        .bind("/tmp/shared.md")
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await;
+        assert!(dup.is_err(), "duplicate target_path must be rejected by unique index");
     }
 
     #[tokio::test]

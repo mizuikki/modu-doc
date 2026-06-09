@@ -1,46 +1,43 @@
 import { browser, expect } from "@wdio/globals";
 import { tauriInvoke } from "../support/tauri";
-import { safeSetValue } from "../support/ui";
-import { createAndSelectWorkspace, deleteWorkspace } from "../support/workspace";
+import { createAndOpenWorkspace, deleteWorkspace, getWorkspaceCount } from "../support/workspace";
 
 describe("Workspaces", () => {
-  it("deletes a workspace and removes it from UI", async () => {
+  it("deletes a workspace and removes it from the sidebar and list_workspaces", async () => {
+    // 1. Fresh workspace. The support helper asserts the sidebar row
+    //    becomes active before returning.
     const workspaceName = `E2E Delete ${Date.now()}`;
-    const workspace = await createAndSelectWorkspace({ name: workspaceName, targetPath: null });
+    const { workspaceId } = await createAndOpenWorkspace(workspaceName);
 
-    await deleteWorkspace(workspace.id);
+    // 2. Capture the workspace count before deleting so we can assert
+    //    list_workspaces shrinks by exactly one.
+    const before = await getWorkspaceCount();
+    expect(before).toBeGreaterThan(0);
 
+    // 3. Drive delete_workspace directly. The backend removes the
+    //    workspace (and all its documents / fragments / recipes /
+    //    snapshots) in one transaction.
+    await deleteWorkspace(workspaceId);
+
+    // 4. The sidebar row for the deleted workspace must disappear.
+    await browser.waitUntil(
+      async () => !(await $(`[data-testid='sidebar-workspace-${workspaceId}']`).isExisting()),
+      { timeout: 20000, interval: 200, timeoutMsg: "deleted workspace still in sidebar" },
+    );
+
+    // 5. list_workspaces must shrink by one and no longer include the id.
     await browser.waitUntil(
       async () => {
-        const workspaces = await tauriInvoke<Array<{ id: string }>>("list_workspaces");
-        return workspaces.every((entry) => entry.id !== workspace.id);
+        const list = await tauriInvoke<Array<{ id: string }>>("list_workspaces");
+        return list.length === before - 1 && list.every((entry) => entry.id !== workspaceId);
       },
-      { timeout: 20000, interval: 200 },
+      { timeout: 20000, interval: 200, timeoutMsg: "list_workspaces did not shrink" },
     );
 
-    // Search should not find it either.
-    await safeSetValue("[data-testid='global-search-input']", workspaceName);
-    await browser.waitUntil(
-      async () => (await $$("[data-testid='global-search-panel']")).length > 0,
-      {
-        timeout: 20000,
-        interval: 200,
-      },
-    );
-    await browser.waitUntil(
-      async () => {
-        const panels = await $$("[data-testid='global-search-panel']");
-        if (panels.length === 0) return false;
-
-        const panelText = await panels[0].getText();
-        if (panelText.includes("…")) return false;
-
-        return (await $$("[data-testid^='global-search-result-workspace-']")).length === 0;
-      },
-      { timeout: 8000, interval: 200 },
-    );
-
-    // Ensure app still renders by checking header still present.
+    // 6. Ensure the app is still responsive after the destructive op:
+    //    the header is still rendered and the language toggle is
+    //    clickable.
     await expect($("header")).toBeDisplayed();
+    await expect($("[data-testid='header-language-toggle']")).toBeDisplayed();
   });
 });

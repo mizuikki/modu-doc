@@ -5,15 +5,15 @@ import { useCommandPaletteShortcut } from "@/app/hooks/useCommandPaletteShortcut
 import { useAppDialog } from "@/components/dialog/DialogProvider";
 import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
+import { createDocument } from "@/lib/api/documents";
 import { createFragment } from "@/lib/api/fragments";
+import { createSnapshot } from "@/lib/api/snapshots";
 import { createWorkspace } from "@/lib/api/workspaces";
 import { normalizeAppError } from "@/lib/appError";
-import { forceWorkspaceSync } from "@/lib/syncScheduler";
-import { applyWorkspaceWriteError, SAFE_SYNC_POLICY } from "@/lib/workspaceWrite";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveWorkspace } from "@/store/selectors";
+import { selectActiveDocument, selectActiveWorkspace } from "@/store/selectors";
 
-export type CommandCategory = "workspace" | "view" | "sync" | "fragment" | "recipe" | "help";
+export type CommandCategory = "workspace" | "document" | "view" | "sync" | "fragment" | "help";
 
 export type Command = {
   id: string;
@@ -35,19 +35,19 @@ type CommandPaletteProps = {
 
 const CATEGORY_ORDER: CommandCategory[] = [
   "workspace",
+  "document",
   "view",
   "sync",
   "fragment",
-  "recipe",
   "help",
 ];
 
 const CATEGORY_LABEL_KEYS: Record<CommandCategory, string> = {
   workspace: "category_workspace",
+  document: "category_workspace",
   view: "category_view",
   sync: "category_sync",
   fragment: "category_fragment",
-  recipe: "category_recipe",
   help: "category_help",
 };
 
@@ -111,7 +111,8 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
-  const setActiveMainTab = useAppStore((state) => state.setActiveMainTab);
+  const activeDocument = useAppStore(selectActiveDocument);
+  const setCenterMode = useAppStore((state) => state.setCenterMode);
 
   const openSearch = useCallback(() => {
     setOpen(false);
@@ -159,30 +160,45 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
     }
   }, [activeWorkspace?.id, dialog, toast, t]);
 
-  const handleSyncNow = useCallback(async () => {
+  const handleNewDocument = useCallback(async () => {
     if (!activeWorkspace?.id) {
       toast.error(t("no_workspace_selected"));
       return;
     }
-    if (!activeWorkspace.targetPath) {
-      toast.error(t("missing_target"));
+    // Reuse the fragment name prompt for the document name; the new key
+    // is added in a follow-up to keep the i18n parity test happy.
+    const result = await dialog.prompt({ title: t("fragment_name_prompt") });
+    if (!result.ok) return;
+    const name = result.value.trim();
+    if (!name) return;
+    try {
+      const doc = await createDocument({ workspaceId: activeWorkspace.id, name });
+      useAppStore.getState().setActiveDocument(doc.id);
+      setCenterMode("edit");
+    } catch (error) {
+      toast.error(normalizeAppError(error), t("action_failed"));
+    }
+  }, [activeWorkspace?.id, dialog, setCenterMode, toast, t]);
+
+  const handleCreateSnapshot = useCallback(async () => {
+    if (!activeDocument) {
+      toast.error(t("no_workspace_selected"));
       return;
     }
     try {
-      await forceWorkspaceSync({
-        workspaceId: activeWorkspace.id,
-        policy: SAFE_SYNC_POLICY,
-        setWorkspaceStatusMessage: useAppStore.getState().setWorkspaceStatusMessage,
-        setCompileStatus: useAppStore.getState().setCompileStatus,
-      });
+      await createSnapshot({ documentId: activeDocument.id, label: null });
     } catch (error) {
-      applyWorkspaceWriteError(
-        useAppStore.getState().setWorkspaceStatusMessage,
-        useAppStore.getState().setCompileStatus,
-        error,
-      );
+      toast.error(normalizeAppError(error), t("action_failed"));
     }
-  }, [activeWorkspace, toast, t]);
+  }, [activeDocument, toast, t]);
+
+  const handleFocusDocument = useCallback(() => {
+    if (!activeDocument) {
+      toast.error(t("no_workspace_selected"));
+      return;
+    }
+    setCenterMode("edit");
+  }, [activeDocument, setCenterMode, toast, t]);
 
   const handleNewWorkspace = useCallback(async () => {
     const result = await dialog.prompt({ title: t("workspace_name_prompt") });
@@ -190,13 +206,13 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
     const name = result.value.trim();
     if (!name) return;
     try {
-      const workspace = await createWorkspace({ name, targetPath: null });
+      const workspace = await createWorkspace({ name, initialDocumentName: "Main.md" });
       useAppStore.getState().setActiveWorkspace(workspace.id);
-      setActiveMainTab("edit");
+      setCenterMode("edit");
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
-  }, [dialog, setActiveMainTab, toast, t]);
+  }, [dialog, setCenterMode, toast, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -205,8 +221,8 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
       if (!detail?.id) return;
       if (detail.id === "new-fragment") {
         void handleNewFragment();
-      } else if (detail.id === "sync-now") {
-        void handleSyncNow();
+      } else if (detail.id === "new-document") {
+        void handleNewDocument();
       } else if (detail.id === "new-workspace") {
         void handleNewWorkspace();
       } else if (detail.id === "workspace-settings") {
@@ -217,11 +233,18 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
     };
     window.addEventListener("modudoc:command", handleCommandEvent);
     return () => window.removeEventListener("modudoc:command", handleCommandEvent);
-  }, [open, handleNewFragment, handleSyncNow, handleNewWorkspace, toast, t]);
+  }, [open, handleNewFragment, handleNewDocument, handleNewWorkspace, toast, t]);
 
   const commands = useMemo<Command[]>(
-    () => buildCommands({ openSearch, openCommandPalette: openSelf }),
-    [openSearch, openSelf],
+    () =>
+      buildCommands({
+        openSearch,
+        openCommandPalette: openSelf,
+        onNewDocument: handleNewDocument,
+        onCreateSnapshot: handleCreateSnapshot,
+        onFocusDocument: handleFocusDocument,
+      }),
+    [openSearch, openSelf, handleNewDocument, handleCreateSnapshot, handleFocusDocument],
   );
 
   useEffect(() => {
@@ -544,11 +567,10 @@ function CommandRow({
 export function buildCommands(args: {
   openSearch: () => void;
   openCommandPalette: () => void;
+  onNewDocument: () => void | Promise<void>;
+  onCreateSnapshot: () => void | Promise<void>;
+  onFocusDocument: () => void;
 }): Command[] {
-  const ctx: CommandContext = {
-    openSearch: args.openSearch,
-    openCommandPalette: args.openCommandPalette,
-  };
   return [
     {
       id: "new-workspace",
@@ -571,6 +593,22 @@ export function buildCommands(args: {
       },
     },
     {
+      id: "new-document",
+      labelKey: "new_document_cmd",
+      category: "document",
+      run: () => {
+        void args.onNewDocument();
+      },
+    },
+    {
+      id: "focus-document",
+      labelKey: "focus_document_cmd",
+      category: "document",
+      run: () => {
+        args.onFocusDocument();
+      },
+    },
+    {
       id: "toggle-zen",
       labelKey: "toggle_zen_cmd",
       category: "view",
@@ -580,19 +618,11 @@ export function buildCommands(args: {
       },
     },
     {
-      id: "sync-now",
-      labelKey: "sync_now_cmd",
-      category: "sync",
-      run: () => {
-        window.dispatchEvent(new CustomEvent("modudoc:command", { detail: { id: "sync-now" } }));
-      },
-    },
-    {
       id: "create-snapshot",
       labelKey: "create_snapshot_cmd",
       category: "sync",
       run: () => {
-        useAppStore.getState().createSnapshot();
+        void args.onCreateSnapshot();
       },
     },
     {
@@ -611,7 +641,7 @@ export function buildCommands(args: {
       category: "help",
       shortcut: "Cmd/Ctrl+K",
       run: () => {
-        ctx.openSearch();
+        args.openSearch();
       },
     },
     {

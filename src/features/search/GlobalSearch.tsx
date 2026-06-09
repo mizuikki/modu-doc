@@ -5,21 +5,20 @@ import { searchWorkspaceContent } from "@/lib/api/search";
 import type { SearchResult } from "@/lib/api/types";
 import { useAppStore } from "@/store/appStore";
 
-type ResultKind = "workspace" | "fragment" | "recipe" | "snapshot";
+type ResultKind = "workspace" | "fragment" | "recipe" | "snapshot" | "document";
 
-type UiSearchResult =
-  | { kind: "workspace"; id: string; title: string; subtitle: string }
-  | {
-      kind: "fragment" | "recipe" | "snapshot";
-      id: string;
-      workspaceId: string;
-      title: string;
-      subtitle: string;
-    };
+type UiSearchResult = {
+  kind: ResultKind;
+  id: string;
+  workspaceId: string | null;
+  title: string;
+  subtitle: string;
+};
 
-const GROUP_ORDER: ResultKind[] = ["fragment", "recipe", "snapshot", "workspace"];
+const GROUP_ORDER: ResultKind[] = ["document", "fragment", "recipe", "snapshot", "workspace"];
 
 const GROUP_LABEL_KEYS: Record<ResultKind, string> = {
+  document: "documents",
   fragment: "search_group_fragments",
   recipe: "search_group_recipes",
   snapshot: "search_group_snapshots",
@@ -28,7 +27,11 @@ const GROUP_LABEL_KEYS: Record<ResultKind, string> = {
 
 function isResultKind(value: string): value is ResultKind {
   return (
-    value === "workspace" || value === "fragment" || value === "recipe" || value === "snapshot"
+    value === "workspace" ||
+    value === "fragment" ||
+    value === "recipe" ||
+    value === "snapshot" ||
+    value === "document"
   );
 }
 
@@ -40,28 +43,42 @@ export function GlobalSearch() {
   const [isSearching, setIsSearching] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace);
-  const setActiveFragment = useAppStore((state) => state.setActiveFragment);
-  const setActiveRecipe = useAppStore((state) => state.setActiveRecipe);
-  const setActiveMainTab = useAppStore((state) => state.setActiveMainTab);
+  const setActiveDocument = useAppStore((state) => state.setActiveDocument);
+  const setRightPanelTab = useAppStore((state) => state.setRightPanelTab);
   const setSelectedSnapshot = useAppStore((state) => state.setSelectedSnapshot);
+  const setCenterMode = useAppStore((state) => state.setCenterMode);
 
   const results = useMemo(() => remoteResults, [remoteResults]);
 
   const applyResult = (result: UiSearchResult) => {
     if (result.kind === "workspace") {
       setActiveWorkspace(result.id);
+    } else if (result.kind === "document") {
+      if (result.workspaceId) {
+        setActiveWorkspace(result.workspaceId);
+      }
+      setActiveDocument(result.id);
+      setCenterMode("edit");
     } else if (result.kind === "fragment") {
-      setActiveWorkspace(result.workspaceId);
-      setActiveFragment(result.id);
-      setActiveMainTab("edit");
+      if (result.workspaceId) {
+        setActiveWorkspace(result.workspaceId);
+      }
+      // Fragments are now opened inside the right panel's Fragments tab.
+      // The panel owns the per-fragment view state; we just ensure the tab
+      // is the active one so the user can see it.
+      setRightPanelTab("fragments");
     } else if (result.kind === "recipe") {
-      setActiveWorkspace(result.workspaceId);
-      setActiveRecipe(result.id);
-      setActiveMainTab("edit");
+      if (result.workspaceId) {
+        setActiveWorkspace(result.workspaceId);
+      }
+      setRightPanelTab("recipes");
     } else {
-      setActiveWorkspace(result.workspaceId);
+      // snapshot
+      if (result.workspaceId) {
+        setActiveWorkspace(result.workspaceId);
+      }
       setSelectedSnapshot(result.id);
-      setActiveMainTab("history");
+      setCenterMode("history");
     }
     setQuery("");
     setActiveIndex(-1);
@@ -84,15 +101,7 @@ export function GlobalSearch() {
           if (cancelled) return;
           const mapped: UiSearchResult[] = raw
             .map((result: SearchResult) => {
-              if (result.kind === "workspace") {
-                return {
-                  kind: "workspace" as const,
-                  id: result.id,
-                  title: result.title,
-                  subtitle: result.subtitle,
-                };
-              }
-              if (!result.workspace_id) return null;
+              if (!isResultKind(result.kind)) return null;
               return {
                 kind: result.kind,
                 id: result.id,

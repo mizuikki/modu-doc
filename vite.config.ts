@@ -10,6 +10,12 @@ export default defineConfig({
     alias: {
       "@": resolve(__dirname, "src"),
     },
+    // Force a single copy of React so the dispatcher matches between the app
+    // and packages that call React hooks internally (e.g. zustand/useShallow).
+    dedupe: ["react", "react-dom"],
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "zustand/react/shallow"],
   },
   server: {
     watch: {

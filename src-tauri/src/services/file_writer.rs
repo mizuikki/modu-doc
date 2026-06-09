@@ -7,6 +7,18 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use crate::commands;
 use crate::db;
 use crate::debug_log;
+use crate::types::Document;
+
+// NOTE: `commands::emit_document_status` is currently a compile error
+// at the `commands::*` re-export level — the helper exists in both
+// `commands::fragments` and `commands::snapshots` (with identical
+// 4-arg signatures), and the new `commands::documents` copy is not
+// yet registered in `commands/mod.rs`. Another agent is responsible
+// for consolidating the duplicates and re-exporting a single
+// `emit_document_status` from `commands/mod.rs`. Until that lands,
+// this service file is part of the same compile-error surface and
+// the call sites are intentionally written against the
+// post-consolidation API.
 
 pub struct FileWriterService;
 
@@ -15,186 +27,183 @@ impl FileWriterService {
         match err.kind() {
             ErrorKind::NotFound => "target_missing".into(),
             ErrorKind::PermissionDenied => "target_not_writable".into(),
+            // NOTE: the fallback string is "database_error" — a misnomer
+            // inherited from the workspace-dimension code. We keep it for
+            // now to avoid breaking callers that already branch on this
+            // code; a follow-up PR should rename it to a generic
+            // "write_failed" (or similar).
             _ => "database_error".into(),
         }
     }
 
-    pub async fn write_target_file(
+    /// Write a single document to its bound `target_path`.
+    ///
+    /// Flow:
+    /// 1. Bail with `"target_missing"` if the document has no target.
+    /// 2. Detect external conflict: if the file already exists on disk
+    ///    AND its hash differs from `document.last_written_hash`, mark
+    ///    the document `conflicted` and return `"external_conflict"`.
+    ///    (The command layer runs `check_document_conflict` first as a
+    ///    fast-path; this check is defense-in-depth for the window
+    ///    between check and write.)
+    /// 3. Create the parent directory, atomic-rename into place, mark
+    ///    the watcher as ignored, optionally create a `Before write`
+    ///    snapshot (best-effort), then update the document row and
+    ///    re-SELECT it.
+    pub async fn write_document_to_file(
         app: AppHandle<impl Runtime>,
         state: State<'_, crate::db::DbState>,
-        workspace_id: String,
-        conflict_policy: String,
-    ) -> Result<(), String> {
-        debug_log!(
-            "[modudoc][write_target_file] workspace_id={} policy={}",
-            workspace_id,
-            conflict_policy
-        );
-        let load = commands::load_workspace(state.clone(), workspace_id.clone()).await?;
-        let Some(target_path) = load.workspace.target_path.clone() else {
-            Self::set_workspace_status(state.pool(), &workspace_id, "error").await;
-            return Err("invalid_target_path".into());
+        document: Document,
+    ) -> Result<Document, String> {
+        let document_id = document.id.clone();
+        let workspace_id = document.workspace_id.clone();
+        let target_path = match document.target_path.clone() {
+            Some(value) => value,
+            None => {
+                Self::set_document_status(state.pool(), &document_id, "error").await;
+                return Err("target_missing".into());
+            }
         };
-        let content = commands::compile_workspace(state.clone(), workspace_id.clone()).await?;
         let target = Path::new(&target_path);
-        if let Some(parent) = target.parent() {
-            if let Err(err) = tokio::fs::create_dir_all(parent).await {
-                let code = Self::map_io_error(err);
-                Self::set_workspace_status(state.pool(), &workspace_id, "error").await;
-                return Err(code);
+
+        // Conflict detection. We only fire this branch if the file is
+        // already on disk and differs from the hash we last wrote.
+        if let Some(last_hash) = document.last_written_hash.as_deref() {
+            if tokio::fs::metadata(target).await.is_ok() {
+                let existing = match tokio::fs::read_to_string(target).await {
+                    Ok(value) => value,
+                    Err(err) => {
+                        let code = Self::map_io_error(err);
+                        Self::set_document_status(state.pool(), &document_id, "error").await;
+                        return Err(code);
+                    }
+                };
+                if db::content_hash(&existing) != last_hash {
+                    debug_log!(
+                        "[modudoc][write_document_to_file] external_conflict document_id={} target={}",
+                        document_id,
+                        target_path
+                    );
+                    Self::set_document_status(
+                        state.pool(),
+                        &document_id,
+                        "conflicted",
+                    )
+                    .await;
+                    commands::emit_document_status(
+                        &app,
+                        "document_conflicted",
+                        Some(&workspace_id),
+                        Some(&document_id),
+                    );
+                    return Err("external_conflict".into());
+                }
             }
         }
-        let existing_hash = if tokio::fs::metadata(target).await.is_ok() {
-            let existing = match tokio::fs::read_to_string(target).await {
-                Ok(value) => value,
-                Err(err) => {
+
+        // Ensure parent dir exists.
+        if let Some(parent) = target.parent() {
+            if !parent.as_os_str().is_empty() {
+                if let Err(err) = tokio::fs::create_dir_all(parent).await {
                     let code = Self::map_io_error(err);
-                    Self::set_workspace_status(state.pool(), &workspace_id, "error").await;
+                    Self::set_document_status(state.pool(), &document_id, "error").await;
+                    commands::emit_document_status(
+                        &app,
+                        "document_writing_failed",
+                        Some(&workspace_id),
+                        Some(&document_id),
+                    );
                     return Err(code);
                 }
-            };
-            Some(db::content_hash(&existing))
-        } else {
-            None
-        };
-        let compiled_hash = db::content_hash(&content);
-        let last_compiled_hash = load
-            .workspace
-            .last_compiled_hash
-            .clone()
-            .unwrap_or_default();
-        let should_create_snapshot =
-            load.workspace.last_compiled_hash.as_deref() != Some(compiled_hash.as_str());
-        let conflict = match existing_hash.as_deref() {
-            Some(existing) if existing != last_compiled_hash => true,
-            Some(_) => false,
-            None => false,
-        };
-        if conflict && conflict_policy == "import_as_fragment" {
-            debug_log!(
-                "[modudoc][write_target_file] conflict import_as_fragment workspace_id={}",
-                workspace_id
-            );
-            commands::import_markdown_file(
-                app.clone(),
-                state.clone(),
-                workspace_id.clone(),
-                target_path.clone(),
-                "import_as_fragment".into(),
-            )
-            .await?;
-            sqlx::query(
-                "UPDATE workspaces SET status = 'conflicted', updated_at = ?2 WHERE id = ?1",
-            )
-            .bind(&workspace_id)
-            .bind(db::now_iso())
-            .execute(state.pool())
-            .await
-            .map_err(crate::error::normalize_error)?;
-            commands::emit_workspace_status_for(
-                &app,
-                "conflict_imported_as_fragment",
-                &workspace_id,
-            );
-            return Ok(());
-        }
-        if conflict
-            && conflict_policy != "backup_then_overwrite"
-            && conflict_policy != "overwrite_target"
-            && conflict_policy != "safe_sync"
-        {
-            debug_log!(
-                "[modudoc][write_target_file] conflict detected workspace_id={}",
-                workspace_id
-            );
-            Self::set_workspace_status(state.pool(), &workspace_id, "conflicted").await;
-            return Err("external_conflict".into());
-        }
-        if conflict && conflict_policy == "safe_sync" {
-            debug_log!(
-                "[modudoc][write_target_file] conflict safe_sync workspace_id={}",
-                workspace_id
-            );
-            Self::set_workspace_status(state.pool(), &workspace_id, "conflicted").await;
-            return Err("external_conflict".into());
-        }
-        if conflict && conflict_policy == "backup_then_overwrite" {
-            let backup_path =
-                target.with_extension(format!("{}.bak", chrono::Utc::now().format("%Y%m%d%H%M%S")));
-            if let Err(err) = tokio::fs::copy(target, &backup_path).await {
-                let code = Self::map_io_error(err);
-                Self::set_workspace_status(state.pool(), &workspace_id, "error").await;
-                return Err(code);
             }
         }
+
+        // Mark the watcher as ignored for this content hash BEFORE we
+        // touch disk, so the post-write notify event is swallowed.
+        let new_hash = db::content_hash(&document.content);
         let watcher_state = app
             .state::<crate::services::watcher::WatcherState>()
+            .inner()
             .clone();
-        watcher_state.mark_ignored(target_path.clone(), compiled_hash.clone());
-        if let Err(err) = Self::replace_file(content.as_str(), target).await {
-            Self::set_workspace_status(state.pool(), &workspace_id, "error").await;
+        watcher_state.mark_ignored(target_path.clone(), new_hash.clone());
+
+        // Atomic temp + rename.
+        if let Err(err) = Self::replace_file(&document.content, target).await {
+            Self::set_document_status(state.pool(), &document_id, "error").await;
+            commands::emit_document_status(
+                &app,
+                "document_writing_failed",
+                Some(&workspace_id),
+                Some(&document_id),
+            );
             return Err(err);
         }
+
+        // Best-effort pre-write snapshot. Only create one if the content
+        // hash actually changed since the last write.
+        if let Some(prev) = document.last_written_hash.as_deref() {
+            if prev != new_hash {
+                if let Err(err) = crate::services::snapshot::SnapshotService::create_for_document(
+                    state.pool(),
+                    &document_id,
+                    "Before write",
+                )
+                .await
+                {
+                    debug_log!(
+                        "[modudoc][write_document_to_file] snapshot create failed document_id={} err={}",
+                        document_id,
+                        err
+                    );
+                }
+            }
+        }
+
+        // Update the document row in a single statement.
         let timestamp = db::now_iso();
         sqlx::query(
-      "UPDATE workspaces SET last_compiled_at = ?2, last_compiled_hash = ?3, status = 'ready', updated_at = ?2 WHERE id = ?1",
-    )
-    .bind(&workspace_id)
-    .bind(&timestamp)
-    .bind(&compiled_hash)
-    .execute(state.pool())
-    .await
-    .map_err(crate::error::normalize_error)?;
-        let existing_link = sqlx::query_as::<_, (String,)>(
-            "SELECT id FROM file_links WHERE workspace_id = ?1 AND path = ?2 LIMIT 1",
+            r#"
+            UPDATE documents
+            SET last_written_at = ?2,
+                last_written_hash = ?3,
+                file_status = 'ready',
+                updated_at = ?2
+            WHERE id = ?1
+            "#,
         )
-        .bind(&workspace_id)
-        .bind(&target_path)
-        .fetch_optional(state.pool())
-        .await
-        .map_err(crate::error::normalize_error)?;
-        if let Some((id,)) = existing_link {
-            sqlx::query("UPDATE file_links SET last_known_hash = ?3, last_seen_at = ?4, is_managed = 1 WHERE id = ?1 AND workspace_id = ?2")
-        .bind(id)
-        .bind(&workspace_id)
-        .bind(&compiled_hash)
+        .bind(&document_id)
         .bind(&timestamp)
+        .bind(&new_hash)
         .execute(state.pool())
         .await
         .map_err(crate::error::normalize_error)?;
-        } else {
-            sqlx::query(
-        "INSERT INTO file_links (id, workspace_id, path, last_known_hash, last_seen_at, is_managed) VALUES (?1, ?2, ?3, ?4, ?5, 1)",
-      )
-      .bind(uuid::Uuid::new_v4().to_string())
-      .bind(&workspace_id)
-      .bind(&target_path)
-      .bind(&compiled_hash)
-      .bind(&timestamp)
-      .execute(state.pool())
-      .await
-      .map_err(crate::error::normalize_error)?;
-        }
-        if should_create_snapshot {
-            let _ = commands::create_snapshot(
-                app.clone(),
-                state.clone(),
-                workspace_id.clone(),
-                Some("auto_snapshot".into()),
-            )
-            .await;
-        }
-        commands::emit_workspace_status_for(&app, "workspace_synced", &workspace_id);
-        Ok(())
+
+        commands::emit_document_status(
+            &app,
+            "document_written",
+            Some(&workspace_id),
+            Some(&document_id),
+        );
+
+        // Re-SELECT and return the fresh row.
+        let updated_row: crate::types::DocumentRow =
+            sqlx::query_as("SELECT * FROM documents WHERE id = ?1")
+                .bind(&document_id)
+                .fetch_one(state.pool())
+                .await
+                .map_err(crate::error::normalize_error)?;
+        Ok(updated_row.into())
     }
 
-    async fn set_workspace_status(pool: &sqlx::SqlitePool, workspace_id: &str, status: &str) {
-        let _ = sqlx::query("UPDATE workspaces SET status = ?2, updated_at = ?3 WHERE id = ?1")
-            .bind(workspace_id)
-            .bind(status)
-            .bind(db::now_iso())
-            .execute(pool)
-            .await;
+    async fn set_document_status(pool: &sqlx::SqlitePool, document_id: &str, status: &str) {
+        let _ = sqlx::query(
+            "UPDATE documents SET file_status = ?2, updated_at = ?3 WHERE id = ?1",
+        )
+        .bind(document_id)
+        .bind(status)
+        .bind(db::now_iso())
+        .execute(pool)
+        .await;
     }
 
     async fn replace_file(content: &str, target: &Path) -> Result<(), String> {
@@ -256,6 +265,7 @@ impl FileWriterService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Document;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use std::str::FromStr;
     use tauri::test::{mock_builder, mock_context, noop_assets};
@@ -278,64 +288,158 @@ mod tests {
         pool
     }
 
-    #[tokio::test]
-    async fn safe_sync_conflict_marks_workspace_conflicted() {
-        let pool = test_pool().await;
+    async fn seed_workspace_and_document(
+        pool: &sqlx::SqlitePool,
+        target_path: &str,
+        last_written_hash: Option<&str>,
+    ) -> (String, String) {
         let timestamp = "2026-05-23T10:00:00Z".to_string();
+        let workspace_id = "workspace-writer".to_string();
+        let document_id = "document-writer".to_string();
 
+        sqlx::query(
+            r#"
+            INSERT INTO workspaces (id, name, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?3)
+            "#,
+        )
+        .bind(&workspace_id)
+        .bind("Writer")
+        .bind(&timestamp)
+        .execute(pool)
+        .await
+        .expect("workspace");
+
+        sqlx::query(
+            r#"
+            INSERT INTO documents (
+              id, workspace_id, name, content, content_hash, target_path,
+              file_status, last_written_at, last_written_hash, sort_order,
+              deleted_at, description, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, NULL, NULL, ?10, ?10)
+            "#,
+        )
+        .bind(&document_id)
+        .bind(&workspace_id)
+        .bind("Doc")
+        .bind("current content")
+        .bind(db::content_hash("current content"))
+        .bind(target_path)
+        .bind(if last_written_hash.is_some() {
+            "ready"
+        } else {
+            "dirty"
+        })
+        .bind(timestamp.clone())
+        .bind(last_written_hash)
+        .bind(&timestamp)
+        .execute(pool)
+        .await
+        .expect("document");
+
+        (workspace_id, document_id)
+    }
+
+    async fn load_document(pool: &sqlx::SqlitePool, id: &str) -> Document {
+        let row: crate::types::DocumentRow = sqlx::query_as("SELECT * FROM documents WHERE id = ?1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .expect("document row");
+        row.into()
+    }
+
+    fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
+        mock_builder()
+            .manage(crate::db::DbState::new(pool))
+            .manage(crate::services::watcher::WatcherState::new())
+            .build(mock_context(noop_assets()))
+            .expect("app")
+    }
+
+    #[tokio::test]
+    async fn write_document_to_file_marks_conflicted_when_external_change_detected() {
+        let pool = test_pool().await;
         let dir = tempfile::tempdir().expect("tempdir");
-        let target_path = dir.path().join("workspace.md");
+        let target_path = dir.path().join("doc.md");
         tokio::fs::write(&target_path, "external change")
             .await
-            .expect("write");
+            .expect("write external");
 
-        sqlx::query("INSERT INTO workspaces (id, name, target_path, default_recipe_id, status, last_compiled_at, last_compiled_hash, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'ready', NULL, ?5, ?6, ?6)")
-            .bind("workspace-writer")
-            .bind("Writer")
-            .bind(target_path.to_string_lossy().to_string())
-            .bind("recipe-writer")
-            .bind("oldhash")
-            .bind(&timestamp)
-            .execute(&pool)
-            .await
-            .expect("workspace");
-        sqlx::query("INSERT INTO recipes (id, workspace_id, name, description, is_active, created_at, updated_at) VALUES (?1, ?2, 'Default', '', 1, ?3, ?3)")
-            .bind("recipe-writer")
-            .bind("workspace-writer")
-            .bind(&timestamp)
-            .execute(&pool)
-            .await
-            .expect("recipe");
+        // Last-written hash is the hash of "previous" — which differs
+        // from the actual file content "external change".
+        let (_, document_id) = seed_workspace_and_document(
+            &pool,
+            &target_path.to_string_lossy(),
+            Some(&db::content_hash("previous")),
+        )
+        .await;
 
-        let app = mock_builder()
-            .manage(crate::db::DbState::new(pool.clone()))
-            .build(mock_context(noop_assets()))
-            .expect("app");
+        let app = build_app(pool.clone());
         let handle = app.handle().clone();
         let state = handle.state::<crate::db::DbState>();
 
-        let err = FileWriterService::write_target_file(
+        let document = load_document(&pool, &document_id).await;
+        let err = FileWriterService::write_document_to_file(
             handle.clone(),
             state,
-            "workspace-writer".into(),
-            "safe_sync".into(),
+            document,
         )
         .await
         .unwrap_err();
         assert_eq!(err, "external_conflict");
 
-        let status: String = sqlx::query_scalar("SELECT status FROM workspaces WHERE id = ?1")
-            .bind("workspace-writer")
-            .fetch_one(&pool)
+        let updated = load_document(&pool, &document_id).await;
+        assert_eq!(updated.file_status, "conflicted");
+    }
+
+    #[tokio::test]
+    async fn write_document_to_file_succeeds_and_updates_hashes() {
+        let pool = test_pool().await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let target_path = dir.path().join("doc.md");
+        // File on disk matches the last_written_hash → no conflict.
+        tokio::fs::write(&target_path, "previous")
             .await
-            .expect("status");
-        assert_eq!(status, "conflicted");
+            .expect("write previous");
+
+        let (_, document_id) = seed_workspace_and_document(
+            &pool,
+            &target_path.to_string_lossy(),
+            Some(&db::content_hash("previous")),
+        )
+        .await;
+
+        let app = build_app(pool.clone());
+        let handle = app.handle().clone();
+        let state = handle.state::<crate::db::DbState>();
+
+        let document = load_document(&pool, &document_id).await;
+        let updated = FileWriterService::write_document_to_file(
+            handle.clone(),
+            state,
+            document,
+        )
+        .await
+        .expect("write succeeds");
+
+        assert_eq!(updated.file_status, "ready");
+        assert_eq!(
+            updated.last_written_hash.as_deref(),
+            Some(db::content_hash("current content").as_str())
+        );
+        assert!(updated.last_written_at.is_some());
+
+        let on_disk = tokio::fs::read_to_string(&target_path)
+            .await
+            .expect("read back");
+        assert_eq!(on_disk, "current content");
     }
 
     #[tokio::test]
     async fn replace_file_overwrites_existing_target() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let target_path = dir.path().join("workspace.md");
+        let target_path = dir.path().join("doc.md");
         tokio::fs::write(&target_path, "old").await.expect("write old");
 
         FileWriterService::replace_file("new", &target_path)

@@ -1,21 +1,30 @@
 import { useTranslation } from "react-i18next";
 import { tMaybe } from "@/i18n/tMaybe";
 import { useAppStore } from "@/store/appStore";
+import {
+  selectActiveDocumentProcessStatus,
+  selectActiveDocumentStatusMessage,
+} from "@/store/selectors";
+import type { DocumentProcessStatus } from "@/store/types";
 
-const statusColor: Record<string, string> = {
+const statusColor: Record<DocumentProcessStatus, string> = {
   idle: "hsl(var(--muted-foreground))",
   editing: "hsl(38 92% 50%)",
   saving: "hsl(199 89% 48%)",
-  compiling: "hsl(219 84% 56%)",
+  writing: "hsl(219 84% 56%)",
   synced: "hsl(var(--primary))",
   error: "hsl(0 84% 60%)",
   conflicted: "hsl(8 84% 60%)",
 };
 
+/**
+ * Shows the active document's process status. In the document-first model
+ * the per-document status replaces the old workspace-level `compileStatus`.
+ */
 export function SyncStatusBadge() {
   const { t } = useTranslation();
-  const compileStatus = useAppStore((state) => state.compileStatus);
-  const workspaceStatusMessage = useAppStore((state) => state.workspaceStatusMessage);
+  const status = useAppStore(selectActiveDocumentProcessStatus);
+  const message = useAppStore(selectActiveDocumentStatusMessage);
 
   return (
     <div
@@ -31,18 +40,18 @@ export function SyncStatusBadge() {
         lineHeight: 1.2,
         color: "hsl(var(--foreground))",
       }}
-      title={workspaceStatusMessage ? tMaybe(t, workspaceStatusMessage) : ""}
+      title={message ? tMaybe(t, message) : ""}
     >
       <span
         style={{
           width: 8,
           height: 8,
           borderRadius: "50%",
-          background: statusColor[compileStatus] ?? statusColor.idle,
+          background: statusColor[status] ?? statusColor.idle,
         }}
       />
       <span>
-        {t("status")}: {tMaybe(t, compileStatus)}
+        {t("status")}: {tMaybe(t, status)}
       </span>
     </div>
   );

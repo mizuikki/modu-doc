@@ -1,57 +1,18 @@
-import type { AppState } from "./types";
+import type { UiState } from "./types";
 
-export function createDefaultWorkspaceState(): Pick<
-  AppState,
-  "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots"
-> {
-  return {
-    workspaces: [
-      {
-        id: "workspace-default",
-        name: "Default Workspace",
-        targetPath: null,
-        defaultRecipeId: "recipe-default",
-        status: "missing_target",
-        lastCompiledAt: null,
-        lastCompiledHash: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
-    fragments: [
-      {
-        id: "fragment-default",
-        workspaceId: "workspace-default",
-        name: "AGENTS.md",
-        content: "# ModuDoc\n",
-        contentHash: "",
-        sortOrder: 0,
-        isArchived: false,
-        deletedAt: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
-    recipes: [
-      {
-        id: "recipe-default",
-        workspaceId: "workspace-default",
-        name: "Default",
-        description: "",
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
-    recipeItems: [
-      {
-        id: "recipe-item-default",
-        recipeId: "recipe-default",
-        fragmentId: "fragment-default",
-        enabled: true,
-        sortOrder: 0,
-      },
-    ],
-    snapshots: [],
-  };
-}
+export const initialUI: UiState = {
+  theme: "light",
+  centerMode: "edit",
+  sidebarWidth: 220,
+  rightPanelWidth: 320,
+  rightPanelTab: "fragments",
+  rightPanelCollapsed: true,
+  zenMode: false,
+  cheatsheetOpen: false,
+  settingsDialogOpen: false,
+};
+
+export const SIDEBAR_WIDTH_MIN = 176;
+export const SIDEBAR_WIDTH_MAX = 320;
+export const RIGHT_PANEL_WIDTH_MIN = 280;
+export const RIGHT_PANEL_WIDTH_MAX = 480;

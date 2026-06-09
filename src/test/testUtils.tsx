@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { DialogProvider } from "@/components/dialog/DialogProvider";
 import { ToastProvider } from "@/components/toast/ToastProvider";
 import "@/i18n/i18n";
-import { useAppStore } from "@/store/appStore";
+import { initialUI, useAppStore } from "@/store/appStore";
 
 export function resetAppStore() {
   localStorage.clear();
@@ -10,26 +10,17 @@ export function resetAppStore() {
   useAppStore.setState({
     workspaces: [],
     activeWorkspaceId: null,
-    activeRecipeId: null,
-    activeFragmentId: null,
-    selectedSnapshotId: null,
+    documents: [],
+    activeDocumentId: null,
     fragments: [],
     recipes: [],
     recipeItems: [],
-    snapshots: [],
-    editorDrafts: {},
-    compileStatus: "idle",
-    workspaceStatusMessage: null,
-    ui: {
-      theme: "light",
-      activeMainTab: "edit",
-      sidebarCollapsed: false,
-      zenMode: false,
-      sidebarWidth: 196,
-      assemblyWidth: 500,
-      cheatsheetOpen: false,
-      settingsDialogOpen: false,
-    },
+    snapshotsByDocumentId: {},
+    selectedSnapshotId: null,
+    documentDrafts: {},
+    documentProcessStatus: {},
+    documentStatusMessage: {},
+    ui: { ...initialUI },
   });
 }
 

@@ -1,5 +1,14 @@
-import type { WorkspaceLoadResult } from "@/lib/api/types";
 import type {
+  DocumentWire,
+  FragmentWire,
+  RecipeItemWire,
+  RecipeWire,
+  SnapshotWire,
+  WorkspaceLoadResult,
+  WorkspaceWire,
+} from "@/lib/api/types";
+import type {
+  DocumentSummary,
   Fragment,
   Recipe,
   RecipeItem,
@@ -7,65 +16,108 @@ import type {
   WorkspaceSummary,
 } from "@/store/types";
 
-export function toWorkspaceSummary(workspace: WorkspaceLoadResult["workspace"]): WorkspaceSummary {
+export function mapWorkspace(wire: WorkspaceWire): WorkspaceSummary {
   return {
-    id: workspace.id,
-    name: workspace.name,
-    targetPath: workspace.target_path,
-    defaultRecipeId: workspace.default_recipe_id,
-    status: workspace.status as WorkspaceSummary["status"],
-    lastCompiledAt: workspace.last_compiled_at,
-    lastCompiledHash: workspace.last_compiled_hash,
-    createdAt: workspace.created_at,
-    updatedAt: workspace.updated_at,
+    id: wire.id,
+    name: wire.name,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
   };
 }
 
-export function toFragment(fragment: WorkspaceLoadResult["fragments"][number]): Fragment {
+export function mapDocument(wire: DocumentWire): DocumentSummary {
   return {
-    id: fragment.id,
-    workspaceId: fragment.workspace_id,
-    name: fragment.name,
-    content: fragment.content,
-    contentHash: fragment.content_hash,
-    sortOrder: fragment.sort_order,
-    isArchived: fragment.is_archived,
-    deletedAt: fragment.deleted_at,
-    createdAt: fragment.created_at,
-    updatedAt: fragment.updated_at,
+    id: wire.id,
+    workspaceId: wire.workspace_id,
+    name: wire.name,
+    content: wire.content,
+    contentHash: wire.content_hash,
+    targetPath: wire.target_path,
+    fileStatus: wire.file_status,
+    lastWrittenAt: wire.last_written_at,
+    lastWrittenHash: wire.last_written_hash,
+    sortOrder: wire.sort_order,
+    deletedAt: wire.deleted_at,
+    description: wire.description,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
   };
 }
 
-export function toRecipe(recipe: WorkspaceLoadResult["recipes"][number]): Recipe {
+export function mapFragment(wire: FragmentWire): Fragment {
   return {
-    id: recipe.id,
-    workspaceId: recipe.workspace_id,
-    name: recipe.name,
-    description: recipe.description,
-    isActive: recipe.is_active,
-    createdAt: recipe.created_at,
-    updatedAt: recipe.updated_at,
+    id: wire.id,
+    workspaceId: wire.workspace_id,
+    name: wire.name,
+    content: wire.content,
+    contentHash: wire.content_hash,
+    // tags wire field is a JSON string; in-memory shape also stores a string.
+    tags: wire.tags,
+    category: wire.category,
+    sortOrder: wire.sort_order,
+    deletedAt: wire.deleted_at,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
   };
 }
 
-export function toRecipeItem(item: WorkspaceLoadResult["recipe_items"][number]): RecipeItem {
+export function mapRecipe(wire: RecipeWire): Recipe {
   return {
-    id: item.id,
-    recipeId: item.recipe_id,
-    fragmentId: item.fragment_id,
-    enabled: item.enabled,
-    sortOrder: item.sort_order,
+    id: wire.id,
+    workspaceId: wire.workspace_id,
+    name: wire.name,
+    description: wire.description,
+    deletedAt: wire.deleted_at,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
   };
 }
 
-export function toSnapshot(snapshot: WorkspaceLoadResult["snapshots"][number]): SnapshotSummary {
+export function mapRecipeItem(wire: RecipeItemWire): RecipeItem {
   return {
-    id: snapshot.id,
-    workspaceId: snapshot.workspace_id,
-    recipeId: snapshot.recipe_id,
-    label: snapshot.label,
-    compiledText: snapshot.compiled_text,
-    compiledHash: snapshot.compiled_hash,
-    createdAt: snapshot.created_at,
+    id: wire.id,
+    recipeId: wire.recipe_id,
+    fragmentId: wire.fragment_id,
+    enabled: wire.enabled,
+    sortOrder: wire.sort_order,
+  };
+}
+
+export function mapSnapshot(wire: SnapshotWire): SnapshotSummary {
+  return {
+    id: wire.id,
+    documentId: wire.document_id,
+    label: wire.label,
+    content: wire.content,
+    contentHash: wire.content_hash,
+    createdAt: wire.created_at,
+  };
+}
+
+export type LoadResultBundle = {
+  workspace: WorkspaceSummary;
+  documents: DocumentSummary[];
+  fragments: Fragment[];
+  recipes: Recipe[];
+  recipeItems: RecipeItem[];
+  snapshotsByDocumentId: Record<string, SnapshotSummary[]>;
+};
+
+export function mapLoadResult(wire: WorkspaceLoadResult): LoadResultBundle {
+  const fragments = wire.fragments.map(mapFragment);
+  const recipes = wire.recipes.map(mapRecipe);
+  const recipeItems = wire.recipe_items.map(mapRecipeItem);
+  const documents = wire.documents.map(mapDocument);
+  const snapshotsByDocumentId: Record<string, SnapshotSummary[]> = {};
+  for (const [docId, list] of Object.entries(wire.snapshots ?? {})) {
+    snapshotsByDocumentId[docId] = list.map(mapSnapshot);
+  }
+  return {
+    workspace: mapWorkspace(wire.workspace),
+    documents,
+    fragments,
+    recipes,
+    recipeItems,
+    snapshotsByDocumentId,
   };
 }

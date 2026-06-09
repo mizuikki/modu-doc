@@ -1,207 +1,101 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { isScreenshotMode } from "@/app/screenshotMode";
 import { useToast } from "@/components/toast/ToastProvider";
 import { updateFragment } from "@/lib/api/fragments";
-import { logDebugPerf } from "@/lib/debugPerf";
-import { scheduleWorkspaceSync } from "@/lib/syncScheduler";
-import { applyWorkspaceWriteError } from "@/lib/workspaceWrite";
-import { useAppStore } from "@/store/appStore";
-import { selectActiveFragment, selectActiveWorkspace } from "@/store/selectors";
+import { normalizeAppError } from "@/lib/appError";
+import type { Fragment } from "@/store/types";
 import { MilkdownEditor } from "./MilkdownEditor";
 
 const AUTO_SAVE_DELAY_MS = 800;
 
-export function FragmentEditor() {
+type FragmentEditorProps = {
+  fragment: Fragment;
+  onClose?: () => void;
+};
+
+/**
+ * The fragment editor is now a focused modal-style component used from the
+ * right panel's Fragments tab. It is no longer the default main-panel editor
+ * (that role is owned by `DocumentEditor`).
+ *
+ * Edits are persisted via `updateFragment` on a debounce. There is no longer a
+ * workspace-level sync or recipe target to flush to; conflicts are tracked on
+ * the bound document instead, and `DocumentTargetBar` writes the file.
+ */
+export function FragmentEditor({ fragment, onClose }: FragmentEditorProps) {
   const { t } = useTranslation();
   const toast = useToast();
-  const fragment = useAppStore(selectActiveFragment);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
-  const updateEditorDraft = useAppStore((state) => state.updateEditorDraft);
-  const flushEditorDraft = useAppStore((state) => state.flushEditorDraft);
-  const clearEditorDraft = useAppStore((state) => state.clearEditorDraft);
-  const restoreFragmentContent = useAppStore((state) => state.restoreFragmentContent);
-  const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
-  const setCompileStatus = useAppStore((state) => state.setCompileStatus);
-  const [value, setValue] = useState(fragment?.content ?? "");
-  const valueRef = useRef(value);
-  const dirtyRef = useRef(false);
-  const loadedFragmentIdRef = useRef<string | null>(fragment?.id ?? null);
-  const activeFragmentRef = useRef(fragment);
-  const activeWorkspaceRef = useRef(activeWorkspace);
-  const lastFailedAutoSaveRef = useRef<string | null>(null);
+  const [value, setValue] = useState(fragment.content);
+  const [saving, setSaving] = useState(false);
 
+  // Reset the local buffer when the active fragment changes.
   useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
+    setValue(fragment.content);
+  }, [fragment.content]);
 
+  // Debounced auto-save: send every change to the backend after a quiet period.
   useEffect(() => {
-    activeFragmentRef.current = fragment;
-  }, [fragment]);
-
-  useEffect(() => {
-    activeWorkspaceRef.current = activeWorkspace;
-  }, [activeWorkspace]);
-
-  useEffect(() => {
-    if (!fragment) {
-      void logDebugPerf("fragment editor: active fragment changed", { fragmentId: null });
-      loadedFragmentIdRef.current = null;
-      dirtyRef.current = false;
-      valueRef.current = "";
-      setValue("");
+    if (value === fragment.content) {
       return;
     }
-
-    const fragmentChanged = loadedFragmentIdRef.current !== fragment.id;
-    const storeMatchesEditor = fragment.content === valueRef.current;
-    void logDebugPerf("fragment editor: active fragment changed", {
-      fragmentId: fragment.id,
-      fragmentChanged,
-      valueBytes: fragment.content.length,
-    });
-    if (fragmentChanged || !dirtyRef.current || storeMatchesEditor) {
-      loadedFragmentIdRef.current = fragment.id;
-      dirtyRef.current = false;
-      valueRef.current = fragment.content;
-      setValue(fragment.content);
-      void logDebugPerf("fragment editor: document bound", {
-        documentId: fragment.id,
-        reason: fragmentChanged
-          ? "fragment_changed"
-          : storeMatchesEditor
-            ? "store_matches"
-            : "clean",
-        valueBytes: fragment.content.length,
-      });
-    }
-  }, [fragment]);
-
-  const persistFragmentValue = useEffectEvent(
-    async (
-      targetFragment: typeof fragment,
-      targetWorkspace: typeof activeWorkspace,
-      nextValue: string,
-      source: "auto" | "blur",
-    ) => {
-      if (!targetFragment) {
-        return;
-      }
-      if (isScreenshotMode()) {
-        return;
-      }
-      if (source === "auto" && lastFailedAutoSaveRef.current === nextValue) {
-        return;
-      }
-      if (nextValue === targetFragment.content) {
-        if (valueRef.current === nextValue) {
-          clearEditorDraft(targetFragment.id);
-        }
-        dirtyRef.current = false;
-        lastFailedAutoSaveRef.current = null;
-        return;
-      }
-
-      const previousContent = targetFragment.content;
-      updateEditorDraft(targetFragment.id, nextValue);
-      flushEditorDraft(targetFragment.id);
+    const timeoutId = window.setTimeout(async () => {
+      setSaving(true);
       try {
-        await updateFragment({
-          id: targetFragment.id,
-          name: targetFragment.name,
-          content: nextValue,
-        });
+        await updateFragment({ id: fragment.id, content: value });
       } catch (error) {
-        restoreFragmentContent(targetFragment.id, previousContent);
-        clearEditorDraft(targetFragment.id);
-        dirtyRef.current = true;
-        lastFailedAutoSaveRef.current = nextValue;
-        const message = applyWorkspaceWriteError(
-          setWorkspaceStatusMessage,
-          setCompileStatus,
-          error,
-        );
-        toast.error(message, t("action_failed"));
-        return;
+        toast.error(normalizeAppError(error), t("action_failed"));
+      } finally {
+        setSaving(false);
       }
-
-      lastFailedAutoSaveRef.current = null;
-      if (loadedFragmentIdRef.current === targetFragment.id && valueRef.current === nextValue) {
-        dirtyRef.current = false;
-      }
-      clearEditorDraft(targetFragment.id);
-
-      if (targetWorkspace?.targetPath) {
-        scheduleWorkspaceSync({
-          workspaceId: targetWorkspace.id,
-          setWorkspaceStatusMessage,
-          setCompileStatus,
-        });
-      }
-    },
-  );
-
-  const persistFragment = useEffectEvent(async (nextValue: string, source: "auto" | "blur") => {
-    const currentFragment = activeFragmentRef.current;
-    if (!currentFragment) {
-      return;
-    }
-    await persistFragmentValue(currentFragment, activeWorkspaceRef.current, nextValue, source);
-  });
-
-  useEffect(() => {
-    const fragmentToFlush = fragment;
-    const workspaceToFlush = activeWorkspace;
-    return () => {
-      const nextValue = valueRef.current;
-      if (!fragmentToFlush || nextValue === fragmentToFlush.content) {
-        return;
-      }
-      void persistFragmentValue(fragmentToFlush, workspaceToFlush, nextValue, "blur");
-    };
-  }, [activeWorkspace, fragment]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: persistFragment is a useEffectEvent with a stable identity and must not be in deps
-  useEffect(() => {
-    if (!fragment || value === fragment.content) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void persistFragment(value, "auto");
     }, AUTO_SAVE_DELAY_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [fragment, persistFragment, value]);
-
-  if (!fragment) {
-    return <div style={{ padding: 16 }}>{t("select_fragment_to_edit")}</div>;
-  }
+  }, [fragment.content, fragment.id, t, toast, value]);
 
   return (
-    <div style={{ padding: 16, display: "grid", gap: 8 }}>
-      <label id="fragment-editor-label" htmlFor="fragment-editor">
-        {t("editor")}: {fragment.name}
-      </label>
+    <div
+      style={{
+        padding: 16,
+        display: "grid",
+        gap: 8,
+        minHeight: 0,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <label id="fragment-editor-label" htmlFor="fragment-editor">
+          {t("editor")}: {fragment.name}
+          {saving ? ` (${t("saving")})` : ""}
+        </label>
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            data-testid="fragment-editor-close"
+            style={{
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 8,
+              padding: "4px 10px",
+              background: "hsl(var(--card))",
+              color: "hsl(var(--foreground))",
+              cursor: "pointer",
+            }}
+          >
+            {t("close")}
+          </button>
+        ) : null}
+      </div>
       <MilkdownEditor
         documentId={fragment.id}
         value={value}
         placeholder={t("editor_placeholder")}
-        onChange={(nextValue) => {
-          valueRef.current = nextValue;
-          setValue(nextValue);
-          const nextDirty = nextValue !== fragment.content;
-          if (nextDirty && !dirtyRef.current) {
-            setCompileStatus("editing");
-          }
-          dirtyRef.current = nextDirty;
-          if (nextDirty) {
-            lastFailedAutoSaveRef.current = null;
-          }
-        }}
-        onBlur={() => {
-          const nextValue = valueRef.current;
-          void persistFragment(nextValue, "blur");
-        }}
+        onChange={(nextValue) => setValue(nextValue)}
+        onBlur={() => undefined}
       />
     </div>
   );

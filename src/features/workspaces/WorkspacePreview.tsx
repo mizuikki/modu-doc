@@ -1,62 +1,28 @@
-import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { tMaybe } from "@/i18n/tMaybe";
 import { openTargetInFileManager } from "@/lib/api/misc";
-import { logDebugPerf } from "@/lib/debugPerf";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveWorkspace } from "@/store/selectors";
+import { selectActiveDocument, selectActiveWorkspace } from "@/store/selectors";
+import type { DocumentFileStatus } from "@/store/types";
+
+const STATUS_LABEL_KEYS: Record<DocumentFileStatus, string> = {
+  missing_target: "missing_target",
+  dirty: "dirty",
+  ready: "ready",
+  conflicted: "conflicted",
+  error: "error",
+};
 
 export function WorkspacePreview() {
   const { t } = useTranslation();
   const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
-  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
-  const fragments = useAppStore((state) => state.fragments);
-  const recipeItems = useAppStore((state) => state.recipeItems);
-  const totalCount = recipeItems.filter((item) => item.recipeId === activeRecipeId).length;
-  const enabledCount = recipeItems.filter(
-    (item) => item.recipeId === activeRecipeId && item.enabled,
-  ).length;
+  const activeDocument = useAppStore(selectActiveDocument);
 
-  const fragmentsById = useMemo(() => {
-    const map = new Map<string, (typeof fragments)[number]>();
-    for (const fragment of fragments) {
-      if (fragment.deletedAt === null) {
-        map.set(fragment.id, fragment);
-      }
-    }
-    return map;
-  }, [fragments]);
-
-  const compiled = useMemo(() => {
-    const orderedItems = recipeItems
-      .filter((item) => item.recipeId === activeRecipeId && item.enabled)
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-    if (orderedItems.length === 0) {
-      return "";
-    }
-    const parts: string[] = [];
-    for (const item of orderedItems) {
-      const fragment = fragmentsById.get(item.fragmentId);
-      if (fragment) {
-        parts.push(fragment.content);
-      }
-    }
-    return parts.join("\n\n");
-  }, [activeRecipeId, fragmentsById, recipeItems]);
-
-  useEffect(() => {
-    void logDebugPerf("main-tab ready:preview", {
-      workspaceId: activeWorkspace?.id ?? null,
-      recipeId: activeRecipeId,
-      compiledBytes: compiled.length,
-      enabledCount,
-      totalCount,
-    });
-  }, [activeRecipeId, activeWorkspace?.id, compiled.length, enabledCount, totalCount]);
+  const status = activeDocument?.fileStatus ?? "missing_target";
+  const statusLabel = tMaybe(t, STATUS_LABEL_KEYS[status] ?? "missing_target");
 
   return (
     <div style={{ padding: 20, display: "grid", gap: 16 }}>
@@ -97,10 +63,12 @@ export function WorkspacePreview() {
                   {activeWorkspace?.name ?? t("no_workspace")}
                 </div>
                 <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                  {t("last_written_at")}:{" "}
-                  {activeWorkspace?.lastCompiledAt
-                    ? new Date(activeWorkspace.lastCompiledAt).toLocaleString()
-                    : t("never_compiled")}
+                  {tMaybe(t, "created_at")}:{" "}
+                  {activeWorkspace ? new Date(activeWorkspace.createdAt).toLocaleString() : "—"}
+                </div>
+                <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                  {tMaybe(t, "updated_at")}:{" "}
+                  {activeWorkspace ? new Date(activeWorkspace.updatedAt).toLocaleString() : "—"}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -114,44 +82,22 @@ export function WorkspacePreview() {
                     color: "hsl(var(--muted-foreground))",
                   }}
                 >
-                  {t("fragment_count", { count: totalCount })}
+                  {t("status")}: {statusLabel}
                 </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    border: "1px solid hsl(var(--primary))",
-                    background: "color-mix(in srgb, hsl(var(--primary)) 10%, transparent)",
-                    color: "hsl(var(--primary))",
-                  }}
-                >
-                  {t("enabled_count", { enabled: enabledCount })}
-                </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    border:
-                      activeWorkspace?.status === "missing_target"
-                        ? "1px solid hsl(8 70% 45%)"
-                        : "1px solid hsl(var(--border))",
-                    background:
-                      activeWorkspace?.status === "missing_target"
-                        ? "color-mix(in srgb, hsl(8 70% 45%) 10%, transparent)"
-                        : "hsl(var(--card))",
-                    color:
-                      activeWorkspace?.status === "missing_target"
-                        ? "hsl(8 70% 40%)"
-                        : "hsl(var(--muted-foreground))",
-                  }}
-                >
-                  {t("status")}:{" "}
-                  {activeWorkspace?.status
-                    ? tMaybe(t, activeWorkspace.status)
-                    : t("missing_target")}
-                </span>
+                {activeDocument ? (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      padding: "4px 10px",
+                      borderRadius: 999,
+                      border: "1px solid hsl(var(--primary))",
+                      background: "color-mix(in srgb, hsl(var(--primary)) 10%, transparent)",
+                      color: "hsl(var(--primary))",
+                    }}
+                  >
+                    {activeDocument.name}
+                  </span>
+                ) : null}
               </div>
               <div
                 style={{
@@ -165,8 +111,8 @@ export function WorkspacePreview() {
                 }}
               >
                 <strong>{t("current_target")}:</strong>{" "}
-                {activeWorkspace?.targetPath ? (
-                  activeWorkspace.targetPath
+                {activeDocument?.targetPath ? (
+                  activeDocument.targetPath
                 ) : (
                   <button
                     type="button"
@@ -187,14 +133,25 @@ export function WorkspacePreview() {
                   </button>
                 )}
               </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "hsl(var(--muted-foreground))",
+                }}
+              >
+                {t("last_written_at")}:{" "}
+                {activeDocument?.lastWrittenAt
+                  ? new Date(activeDocument.lastWrittenAt).toLocaleString()
+                  : "—"}
+              </div>
             </div>
             <button
               type="button"
               onClick={() => {
-                if (!activeWorkspace?.targetPath) return;
-                void openTargetInFileManager(activeWorkspace.id);
+                if (!activeDocument?.targetPath) return;
+                void openTargetInFileManager(activeDocument.id);
               }}
-              disabled={!activeWorkspace?.targetPath}
+              disabled={!activeDocument?.targetPath}
               data-testid="preview-open-target-folder"
             >
               {t("open_target_folder")}
@@ -223,7 +180,7 @@ export function WorkspacePreview() {
           </div>
           <div className="prose prose-sm max-w-none">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {compiled || t("empty_fragment")}
+              {activeDocument?.content || t("empty_fragment")}
             </ReactMarkdown>
           </div>
         </section>

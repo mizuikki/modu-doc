@@ -1,16 +1,24 @@
 import { initialUI, useAppStore } from "@/store/appStore";
-import type { AppState } from "@/store/types";
+import type { AppState, DocumentFileStatus } from "@/store/types";
 
-type ScreenshotScenarioId = "default" | "edit-fragment" | "preview" | "history" | "library-insert";
+type ScreenshotScenarioId =
+  | "default"
+  | "workspace-ready"
+  | "edit-fragment"
+  | "preview"
+  | "history"
+  | "library-insert";
 
 type ScreenshotScenario = {
-  app: Pick<AppState, "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots">;
+  app: Pick<
+    AppState,
+    "workspaces" | "documents" | "fragments" | "recipes" | "recipeItems" | "snapshotsByDocumentId"
+  >;
   activeWorkspaceId: string | null;
-  activeRecipeId: string | null;
-  activeFragmentId: string | null;
+  activeDocumentId: string | null;
   selectedSnapshotId: string | null;
-  compileStatus: AppState["compileStatus"];
-  workspaceStatusMessage: string | null;
+  documentProcessStatus: AppState["documentProcessStatus"];
+  documentStatusMessage: AppState["documentStatusMessage"];
   ui: Partial<AppState["ui"]>;
   libraryDialog?: "insert" | null;
 };
@@ -42,6 +50,13 @@ function getCapturePort() {
   return Number.isFinite(port) && port > 0 ? port : null;
 }
 
+function setScreenshotReadyState(state: "pending" | "true" | "timeout" | "error") {
+  if (typeof document === "undefined") {
+    return;
+  }
+  document.documentElement.dataset.screenshotReady = state;
+}
+
 export function getScreenshotScenarioId(): ScreenshotScenarioId | null {
   const raw = searchParams()?.get("screenshot");
   if (!raw) {
@@ -49,6 +64,7 @@ export function getScreenshotScenarioId(): ScreenshotScenarioId | null {
   }
   const allowed = new Set<ScreenshotScenarioId>([
     "default",
+    "workspace-ready",
     "edit-fragment",
     "preview",
     "history",
@@ -64,19 +80,36 @@ export function isScreenshotMode() {
   return getScreenshotScenarioId() !== null;
 }
 
-const screenshotScenarioDefault: ScreenshotScenario = {
+const DOC_BASE = "2026-06-02T19:00:00.000Z";
+const DOC_UPDATED = "2026-06-03T12:00:00.000Z";
+const FIRST_RUN_UPDATED = "2026-06-09T14:19:54.000Z";
+
+const screenshotScenarioReadyState: ScreenshotScenario = {
   app: {
     workspaces: [
       {
         id: "workspace-screenshot",
         name: "E2E Workspace 1779597644735",
-        targetPath: null,
-        defaultRecipeId: "recipe-default",
-        status: "missing_target",
-        lastCompiledAt: "2026-06-02 20:42",
-        lastCompiledHash: "compiled-hash-default",
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
+      },
+    ],
+    documents: [
+      {
+        id: "document-main",
+        workspaceId: "workspace-screenshot",
+        name: "Main.md",
+        content: "Main document body",
+        contentHash: "hash-main",
+        targetPath: "/tmp/main.md",
+        fileStatus: "ready" satisfies DocumentFileStatus,
+        lastWrittenAt: "2026-06-03T08:40:00.000Z",
+        lastWrittenHash: "written-hash-main",
+        sortOrder: 0,
+        deletedAt: null,
+        description: null,
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
     ],
     fragments: [
@@ -86,11 +119,12 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         name: "Intro",
         content: "Intro body",
         contentHash: "hash-intro",
+        tags: "",
+        category: null,
         sortOrder: 0,
-        isArchived: false,
         deletedAt: null,
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
       {
         id: "fragment-middle",
@@ -98,11 +132,12 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         name: "Middle",
         content: "Middle body",
         contentHash: "hash-middle",
+        tags: "",
+        category: null,
         sortOrder: 1,
-        isArchived: false,
         deletedAt: null,
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
       {
         id: "fragment-outro",
@@ -110,11 +145,12 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         name: "Outro",
         content: "Outro body",
         contentHash: "hash-outro",
+        tags: "",
+        category: null,
         sortOrder: 2,
-        isArchived: false,
         deletedAt: null,
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
       {
         id: "fragment-unknown",
@@ -122,11 +158,12 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         name: "Unknown fragment",
         content: "Empty fragment",
         contentHash: "hash-unknown",
+        tags: "",
+        category: null,
         sortOrder: 3,
-        isArchived: false,
         deletedAt: null,
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
       {
         id: "fragment-test",
@@ -134,11 +171,12 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         name: "test",
         content: "test123",
         contentHash: "hash-test",
+        tags: "",
+        category: null,
         sortOrder: 4,
-        isArchived: false,
         deletedAt: null,
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
       {
         id: "fragment-library-only",
@@ -146,11 +184,12 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         name: "Appendix",
         content: "Library-only body",
         contentHash: "hash-library",
+        tags: "",
+        category: null,
         sortOrder: 5,
-        isArchived: false,
         deletedAt: null,
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
     ],
     recipes: [
@@ -159,9 +198,9 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         workspaceId: "workspace-screenshot",
         name: "Default",
         description: "",
-        isActive: true,
-        createdAt: "2026-06-02T19:00:00.000Z",
-        updatedAt: "2026-06-03T12:00:00.000Z",
+        deletedAt: null,
+        createdAt: DOC_BASE,
+        updatedAt: DOC_UPDATED,
       },
     ],
     recipeItems: [
@@ -201,37 +240,36 @@ const screenshotScenarioDefault: ScreenshotScenario = {
         sortOrder: 4,
       },
     ],
-    snapshots: [
-      {
-        id: "snapshot-baseline",
-        workspaceId: "workspace-screenshot",
-        recipeId: "recipe-default",
-        label: "Baseline snapshot",
-        compiledText: "Intro body\n\n---\n\nMiddle body\n\n---\n\nOutro body",
-        compiledHash: "snapshot-hash-1",
-        createdAt: "2026-06-02 18:15",
-      },
-      {
-        id: "snapshot-latest",
-        workspaceId: "workspace-screenshot",
-        recipeId: "recipe-default",
-        label: "Latest snapshot",
-        compiledText: "Intro body\n\n---\n\nMiddle body\n\n---\n\nUnknown fragment",
-        compiledHash: "snapshot-hash-2",
-        createdAt: "2026-06-03 08:40",
-      },
-    ],
+    snapshotsByDocumentId: {
+      "document-main": [
+        {
+          id: "snapshot-baseline",
+          documentId: "document-main",
+          label: "Baseline snapshot",
+          content: "Intro body\n\n---\n\nMiddle body\n\n---\n\nOutro body",
+          contentHash: "snapshot-hash-1",
+          createdAt: "2026-06-02 18:15",
+        },
+        {
+          id: "snapshot-latest",
+          documentId: "document-main",
+          label: "Latest snapshot",
+          content: "Intro body\n\n---\n\nMiddle body\n\n---\n\nUnknown fragment",
+          contentHash: "snapshot-hash-2",
+          createdAt: "2026-06-03 08:40",
+        },
+      ],
+    },
   },
   activeWorkspaceId: "workspace-screenshot",
-  activeRecipeId: "recipe-default",
-  activeFragmentId: "fragment-intro",
+  activeDocumentId: "document-main",
   selectedSnapshotId: "snapshot-latest",
-  compileStatus: "idle",
-  workspaceStatusMessage: null,
+  documentProcessStatus: { "document-main": "idle" },
+  documentStatusMessage: {},
   ui: {
     theme: "light",
-    activeMainTab: "edit",
-    sidebarCollapsed: false,
+    centerMode: "edit",
+    rightPanelCollapsed: true,
     zenMode: false,
     cheatsheetOpen: false,
     settingsDialogOpen: false,
@@ -239,33 +277,108 @@ const screenshotScenarioDefault: ScreenshotScenario = {
   libraryDialog: null,
 };
 
-function createScenario(overrides: Partial<ScreenshotScenario>): ScreenshotScenario {
+const screenshotScenarioFirstRun: ScreenshotScenario = {
+  app: {
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Untitled",
+        createdAt: DOC_BASE,
+        updatedAt: FIRST_RUN_UPDATED,
+      },
+      {
+        id: "workspace-2",
+        name: "Untitled",
+        createdAt: DOC_BASE,
+        updatedAt: FIRST_RUN_UPDATED,
+      },
+      {
+        id: "workspace-3",
+        name: "Untitled",
+        createdAt: DOC_BASE,
+        updatedAt: FIRST_RUN_UPDATED,
+      },
+      {
+        id: "workspace-4",
+        name: "Untitled",
+        createdAt: DOC_BASE,
+        updatedAt: FIRST_RUN_UPDATED,
+      },
+    ],
+    documents: [
+      {
+        id: "document-main",
+        workspaceId: "workspace-4",
+        name: "Main.md",
+        content: "",
+        contentHash: "hash-main-empty",
+        targetPath: null,
+        fileStatus: "missing_target" satisfies DocumentFileStatus,
+        lastWrittenAt: null,
+        lastWrittenHash: null,
+        sortOrder: 0,
+        deletedAt: null,
+        description: null,
+        createdAt: DOC_BASE,
+        updatedAt: FIRST_RUN_UPDATED,
+      },
+    ],
+    fragments: [],
+    recipes: [],
+    recipeItems: [],
+    snapshotsByDocumentId: {},
+  },
+  activeWorkspaceId: "workspace-4",
+  activeDocumentId: "document-main",
+  selectedSnapshotId: null,
+  documentProcessStatus: { "document-main": "idle" },
+  documentStatusMessage: {},
+  ui: {
+    theme: "light",
+    centerMode: "edit",
+    rightPanelCollapsed: true,
+    zenMode: false,
+    cheatsheetOpen: false,
+    settingsDialogOpen: false,
+  },
+  libraryDialog: null,
+};
+
+function createScenario(
+  base: ScreenshotScenario,
+  overrides: Partial<ScreenshotScenario>,
+): ScreenshotScenario {
   return {
-    ...screenshotScenarioDefault,
+    ...base,
     ...overrides,
-    app: screenshotScenarioDefault.app,
+    app: base.app,
     ui: {
-      ...screenshotScenarioDefault.ui,
+      ...base.ui,
       ...overrides.ui,
     },
   };
 }
 
 const screenshotScenarios: Record<ScreenshotScenarioId, ScreenshotScenario> = {
-  default: screenshotScenarioDefault,
-  "edit-fragment": screenshotScenarioDefault,
-  preview: createScenario({
+  default: screenshotScenarioFirstRun,
+  "workspace-ready": screenshotScenarioReadyState,
+  "edit-fragment": screenshotScenarioReadyState,
+  preview: createScenario(screenshotScenarioReadyState, {
     ui: {
-      activeMainTab: "preview",
+      centerMode: "preview",
     },
   }),
-  history: createScenario({
+  history: createScenario(screenshotScenarioReadyState, {
     ui: {
-      activeMainTab: "history",
+      centerMode: "history",
     },
   }),
-  "library-insert": createScenario({
-    libraryDialog: "insert",
+  "library-insert": createScenario(screenshotScenarioReadyState, {
+    ui: {
+      rightPanelCollapsed: false,
+      rightPanelTab: "fragments",
+    },
+    libraryDialog: null,
   }),
 };
 
@@ -282,11 +395,10 @@ export function applyScreenshotScenario() {
     ...current,
     ...scenario.app,
     activeWorkspaceId: scenario.activeWorkspaceId,
-    activeRecipeId: scenario.activeRecipeId,
-    activeFragmentId: scenario.activeFragmentId,
+    activeDocumentId: scenario.activeDocumentId,
     selectedSnapshotId: scenario.selectedSnapshotId,
-    compileStatus: scenario.compileStatus,
-    workspaceStatusMessage: scenario.workspaceStatusMessage,
+    documentProcessStatus: scenario.documentProcessStatus,
+    documentStatusMessage: scenario.documentStatusMessage,
     ui: {
       ...initialUI,
       ...scenario.ui,
@@ -336,23 +448,35 @@ function screenshotSceneLooksReady() {
     return false;
   }
 
-  const needsDialog = getScreenshotDialogMode() !== null;
-  if (needsDialog && !document.querySelector('[role="dialog"]')) {
-    return false;
-  }
-
   if (
-    (scenarioId === "default" || scenarioId === "edit-fragment") &&
-    !document.querySelector("#fragment-editor .ProseMirror, #fragment-editor textarea")
+    !document.querySelector("[data-testid='document-header']") ||
+    !document.querySelector("[data-testid='target-bar']")
   ) {
     return false;
   }
 
-  return Boolean(
-    document.querySelector("[data-testid='main-tab-edit']") ||
-      document.querySelector("[data-testid='main-tab-preview']") ||
-      document.querySelector("[data-testid='main-tab-history']"),
-  );
+  if (
+    (scenarioId === "default" ||
+      scenarioId === "workspace-ready" ||
+      scenarioId === "edit-fragment") &&
+    !document.querySelector("[data-testid='editor-pane-textarea']")
+  ) {
+    return false;
+  }
+
+  if (scenarioId === "preview" && !document.querySelector(".preview-pane")) {
+    return false;
+  }
+
+  if (scenarioId === "history" && !document.querySelector(".history-view")) {
+    return false;
+  }
+
+  if (scenarioId === "library-insert" && !document.querySelector(".right-panel")) {
+    return false;
+  }
+
+  return Boolean(document.querySelector(".document-editor"));
 }
 
 async function waitForScreenshotScene(timeoutMs = 10000) {
@@ -384,14 +508,21 @@ function normalizeSize(value: { width: number; height: number } | null | undefin
 export async function reportScreenshotReady() {
   const scenarioId = getScreenshotScenarioId();
   const capturePort = getCapturePort();
-  if (!scenarioId || !capturePort) {
+  if (!scenarioId) {
     return false;
   }
 
   try {
+    document.documentElement.dataset.screenshotScenario = scenarioId;
+    setScreenshotReadyState("pending");
     const ready = await waitForScreenshotScene();
     if (!ready) {
       console.warn("Screenshot scene did not fully stabilize before capture");
+    }
+    setScreenshotReadyState(ready ? "true" : "timeout");
+
+    if (!capturePort) {
+      return ready;
     }
 
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -430,6 +561,7 @@ export async function reportScreenshotReady() {
 
     return true;
   } catch (error) {
+    setScreenshotReadyState("error");
     console.error("Failed to report screenshot readiness", error);
     return false;
   }

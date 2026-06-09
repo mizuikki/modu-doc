@@ -9,11 +9,7 @@ function isWindowsAttachMode() {
   );
 }
 
-export async function dismissWorkspaceStatus() {
-  // The popover can re-render in response to fresh status events fired by the
-  // test's own actions (e.g. autosave, recipe updates), so a single close click
-  // is not enough. Drain it by clicking close in a loop until the message has
-  // stayed cleared for one full check cycle or we hit the timeout.
+export async function dismissDocumentStatus() {
   await browser.waitUntil(
     async () => {
       const popover = await $("[data-testid='workspace-status-popover']");
@@ -44,9 +40,6 @@ export async function ensureInteractable(element: WebdriverIO.Element, timeoutMs
   try {
     await element.scrollIntoView({ block: "center", inline: "center" });
   } catch {
-    // WebDriver's scrollIntoView can fail with "move target out of bounds" on
-    // nested scroll containers. Fall back to a JS-driven scroll on the
-    // nearest scrollable ancestor so the element is brought into view.
     await browser.execute((target) => {
       const elementNode = target as HTMLElement | null;
       if (!elementNode) return;
@@ -133,20 +126,6 @@ export async function safeSetValue(selector: string, value: string, timeoutMs = 
   }
 }
 
-export async function selectWorkspaceById(workspaceId: string, timeoutMs = 20000) {
-  await dismissWorkspaceStatus();
-  await safeClick("[data-testid='workspace-select-trigger']", timeoutMs);
-  await safeClick(`[data-testid='workspace-select-item-${workspaceId}']`, timeoutMs);
-  await browser.waitUntil(
-    async () => {
-      const trigger = await $("[data-testid='workspace-select-trigger']");
-      const current = await trigger.getAttribute("data-current-workspace-id");
-      return current === workspaceId;
-    },
-    { timeout: timeoutMs, interval: 200 },
-  );
-}
-
 export async function openSidebarMore(timeoutMs = 20000) {
   const trigger = await $("[data-testid='sidebar-more-trigger']");
   await ensureInteractable(trigger, timeoutMs);
@@ -156,34 +135,6 @@ export async function openSidebarMore(timeoutMs = 20000) {
     timeout: timeoutMs,
     interval: 100,
   });
-}
-
-export async function openAddFragmentMenu(timeoutMs = 20000) {
-  const trigger = await $("[data-testid='recipe-add-fragment-menu']");
-  await ensureInteractable(trigger, timeoutMs);
-  await safeClick("[data-testid='recipe-add-fragment-menu']", timeoutMs);
-  const content = await $("[data-testid='recipe-add-fragment-menu-content']");
-  await browser.waitUntil(async () => await content.isExisting(), {
-    timeout: timeoutMs,
-    interval: 100,
-  });
-}
-
-export async function openLibraryDialog(mode: "insert" | "manage" = "insert", timeoutMs = 20000) {
-  const trigger = (await $("[data-testid='recipe-add-fragment']").isExisting())
-    ? "[data-testid='recipe-add-fragment']"
-    : "[data-testid='recipe-empty-add-fragment']";
-  await safeClick(trigger, timeoutMs);
-  const dialog = await $("[data-testid='fragment-library-dialog']");
-  await browser.waitUntil(async () => await dialog.isExisting(), {
-    timeout: timeoutMs,
-    interval: 100,
-  });
-  if (mode === "manage") {
-    await safeClick("[data-testid='fragment-library-mode-manage']", timeoutMs);
-  } else {
-    await safeClick("[data-testid='fragment-library-mode-insert']", timeoutMs);
-  }
 }
 
 export async function openCommandPalette(timeoutMs = 20000) {
@@ -207,16 +158,59 @@ export async function runCommandPaletteCommand(labelSubstring: string, timeoutMs
   );
 }
 
-export async function createWorkspaceViaUI(name: string, timeoutMs = 20000) {
-  await openSidebarMore(timeoutMs);
-  await safeClick("[data-testid='sidebar-new-workspace']", timeoutMs);
-  await safeSetValue("[data-testid='app-prompt-input']", name, timeoutMs);
-  await safeClick("[data-testid='app-dialog-confirm']", timeoutMs);
+export async function selectDocumentInSidebar(documentId: string, timeoutMs = 20000) {
+  await safeClick(`[data-testid='sidebar-document-${documentId}']`, timeoutMs);
+  await browser.waitUntil(
+    async () => {
+      const trigger = await $(`[data-testid='sidebar-document-${documentId}']`);
+      return (await trigger.getAttribute("data-active")) === "true";
+    },
+    { timeout: timeoutMs, interval: 200 },
+  );
 }
 
-export async function createFragmentViaUI(name: string, timeoutMs = 20000) {
-  await openAddFragmentMenu(timeoutMs);
-  await safeClick("[data-testid='fragments-new']", timeoutMs);
-  await safeSetValue("[data-testid='app-prompt-input']", name, timeoutMs);
-  await safeClick("[data-testid='app-dialog-confirm']", timeoutMs);
+export async function clickCenterMode(
+  mode: "edit" | "split" | "preview" | "history",
+  timeoutMs = 20000,
+) {
+  await safeClick(`[data-testid='document-header-mode-${mode}']`, timeoutMs);
+}
+
+export async function clickTargetBarWrite(timeoutMs = 20000) {
+  await safeClick("[data-testid='target-bar-write']", timeoutMs);
+}
+
+export async function clickConflictPolicy(
+  policy: "import_external" | "overwrite_external" | "backup_and_overwrite" | "cancel",
+  timeoutMs = 20000,
+) {
+  await safeClick(`[data-testid='target-bar-resolve-${policy}']`, timeoutMs);
+}
+
+export async function waitForTargetBarConflict(timeoutMs = 20000) {
+  const bar = await $("[data-testid='target-bar-conflict']");
+  await browser.waitUntil(async () => await bar.isExisting(), {
+    timeout: timeoutMs,
+    interval: 200,
+  });
+}
+
+export async function assertDocumentFileStatus(
+  documentId: string,
+  expected: "missing_target" | "dirty" | "ready" | "conflicted" | "error" | (string & {}),
+  timeoutMs = 20000,
+) {
+  await browser.waitUntil(
+    async () => {
+      const status = await $(`[data-testid='sidebar-document-status-${documentId}']`);
+      if (!(await status.isExisting())) return false;
+      const text = (await status.getText()).trim().toLowerCase();
+      return text === expected.toLowerCase();
+    },
+    {
+      timeout: timeoutMs,
+      interval: 200,
+      timeoutMsg: `expected document ${documentId} file_status=${expected}`,
+    },
+  );
 }

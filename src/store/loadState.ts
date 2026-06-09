@@ -1,59 +1,34 @@
-import type { AppState } from "./types";
-
-type LoadPayload = Pick<
-  AppState,
-  "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots"
->;
+import { pickFirstVisibleDocument } from "./activation";
+import type { AppState, LoadWorkspaceBundleInput, SnapshotSummary } from "./types";
 
 export function applyLoadedWorkspaceState(
-  current: AppState,
-  initial: LoadPayload,
+  state: AppState,
+  payload: LoadWorkspaceBundleInput,
 ): Pick<
   AppState,
-  | "workspaces"
+  | "documents"
   | "fragments"
   | "recipes"
   | "recipeItems"
-  | "snapshots"
-  | "activeWorkspaceId"
-  | "activeRecipeId"
-  | "activeFragmentId"
+  | "snapshotsByDocumentId"
+  | "activeDocumentId"
   | "selectedSnapshotId"
 > {
-  const activeWorkspaceId =
-    current.activeWorkspaceId &&
-    initial.workspaces.some((workspace) => workspace.id === current.activeWorkspaceId)
-      ? current.activeWorkspaceId
-      : (initial.workspaces[0]?.id ?? null);
+  const nextActiveDocument = pickFirstVisibleDocument(payload.documents, state.activeDocumentId);
+  const activeDocumentId = nextActiveDocument?.id ?? null;
 
-  const activeRecipeId =
-    current.activeRecipeId && initial.recipes.some((recipe) => recipe.id === current.activeRecipeId)
-      ? current.activeRecipeId
-      : (initial.recipes.find((recipe) => recipe.isActive)?.id ?? initial.recipes[0]?.id ?? null);
-
-  const activeFragmentId =
-    current.activeFragmentId &&
-    initial.fragments.some(
-      (fragment) => fragment.id === current.activeFragmentId && fragment.deletedAt === null,
-    )
-      ? current.activeFragmentId
-      : (initial.fragments.find((fragment) => fragment.deletedAt === null)?.id ?? null);
-
-  const selectedSnapshotId =
-    current.selectedSnapshotId &&
-    initial.snapshots.some((snapshot) => snapshot.id === current.selectedSnapshotId)
-      ? current.selectedSnapshotId
-      : (initial.snapshots[0]?.id ?? null);
+  const activeSnapshots: SnapshotSummary[] = activeDocumentId
+    ? (payload.snapshotsByDocumentId[activeDocumentId] ?? [])
+    : [];
+  const selectedSnapshotId = activeSnapshots[0]?.id ?? null;
 
   return {
-    workspaces: initial.workspaces,
-    fragments: initial.fragments,
-    recipes: initial.recipes,
-    recipeItems: initial.recipeItems,
-    snapshots: initial.snapshots,
-    activeWorkspaceId,
-    activeRecipeId,
-    activeFragmentId,
+    documents: payload.documents,
+    fragments: payload.fragments,
+    recipes: payload.recipes,
+    recipeItems: payload.recipeItems,
+    snapshotsByDocumentId: payload.snapshotsByDocumentId,
+    activeDocumentId,
     selectedSnapshotId,
   };
 }

@@ -23,22 +23,36 @@ describe("StatusBar", () => {
     expect(screen.getByTestId("status-snapshot")).toBeInTheDocument();
   });
 
-  it("computes word count from active workspace fragments", () => {
+  it("computes word count from the active document", () => {
     useAppStore.setState({
       workspaces: [
         {
           id: "ws-1",
           name: "Test",
-          targetPath: null,
-          defaultRecipeId: "r-1",
-          status: "ready",
-          lastCompiledAt: new Date().toISOString(),
-          lastCompiledHash: null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
       ],
       activeWorkspaceId: "ws-1",
+      documents: [
+        {
+          id: "doc-1",
+          workspaceId: "ws-1",
+          name: "Main",
+          content: "one two three four five six",
+          contentHash: "hash-1",
+          targetPath: null,
+          fileStatus: "ready",
+          lastWrittenAt: null,
+          lastWrittenHash: null,
+          sortOrder: 0,
+          deletedAt: null,
+          description: null,
+          createdAt: "t",
+          updatedAt: "t",
+        },
+      ],
+      activeDocumentId: "doc-1",
       fragments: [
         {
           id: "f-1",
@@ -46,8 +60,9 @@ describe("StatusBar", () => {
           name: "F1",
           content: "one two three four",
           contentHash: "",
+          tags: "",
+          category: null,
           sortOrder: 0,
-          isArchived: false,
           deletedAt: null,
           createdAt: "t",
           updatedAt: "t",
@@ -58,8 +73,9 @@ describe("StatusBar", () => {
           name: "F2",
           content: "five six",
           contentHash: "",
+          tags: "",
+          category: null,
           sortOrder: 1,
-          isArchived: false,
           deletedAt: null,
           createdAt: "t",
           updatedAt: "t",
@@ -70,8 +86,9 @@ describe("StatusBar", () => {
           name: "F3",
           content: "should not count",
           contentHash: "",
+          tags: "",
+          category: null,
           sortOrder: 2,
-          isArchived: false,
           deletedAt: "2024-01-01T00:00:00Z",
           createdAt: "t",
           updatedAt: "t",
@@ -114,7 +131,7 @@ describe("StatusBar", () => {
     expect(snapshot.disabled).toBe(true);
   });
 
-  it("formats last-compiled time across second/minute/hour/day buckets", () => {
+  it("formats last-written time across second/minute/hour/day buckets", () => {
     const cases: Array<{
       offsetMs: number;
       bucket: "just now" | "s ago" | "m ago" | "h ago" | "d ago";
@@ -132,16 +149,30 @@ describe("StatusBar", () => {
           {
             id: "ws-1",
             name: "Test",
-            targetPath: null,
-            defaultRecipeId: "r-1",
-            status: "ready",
-            lastCompiledAt: new Date(Date.now() - offsetMs).toISOString(),
-            lastCompiledHash: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
         ],
         activeWorkspaceId: "ws-1",
+        documents: [
+          {
+            id: "doc-1",
+            workspaceId: "ws-1",
+            name: "Main",
+            content: "body",
+            contentHash: "hash",
+            targetPath: "/tmp/main.md",
+            fileStatus: "ready",
+            lastWrittenAt: new Date(Date.now() - offsetMs).toISOString(),
+            lastWrittenHash: null,
+            sortOrder: 0,
+            deletedAt: null,
+            description: null,
+            createdAt: "t",
+            updatedAt: "t",
+          },
+        ],
+        activeDocumentId: "doc-1",
       });
       const { unmount } = render(
         <AppTestProviders>
@@ -149,7 +180,7 @@ describe("StatusBar", () => {
         </AppTestProviders>,
       );
       const text = document.body.textContent ?? "";
-      expect(text).toContain("Last compiled ");
+      expect(text).toContain("Last written ");
       expect(text).toContain(bucket);
       unmount();
     }

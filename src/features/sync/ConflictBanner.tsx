@@ -1,64 +1,89 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAppDialog } from "@/components/dialog/DialogProvider";
 import { useToast } from "@/components/toast/ToastProvider";
-import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
-import { tMaybe } from "@/i18n/tMaybe";
-import { writeTargetFile } from "@/lib/api/sync";
+import {
+  type ConflictPolicy,
+  resolveDocumentConflict,
+  writeDocumentToFile,
+} from "@/lib/api/documents";
 import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
+import type { DocumentSummary } from "@/store/types";
 
-export function ConflictBanner() {
+type ConflictBannerProps = {
+  document?: DocumentSummary | null;
+};
+
+const POLICIES: Array<{ value: ConflictPolicy; labelKey: string; testId: string }> = [
+  {
+    value: "import_external",
+    labelKey: "import_as_fragment",
+    testId: "conflict-import-as-fragment",
+  },
+  {
+    value: "overwrite_external",
+    labelKey: "overwrite_target",
+    testId: "conflict-overwrite-target",
+  },
+  {
+    value: "backup_and_overwrite",
+    labelKey: "backup_then_overwrite",
+    testId: "conflict-backup-then-overwrite",
+  },
+  { value: "cancel", labelKey: "cancel", testId: "conflict-cancel" },
+];
+
+/**
+ * Document-first conflict banner. Reads the conflict signal from
+ * `document.fileStatus === "conflicted"` and resolves it with the new
+ * `resolveDocumentConflict` API. Falls back to the active document if no
+ * `document` prop is provided (e.g. when used as a top-level indicator).
+ */
+export function ConflictBanner({ document: documentProp }: ConflictBannerProps = {}) {
   const { t } = useTranslation();
-  const dialog = useAppDialog();
   const toast = useToast();
-  const compileStatus = useAppStore((state) => state.compileStatus);
-  const workspaceStatusMessage = useAppStore((state) => state.workspaceStatusMessage);
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
-  const setCompileStatus = useAppStore((state) => state.setCompileStatus);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const isConflict =
-    compileStatus === "conflicted" || workspaceStatusMessage === "external_conflict";
-  const isTargetIssue =
-    workspaceStatusMessage === "target_not_writable" ||
-    workspaceStatusMessage === "target_missing" ||
-    workspaceStatusMessage === "invalid_target_path";
+  const activeDocument = useAppStore(
+    (state) => state.documents.find((doc) => doc.id === state.activeDocumentId) ?? null,
+  );
+  const document = documentProp ?? activeDocument;
+  const setProcessStatus = useAppStore((state) => state.setDocumentProcessStatus);
+  const setStatusMessage = useAppStore((state) => state.setDocumentStatusMessage);
+  const [isResolving, setIsResolving] = useState(false);
 
-  const handleResolve = async (
-    policy: "import_as_fragment" | "overwrite_target" | "backup_then_overwrite",
-  ) => {
-    if (!activeWorkspaceId) return;
-    setWorkspaceStatusMessage(null);
-    if (policy === "overwrite_target") {
-      const ok = await dialog.confirm({
-        title: t("overwrite_target"),
-        description: t("overwrite_confirm"),
-        danger: true,
-      });
-      if (!ok) return;
+  if (!document) return null;
+  if (document.fileStatus !== "conflicted") return null;
+
+  const handleResolve = async (policy: ConflictPolicy) => {
+    if (policy === "cancel") {
+      setStatusMessage(document.id, null);
+      return;
     }
+    setIsResolving(true);
+    setStatusMessage(document.id, null);
+    setProcessStatus(document.id, "writing");
     try {
-      await writeTargetFile({ workspaceId: activeWorkspaceId, conflictPolicy: policy });
-      if (policy === "import_as_fragment") {
-        setWorkspaceStatusMessage("conflict_imported_as_fragment");
-        setCompileStatus("conflicted");
+      if (policy === "import_external") {
+        // First pull the latest file contents into the document, then write
+        // the document back to the target. The backend's `import_external`
+        // policy folds the external content into the document; we then
+        // ensure a write so the file matches.
+        await resolveDocumentConflict({ id: document.id, policy: "import_external" });
+      } else {
+        await resolveDocumentConflict({ id: document.id, policy });
+        if (policy === "overwrite_external" || policy === "backup_and_overwrite") {
+          await writeDocumentToFile(document.id);
+        }
       }
+      setProcessStatus(document.id, "synced");
+      setStatusMessage(document.id, "conflict_resolved");
     } catch (error) {
-      setWorkspaceStatusMessage(normalizeAppError(error));
-      setCompileStatus("error");
+      setProcessStatus(document.id, "error");
+      setStatusMessage(document.id, normalizeAppError(error));
       toast.error(normalizeAppError(error), t("action_failed"));
+    } finally {
+      setIsResolving(false);
     }
   };
-
-  const handleChooseTarget = () => {
-    if (!activeWorkspaceId) return;
-    setSettingsOpen(true);
-  };
-
-  if (!isConflict && !isTargetIssue) {
-    return null;
-  }
 
   return (
     <div
@@ -75,54 +100,20 @@ export function ConflictBanner() {
         gap: 12,
       }}
     >
-      <div>
-        {workspaceStatusMessage ? tMaybe(t, workspaceStatusMessage) : t("external_conflict")}
-      </div>
+      <div>{t("external_conflict")}</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        {isConflict ? (
-          <>
-            <button
-              type="button"
-              onClick={() => handleResolve("import_as_fragment")}
-              disabled={!activeWorkspaceId}
-              data-testid="conflict-import-as-fragment"
-            >
-              {t("import_as_fragment")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleResolve("overwrite_target")}
-              disabled={!activeWorkspaceId}
-              data-testid="conflict-overwrite-target"
-            >
-              {t("overwrite_target")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleResolve("backup_then_overwrite")}
-              disabled={!activeWorkspaceId}
-              data-testid="conflict-backup-then-overwrite"
-            >
-              {t("backup_then_overwrite")}
-            </button>
-          </>
-        ) : null}
-        {isTargetIssue ? (
+        {POLICIES.map((policy) => (
           <button
+            key={policy.value}
             type="button"
-            onClick={handleChooseTarget}
-            disabled={!activeWorkspaceId}
-            data-testid="conflict-choose-target"
+            onClick={() => void handleResolve(policy.value)}
+            disabled={isResolving}
+            data-testid={policy.testId}
           >
-            {t("choose_target")}
+            {t(policy.labelKey as never)}
           </button>
-        ) : null}
+        ))}
       </div>
-      <WorkspaceSettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        defaultSection="sync"
-      />
     </div>
   );
 }

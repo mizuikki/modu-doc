@@ -1,32 +1,44 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { safeClick } from "../support/ui";
-import { createAndSelectWorkspace } from "../support/workspace";
+import { browser, expect } from "@wdio/globals";
+import { tauriInvoke } from "../support/tauri";
+import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
 
+/**
+ * The old `preview-open-target-folder` testid and the preview tab are
+ * gone. The "open target folder" action is now exposed only as the
+ * `open_target_in_file_manager` tauri command (which the target bar
+ * uses). The backend short-circuits to OK when
+ * `MODUDOC_E2E_SKIP_REVEAL=1` is set, so we don't actually pop a file
+ * manager window during e2e.
+ */
 describe("Workspace preview", () => {
   it("open target folder action does not error", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "modudoc-e2e-open-target-"));
-    const targetPath = path.join(tempDir, "workspace.md");
-    try {
-      await writeFile(targetPath, "# Hello\n", "utf8");
+    const workspaceName = `E2E Open target ${Date.now()}`;
+    const { workspaceId, documentId } = await createAndOpenWorkspace(workspaceName);
 
-      const workspaceName = `E2E Open target ${Date.now()}`;
-      await createAndSelectWorkspace({ name: workspaceName, targetPath });
+    // Bind a target path on the active document so the backend has
+    // something to look up. (Without a target_path the command returns
+    // `invalid_target_path`.)
+    const targetPath = `/tmp/modudoc-e2e-open-target-${Date.now()}.md`;
+    await tauriInvoke("update_document", {
+      id: documentId,
+      target_path: targetPath,
+    });
+    await browser.waitUntil(async () => {
+      const bundle = await loadWorkspace(workspaceId);
+      const doc = bundle.documents.find((entry) => entry.id === documentId);
+      return doc?.target_path === targetPath;
+    });
 
-      await safeClick("[data-testid='main-tab-preview']");
-      await safeClick("[data-testid='preview-open-target-folder']");
+    // Drive the command directly. With MODUDOC_E2E_SKIP_REVEAL=1 it
+    // returns Ok(()) without opening a file manager window. We assert
+    // it resolves without throwing.
+    await tauriInvoke("open_target_in_file_manager", { documentId });
 
-      // Best-effort smoke check: ensure the app is still responsive after invoking.
-      await safeClick("[data-testid='main-tab-edit']");
-    } finally {
-      if (process.env.MODUDOC_E2E_KEEP_TEMP !== "1") {
-        try {
-          await rm(tempDir, { recursive: true, force: true });
-        } catch {
-          // ignore best-effort cleanup failures (e.g. Windows file locking)
-        }
-      }
-    }
+    // Smoke: app is still responsive.
+    await expect($("header")).toBeDisplayed();
+    await expect($(`[data-testid='sidebar-document-${documentId}']`)).toHaveAttribute(
+      "data-active",
+      "true",
+    );
   });
 });

@@ -44,14 +44,14 @@ mod tests {
     async fn search_workspace_content_impl_returns_results() {
         let pool = test_pool().await;
         let timestamp = "2026-05-23T10:00:00Z".to_string();
-        sqlx::query("INSERT INTO workspaces (id, name, target_path, default_recipe_id, status, created_at, updated_at) VALUES (?1, ?2, NULL, NULL, 'dirty', ?3, ?3)")
+        sqlx::query("INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)")
             .bind("workspace-search")
             .bind("Search Space")
             .bind(&timestamp)
             .execute(&pool)
             .await
             .expect("workspace");
-        sqlx::query("INSERT INTO fragments (id, workspace_id, name, content, content_hash, sort_order, is_archived, deleted_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, '', 0, 0, NULL, ?5, ?5)")
+        sqlx::query("INSERT INTO fragments (id, workspace_id, name, content, content_hash, tags, category, sort_order, deleted_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, '', '[]', NULL, 0, NULL, ?5, ?5)")
             .bind("fragment-search")
             .bind("workspace-search")
             .bind("Intro")

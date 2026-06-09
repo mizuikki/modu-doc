@@ -1,31 +1,43 @@
 import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
 import { createSnapshot, restoreSnapshot } from "@/lib/api/snapshots";
 import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
+import { selectActiveDocumentSnapshots } from "@/store/selectors";
 
+/**
+ * Snapshot timeline is per-document in the new model. It reads snapshots
+ * from `selectActiveDocumentSnapshots` and operates on the active document
+ * id when creating or restoring a snapshot.
+ */
 export function SnapshotTimeline() {
   const { t } = useTranslation();
   const toast = useToast();
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const snapshots = useAppStore((state) => state.snapshots);
+  const activeDocumentId = useAppStore((state) => state.activeDocumentId);
+  const snapshots = useAppStore(useShallow(selectActiveDocumentSnapshots));
   const selectedSnapshotId = useAppStore((state) => state.selectedSnapshotId);
   const setSelectedSnapshot = useAppStore((state) => state.setSelectedSnapshot);
 
   const handleCreateSnapshot = async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeDocumentId) return;
     try {
-      await createSnapshot({ workspaceId: activeWorkspaceId, label: null });
+      await createSnapshot({ documentId: activeDocumentId, label: null });
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
   };
 
   const handleRestoreSnapshot = async (snapshotId: string) => {
+    if (!activeDocumentId) return;
     try {
-      await restoreSnapshot(snapshotId);
+      await restoreSnapshot({
+        documentId: activeDocumentId,
+        snapshotId,
+        mode: "overwrite",
+      });
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
@@ -40,7 +52,7 @@ export function SnapshotTimeline() {
         <button
           type="button"
           onClick={handleCreateSnapshot}
-          disabled={!activeWorkspaceId}
+          disabled={!activeDocumentId}
           data-testid="history-create-snapshot"
           aria-label={t("create_snapshot")}
           title={t("create_snapshot")}
@@ -52,8 +64,8 @@ export function SnapshotTimeline() {
             borderRadius: 8,
             border: "1px solid hsl(var(--border))",
             background: "hsl(var(--card))",
-            cursor: activeWorkspaceId ? "pointer" : "not-allowed",
-            opacity: activeWorkspaceId ? 1 : 0.5,
+            cursor: activeDocumentId ? "pointer" : "not-allowed",
+            opacity: activeDocumentId ? 1 : 0.5,
             fontSize: 12,
             color: "hsl(var(--foreground))",
           }}
@@ -63,7 +75,11 @@ export function SnapshotTimeline() {
         </button>
       </div>
       <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-        {snapshots.length === 0 ? (
+        {!activeDocumentId ? (
+          <div style={{ color: "hsl(var(--muted-foreground))", fontSize: 12 }}>
+            {t("no_snapshots_yet")}
+          </div>
+        ) : snapshots.length === 0 ? (
           <div style={{ color: "hsl(var(--muted-foreground))", fontSize: 12 }}>
             {t("no_snapshots_yet")}
           </div>

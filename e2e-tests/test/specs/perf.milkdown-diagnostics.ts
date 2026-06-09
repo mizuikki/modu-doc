@@ -1,10 +1,18 @@
+// Header note: this spec was originally titled "Milkdown performance
+// diagnostics" because the main document editor used to be a Milkdown
+// ProseMirror surface. The document-first refactor replaced that editor
+// with a plain `<textarea data-testid="editor-pane-textarea">`, so the
+// scenarios now measure type latency on that textarea. The spec keeps its
+// filename (`perf.milkdown-diagnostics.ts`) because it is referenced by
+// `npm run e2e:perf`; only the measurement target changed.
+//
+// The markdown seed / warmup scaffolding (buildMarkdownDocument, the
+// PerfAnalysis workspace with small/medium/large fragments) is preserved
+// so the surrounding workflow and the perf fixtures remain identical
+// across the editor migration.
+
 import { browser } from "@wdio/globals";
-import {
-  blurActiveElement,
-  focusFragmentEditor,
-  typeInFragmentEditor,
-  waitForFragmentEditorReady,
-} from "../support/editor";
+import { blurActiveElement, typeInDocumentEditor } from "../support/editor";
 import {
   durationBetween,
   eventPayloadRecord,
@@ -21,25 +29,25 @@ import {
 import { tauriInvoke, waitForTauriBridge } from "../support/tauri";
 import { safeClick, safeSetValue, selectWorkspaceById } from "../support/ui";
 import {
-  createAndSelectWorkspace,
+  createAndOpenWorkspace,
   loadWorkspace,
   type WorkspaceLoadResult,
 } from "../support/workspace";
 
 type WorkspaceSummary = WorkspaceLoadResult["workspace"];
-type FragmentSummary = WorkspaceLoadResult["fragments"][number];
+type DocumentSummary = WorkspaceLoadResult["documents"][number];
 
 type PerfWorkspaceContext = {
   startupWorkspace: WorkspaceSummary;
   workflowWorkspaceId: string;
   analysisWorkspace: WorkspaceSummary;
-  fragments: {
-    smallA: FragmentSummary;
-    smallB: FragmentSummary;
-    mediumA: FragmentSummary;
-    mediumB: FragmentSummary;
-    largeA: FragmentSummary;
-    autosave: FragmentSummary;
+  documents: {
+    smallA: DocumentSummary;
+    smallB: DocumentSummary;
+    mediumA: DocumentSummary;
+    mediumB: DocumentSummary;
+    largeA: DocumentSummary;
+    autosave: DocumentSummary;
   };
 };
 
@@ -96,92 +104,47 @@ async function waitForPerfCollectorReady(timeoutMs = 20000) {
   );
 }
 
-async function waitForFragmentLabel(fragmentName: string, timeoutMs = 20000) {
-  await browser.waitUntil(
-    async () => {
-      const label = await $("label[for='fragment-editor']");
-      if (!(await label.isExisting())) {
-        return false;
-      }
-      return (await label.getText()).includes(fragmentName);
-    },
-    { timeout: timeoutMs, interval: 100, timeoutMsg: `fragment label not ready: ${fragmentName}` },
-  );
+async function waitForEditorTextareaReady(timeoutMs = 20000) {
+  const textarea = await $("[data-testid='editor-pane-textarea']");
+  await browser.waitUntil(async () => await textarea.isExisting(), {
+    timeout: timeoutMs,
+    interval: 100,
+    timeoutMsg: "editor-pane-textarea not ready",
+  });
 }
 
-async function waitForEditorDocument(documentId: string, fragmentName: string, timeoutMs = 20000) {
-  await waitForFragmentEditorReady(timeoutMs);
-  await waitForFragmentLabel(fragmentName, timeoutMs);
+async function waitForEditorDocument(documentId: string, timeoutMs = 20000) {
+  await waitForEditorTextareaReady(timeoutMs);
+  // The new editor binds synchronously to the active document from the
+  // store; we still wait for the perf event so callers get a stable hook.
   await browser.waitUntil(
     async () => {
       const events = await snapshotPerfEvents();
       return Boolean(
-        findLastEvent(events, "milkdown: replace done", (event) =>
+        findLastEvent(events, "document editor: document bound", (event) =>
           hasDocumentId(event, documentId),
-        ) ||
-          findLastEvent(events, "fragment editor: document bound", (event) =>
-            hasDocumentId(event, documentId),
-          ) ||
-          findLastEvent(events, "milkdown: editor ready", (event) =>
-            hasDocumentId(event, documentId),
-          ),
+        ),
       );
     },
-    { timeout: timeoutMs, interval: 100, timeoutMsg: `editor not bound: ${fragmentName}` },
+    { timeout: timeoutMs, interval: 100, timeoutMsg: `editor not bound: ${documentId}` },
   );
 }
 
-async function currentWorkspaceId() {
-  const trigger = await $("[data-testid='workspace-select-trigger']");
-  return (await trigger.getAttribute("data-current-workspace-id")) ?? "";
-}
-
-async function listWorkspaces() {
-  return await tauriInvoke<WorkspaceSummary[]>("list_workspaces");
-}
-
-async function prepareStartupWorkspaceAndReload() {
-  const workspace = await createAndSelectWorkspace({
-    name: uniqueName("Perf Startup"),
-    targetPath: null,
-  });
-  await tauriInvoke("create_fragment", {
-    workspaceId: workspace.id,
-    name: "Startup fragment",
-    content: buildMarkdownDocument("Startup fragment", 2048),
-    attachToRecipe: true,
-  });
-  const bundle = await loadWorkspace(workspace.id);
-  const fragment = bundle.fragments.find((entry) => entry.name === "Startup fragment");
-  if (!fragment) {
-    throw new Error("startup fragment missing");
-  }
-  await safeClick(`[data-testid='recipe-item-select-${fragment.id}']`);
-  await browser.reloadSession();
-  await waitForTauriBridge();
-  await waitForPerfCollectorReady();
-  await waitForFragmentEditorReady();
-  return workspace;
-}
-
 async function createAnalysisWorkspaceContext(): Promise<PerfWorkspaceContext> {
-  const startupWorkspace = await prepareStartupWorkspaceAndReload();
-  const workflowWorkspace = await createAndSelectWorkspace({
-    name: uniqueName("Perf Workflow"),
-    targetPath: null,
-  });
-  await tauriInvoke("create_fragment", {
-    workspaceId: workflowWorkspace.id,
-    name: "Workflow baseline",
-    content: "Workflow baseline",
-    attachToRecipe: true,
-  });
-  const analysisWorkspace = await createAndSelectWorkspace({
-    name: uniqueName("Perf Analysis"),
-    targetPath: null,
-  });
+  // 1. Startup workspace: used purely to capture the cold-start-to-first-
+  //    editor-ready timing. The session is not reloaded; the perf markers
+  //    we read cover the initial bootstrap path.
+  const startupWorkspace = await createAndOpenWorkspace(uniqueName("Perf Startup"));
 
-  const fragmentDocs = [
+  // 2. Workflow workspace: a small clean workspace used to measure the
+  //    create-workspace / create-document flow.
+  const workflowWorkspace = await createAndOpenWorkspace(uniqueName("Perf Workflow"));
+
+  // 3. Analysis workspace: hosts the typed document fixtures (small /
+  //    medium / large / autosave).
+  const analysisWorkspace = await createAndOpenWorkspace(uniqueName("Perf Analysis"));
+
+  const documentSpecs = [
     { key: "smallA", name: "Perf Small A", bytes: 2048 },
     { key: "smallB", name: "Perf Small B", bytes: 3072 },
     { key: "mediumA", name: "Perf Medium A", bytes: 16384 },
@@ -190,72 +153,84 @@ async function createAnalysisWorkspaceContext(): Promise<PerfWorkspaceContext> {
     { key: "autosave", name: "Perf Autosave", bytes: 4096 },
   ] as const;
 
-  for (const doc of fragmentDocs) {
-    await tauriInvoke("create_fragment", {
+  for (const spec of documentSpecs) {
+    const created = await tauriInvoke<{ id: string }>("create_document", {
       workspaceId: analysisWorkspace.id,
-      name: doc.name,
-      content: buildMarkdownDocument(doc.name, doc.bytes),
-      attachToRecipe: true,
+      name: spec.name,
+      content: buildMarkdownDocument(spec.name, spec.bytes),
     });
+    if (!created.id) {
+      throw new Error(`create_document returned no id for ${spec.name}`);
+    }
+    void created;
   }
 
   await browser.waitUntil(
     async () => {
       const bundle = await loadWorkspace(analysisWorkspace.id);
-      return bundle.fragments.length >= fragmentDocs.length;
+      return bundle.documents.length >= documentSpecs.length;
     },
     { timeout: 30000, interval: 200 },
   );
 
   await tauriInvoke("create_snapshot", {
-    workspaceId: analysisWorkspace.id,
+    documentId: (await loadWorkspace(analysisWorkspace.id)).documents.find(
+      (entry) => entry.name === "Perf Small A",
+    )?.id,
     label: "perf-baseline",
   });
 
   const bundle = await loadWorkspace(analysisWorkspace.id);
-  const fragmentByName = new Map(bundle.fragments.map((fragment) => [fragment.name, fragment]));
-  const fragments = {
-    smallA: fragmentByName.get("Perf Small A"),
-    smallB: fragmentByName.get("Perf Small B"),
-    mediumA: fragmentByName.get("Perf Medium A"),
-    mediumB: fragmentByName.get("Perf Medium B"),
-    largeA: fragmentByName.get("Perf Large A"),
-    autosave: fragmentByName.get("Perf Autosave"),
+  const documentByName = new Map(bundle.documents.map((doc) => [doc.name, doc]));
+  const documents = {
+    smallA: documentByName.get("Perf Small A"),
+    smallB: documentByName.get("Perf Small B"),
+    mediumA: documentByName.get("Perf Medium A"),
+    mediumB: documentByName.get("Perf Medium B"),
+    largeA: documentByName.get("Perf Large A"),
+    autosave: documentByName.get("Perf Autosave"),
   };
-  if (Object.values(fragments).some((fragment) => !fragment)) {
-    throw new Error("analysis fragments missing");
+  if (Object.values(documents).some((doc) => !doc)) {
+    throw new Error("analysis documents missing");
   }
 
   await selectWorkspaceById(analysisWorkspace.id);
-  await safeClick(`[data-testid='recipe-item-select-${fragments.smallA?.id}']`);
-  await waitForFragmentEditorReady();
+  await selectDocumentInSidebar(documents.smallA?.id ?? "");
+  await waitForEditorTextareaReady();
 
   return {
     startupWorkspace,
     workflowWorkspaceId: workflowWorkspace.id,
     analysisWorkspace,
-    fragments: fragments as PerfWorkspaceContext["fragments"],
+    documents: documents as PerfWorkspaceContext["documents"],
   };
+}
+
+async function selectDocumentInSidebar(documentId: string, timeoutMs = 20000) {
+  await safeClick(`[data-testid='sidebar-document-${documentId}']`, timeoutMs);
+  await browser.waitUntil(
+    async () => {
+      const trigger = await $(`[data-testid='sidebar-document-${documentId}']`);
+      return (await trigger.getAttribute("data-active")) === "true";
+    },
+    { timeout: timeoutMs, interval: 200 },
+  );
 }
 
 function summarizeSwitchSample(events: PerfEvent[], documentId: string) {
   const start = findLastEvent(events, "wdio:scenario-start");
-  const bound = findLastEvent(events, "fragment editor: document bound", (event) =>
-    hasDocumentId(event, documentId),
-  );
-  const replace = findLastEvent(events, "milkdown: replace done", (event) =>
+  const bound = findLastEvent(events, "document editor: document bound", (event) =>
     hasDocumentId(event, documentId),
   );
   return {
-    totalMs: durationBetween(start, replace ?? bound),
+    totalMs: durationBetween(start, bound),
     markerBreakdown: {
       documentBoundMs: bound ? durationBetween(start, bound) : 0,
-      replaceMs: replace ? durationBetween(start, replace) : 0,
     },
   };
 }
 
-describe("Milkdown performance diagnostics", () => {
+describe("Document editor performance diagnostics", () => {
   it("captures the main workflow and editor scenarios", async () => {
     // Note: the global wdio mocha timeout (see e2e-tests/wdio.conf.ts) is
     // bumped above the default 120s so this spec has room for warmup +
@@ -274,8 +249,8 @@ describe("Milkdown performance diagnostics", () => {
       findFirstEvent(startupEvents, "main module evaluated") ??
       findFirstEvent(startupEvents, "react root render scheduled");
     const startupReady =
-      findFirstEvent(startupEvents, "milkdown: editor ready") ??
-      findFirstEvent(startupEvents, "milkdown: create done");
+      findFirstEvent(startupEvents, "document editor: editor ready") ??
+      findFirstEvent(startupEvents, "document editor: document bound");
     if (!startupStart || !startupReady) {
       throw new Error("missing startup performance markers");
     }
@@ -333,119 +308,98 @@ describe("Milkdown performance diagnostics", () => {
           }
           await browser.waitUntil(
             async () => {
-              const workspace = (await listWorkspaces()).find(
-                (entry) => entry.name === workspaceName,
-              );
-              if (!workspace) {
-                return false;
-              }
-              return (await currentWorkspaceId()) === workspace.id;
+              const workspaces = await tauriInvoke<WorkspaceSummary[]>("list_workspaces");
+              return workspaces.some((entry) => entry.name === workspaceName);
             },
             { timeout: 30000, interval: 200 },
           );
-          await $("[data-testid='recipe-empty-add-fragment']").waitForDisplayed({ timeout: 20000 });
         },
       }),
       await measureScenario({
-        name: "create_fragment_via_ui",
+        name: "create_document_via_ui",
         kind: "workflow",
         iterations,
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.workflowWorkspaceId);
-          await safeClick("[data-testid='main-tab-edit']");
         },
         action: async (iteration) => {
-          const fragmentName = uniqueName(`Perf Fragment ${iteration}`);
-          await markPerf("wdio:fragment-name", { fragmentName });
-          await safeClick("[data-testid='recipe-add-fragment-menu']");
-          await safeClick("[data-testid='fragments-new']");
-          await safeSetValue("[data-testid='app-prompt-input']", fragmentName);
+          const documentName = uniqueName(`Perf Document ${iteration}`);
+          await markPerf("wdio:document-name", { documentName });
+          await safeClick("[data-testid='document-list-new']");
+          await safeSetValue("[data-testid='app-prompt-input']", documentName);
           await safeClick("[data-testid='app-dialog-confirm']");
         },
         settle: async () => {
           const events = await snapshotPerfEvents();
-          const fragmentName = eventPayloadRecord(
-            findLastEvent(events, "wdio:fragment-name"),
-          )?.fragmentName;
-          if (typeof fragmentName !== "string") {
-            throw new Error("missing fragment name");
+          const documentName = eventPayloadRecord(
+            findLastEvent(events, "wdio:document-name"),
+          )?.documentName;
+          if (typeof documentName !== "string") {
+            throw new Error("missing document name");
           }
-          const bundle = await browser.waitUntil(
+          await browser.waitUntil(
             async () => {
-              const nextBundle = await loadWorkspace(context.workflowWorkspaceId);
-              return nextBundle.fragments.some((entry) => entry.name === fragmentName)
-                ? nextBundle
-                : false;
+              const bundle = await loadWorkspace(context.workflowWorkspaceId);
+              return bundle.documents.some((entry) => entry.name === documentName);
             },
             { timeout: 30000, interval: 200 },
           );
-          const created = bundle.fragments.find((entry) => entry.name === fragmentName);
-          if (!created) {
-            throw new Error("created fragment missing");
-          }
-          await safeClick(`[data-testid='recipe-item-select-${created.id}']`);
-          await waitForFragmentEditorReady();
-          await waitForFragmentLabel(fragmentName);
         },
       }),
       await measureScenario({
-        name: "switch_current_recipe_small_to_small",
+        name: "switch_current_document_small_to_small",
         kind: "editor",
         iterations,
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.smallA.id}']`);
-          await waitForFragmentLabel(context.fragments.smallA.name);
+          await selectDocumentInSidebar(context.documents.smallA.id);
+          await waitForEditorDocument(context.documents.smallA.id);
         },
         action: async () => {
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.smallB.id}']`);
+          await selectDocumentInSidebar(context.documents.smallB.id);
         },
         settle: async () => {
-          await waitForEditorDocument(context.fragments.smallB.id, context.fragments.smallB.name);
+          await waitForEditorDocument(context.documents.smallB.id);
         },
-        analyze: (events) => summarizeSwitchSample(events, context.fragments.smallB.id),
+        analyze: (events) => summarizeSwitchSample(events, context.documents.smallB.id),
       }),
       await measureScenario({
-        name: "switch_current_recipe_small_to_large",
+        name: "switch_current_document_small_to_large",
         kind: "editor",
         iterations,
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.smallA.id}']`);
-          await waitForFragmentLabel(context.fragments.smallA.name);
+          await selectDocumentInSidebar(context.documents.smallA.id);
+          await waitForEditorDocument(context.documents.smallA.id);
         },
         action: async () => {
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.largeA.id}']`);
+          await selectDocumentInSidebar(context.documents.largeA.id);
         },
         settle: async () => {
-          await waitForEditorDocument(
-            context.fragments.largeA.id,
-            context.fragments.largeA.name,
-            30000,
-          );
+          await waitForEditorDocument(context.documents.largeA.id, 30000);
         },
-        analyze: (events) => summarizeSwitchSample(events, context.fragments.largeA.id),
+        analyze: (events) => summarizeSwitchSample(events, context.documents.largeA.id),
       }),
       await measureScenario({
-        name: "switch_current_recipe_large_to_small",
+        name: "switch_current_document_large_to_small",
         kind: "editor",
         iterations,
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.largeA.id}']`);
-          await waitForFragmentLabel(context.fragments.largeA.name);
+          await selectDocumentInSidebar(context.documents.largeA.id);
+          await waitForEditorDocument(context.documents.largeA.id);
         },
         action: async () => {
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.smallA.id}']`);
+          await selectDocumentInSidebar(context.documents.smallA.id);
         },
         settle: async () => {
-          await waitForEditorDocument(context.fragments.smallA.id, context.fragments.smallA.name);
+          await waitForEditorDocument(context.documents.smallA.id);
         },
-        analyze: (events) => summarizeSwitchSample(events, context.fragments.smallA.id),
+        analyze: (events) => summarizeSwitchSample(events, context.documents.smallA.id),
       }),
       await measureScenario({
         name: "first_input_small_doc",
@@ -454,29 +408,28 @@ describe("Milkdown performance diagnostics", () => {
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.smallA.id}']`);
-          await waitForFragmentLabel(context.fragments.smallA.name);
-          await focusFragmentEditor();
+          await selectDocumentInSidebar(context.documents.smallA.id);
+          await waitForEditorDocument(context.documents.smallA.id);
         },
         action: async (iteration) => {
-          await typeInFragmentEditor(`s${iteration}`);
+          await typeInDocumentEditor(`s${iteration}`);
         },
         settle: async () => {
           await waitForPerfEvent(
-            "milkdown: markdown updated",
-            (event) => hasDocumentId(event, context.fragments.smallA.id),
+            "document editor: content updated",
+            (event) => hasDocumentId(event, context.documents.smallA.id),
             20000,
           );
         },
         analyze: (events) => {
           const start = findLastEvent(events, "wdio:scenario-start");
-          const updated = findLastEvent(events, "milkdown: markdown updated", (event) =>
-            hasDocumentId(event, context.fragments.smallA.id),
+          const updated = findLastEvent(events, "document editor: content updated", (event) =>
+            hasDocumentId(event, context.documents.smallA.id),
           );
           return {
             totalMs: durationBetween(start, updated),
             markerBreakdown: {
-              inputToMarkdownUpdatedMs: durationBetween(start, updated),
+              inputToContentUpdatedMs: durationBetween(start, updated),
             },
           };
         },
@@ -488,29 +441,28 @@ describe("Milkdown performance diagnostics", () => {
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.largeA.id}']`);
-          await waitForFragmentLabel(context.fragments.largeA.name);
-          await focusFragmentEditor();
+          await selectDocumentInSidebar(context.documents.largeA.id);
+          await waitForEditorDocument(context.documents.largeA.id);
         },
         action: async (iteration) => {
-          await typeInFragmentEditor(`l${iteration}`);
+          await typeInDocumentEditor(`l${iteration}`);
         },
         settle: async () => {
           await waitForPerfEvent(
-            "milkdown: markdown updated",
-            (event) => hasDocumentId(event, context.fragments.largeA.id),
+            "document editor: content updated",
+            (event) => hasDocumentId(event, context.documents.largeA.id),
             30000,
           );
         },
         analyze: (events) => {
           const start = findLastEvent(events, "wdio:scenario-start");
-          const updated = findLastEvent(events, "milkdown: markdown updated", (event) =>
-            hasDocumentId(event, context.fragments.largeA.id),
+          const updated = findLastEvent(events, "document editor: content updated", (event) =>
+            hasDocumentId(event, context.documents.largeA.id),
           );
           return {
             totalMs: durationBetween(start, updated),
             markerBreakdown: {
-              inputToMarkdownUpdatedMs: durationBetween(start, updated),
+              inputToContentUpdatedMs: durationBetween(start, updated),
             },
           };
         },
@@ -522,20 +474,17 @@ describe("Milkdown performance diagnostics", () => {
         warmupIterations,
         prepare: async (iteration) => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.autosave.id}']`);
-          await waitForFragmentLabel(context.fragments.autosave.name);
+          await selectDocumentInSidebar(context.documents.autosave.id);
+          await waitForEditorDocument(context.documents.autosave.id);
           const bundle = await loadWorkspace(context.analysisWorkspace.id);
-          const fragment = bundle.fragments.find(
-            (entry) => entry.id === context.fragments.autosave.id,
-          );
-          const suffix = ` autosave-${iteration}`;
-          if (!fragment) {
-            throw new Error("autosave fragment missing");
+          const doc = bundle.documents.find((entry) => entry.id === context.documents.autosave.id);
+          if (!doc) {
+            throw new Error("autosave document missing");
           }
-          await focusFragmentEditor();
-          await typeInFragmentEditor(suffix);
+          const suffix = ` autosave-${iteration}`;
+          await typeInDocumentEditor(suffix);
           await markPerf("wdio:autosave-expected", {
-            content: `${fragment.content}${suffix}`,
+            content: `${doc.content}${suffix}`,
           });
         },
         action: async () => {
@@ -549,90 +498,82 @@ describe("Milkdown performance diagnostics", () => {
           if (typeof expected !== "string") {
             throw new Error("missing autosave expected content");
           }
-          // The autosave scenario is for performance measurement, not strict
-          // content verification: Milkdown may serialise the document with
-          // small whitespace differences after editing. Just confirm the
-          // bundle caught up with the typed suffix.
-          const suffix = (() => {
-            const payload = eventPayloadRecord(findLastEvent(events, "wdio:autosave-expected"));
-            if (!payload || typeof payload.content !== "string") return null;
-            const full = payload.content;
-            const match = full.match(/autosave-\d+$/);
-            return match ? match[0] : null;
-          })();
-          if (suffix) {
-            await browser.waitUntil(
-              async () => {
-                const bundle = await loadWorkspace(context.analysisWorkspace.id);
-                return (
-                  bundle.fragments
-                    .find((entry) => entry.id === context.fragments.autosave.id)
-                    ?.content?.includes(suffix) ?? false
-                );
-              },
-              { timeout: 30000, interval: 200 },
-            );
+          const suffixMatch = expected.match(/autosave-\d+$/);
+          if (!suffixMatch) {
+            return;
           }
+          const suffix = suffixMatch[0];
+          await browser.waitUntil(
+            async () => {
+              const bundle = await loadWorkspace(context.analysisWorkspace.id);
+              const doc = bundle.documents.find(
+                (entry) => entry.id === context.documents.autosave.id,
+              );
+              return doc?.content?.includes(suffix) ?? false;
+            },
+            { timeout: 30000, interval: 200 },
+          );
         },
       }),
       await measureScenario({
-        name: "switch_to_preview_tab",
+        name: "switch_to_preview_mode",
         kind: "navigation",
         iterations,
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick("[data-testid='main-tab-edit']");
-          await safeClick(`[data-testid='recipe-item-select-${context.fragments.smallA.id}']`);
-          await waitForFragmentLabel(context.fragments.smallA.name);
+          await selectDocumentInSidebar(context.documents.smallA.id);
+          await waitForEditorDocument(context.documents.smallA.id);
         },
         action: async () => {
-          await safeClick("[data-testid='main-tab-preview']");
+          await safeClick("[data-testid='document-header-mode-preview']");
         },
         settle: async () => {
-          await waitForPerfEvent(
-            "main-tab ready:preview",
-            (event) => eventPayloadRecord(event)?.workspaceId === context.analysisWorkspace.id,
-            20000,
+          await browser.waitUntil(
+            async () =>
+              (await $("[data-testid='document-header-mode-preview']").getAttribute(
+                "data-active",
+              )) === "true",
+            { timeout: 20000, interval: 200 },
           );
-          await $("[data-testid='preview-open-target-folder']").waitForDisplayed({
-            timeout: 20000,
-          });
         },
         analyze: (events) => {
           const start = findLastEvent(events, "wdio:scenario-start");
-          const ready = findLastEvent(events, "main-tab ready:preview");
+          const ready = findLastEvent(events, "document header: mode ready:preview");
           return {
-            totalMs: durationBetween(start, ready),
+            totalMs: ready ? durationBetween(start, ready) : 0,
             markerBreakdown: {
-              previewReadyMs: durationBetween(start, ready),
+              previewReadyMs: ready ? durationBetween(start, ready) : 0,
             },
           };
         },
       }),
       await measureScenario({
-        name: "switch_to_history_tab",
+        name: "switch_to_history_mode",
         kind: "navigation",
         iterations,
         warmupIterations,
         prepare: async () => {
           await selectWorkspaceById(context.analysisWorkspace.id);
-          await safeClick("[data-testid='main-tab-edit']");
+          await selectDocumentInSidebar(context.documents.smallA.id);
+          await waitForEditorDocument(context.documents.smallA.id);
         },
         action: async () => {
-          await safeClick("[data-testid='main-tab-history']");
+          await safeClick("[data-testid='document-header-mode-history']");
         },
         settle: async () => {
-          await waitForPerfEvent("main-tab ready:history", undefined, 20000);
-          await $("[data-testid='history-diff']").waitForDisplayed({ timeout: 20000 });
+          await browser.waitUntil(
+            async () => await $("[data-testid='history-diff']").isExisting(),
+            { timeout: 20000, interval: 200 },
+          );
         },
         analyze: (events) => {
           const start = findLastEvent(events, "wdio:scenario-start");
-          const ready = findLastEvent(events, "main-tab ready:history");
+          const ready = findLastEvent(events, "document header: mode ready:history");
           return {
-            totalMs: durationBetween(start, ready),
+            totalMs: ready ? durationBetween(start, ready) : 0,
             markerBreakdown: {
-              historyReadyMs: durationBetween(start, ready),
+              historyReadyMs: ready ? durationBetween(start, ready) : 0,
             },
           };
         },

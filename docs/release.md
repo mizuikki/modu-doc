@@ -4,7 +4,7 @@ This repo uses Tauri v2 and a tag-based release workflow.
 
 ## Tag-based release
 
-- Create a tag like `modu-doc-v0.1.0` and push it.
+- Create a tag like `modu-doc-v0.2.0` and push it.
 - GitHub Actions workflow `.github/workflows/release.yml` builds installers for each platform and drafts a GitHub Release for the tag.
 
 ## Updater artifacts

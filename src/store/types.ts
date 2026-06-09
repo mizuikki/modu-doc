@@ -1,21 +1,34 @@
-export type WorkspaceStatus = "ready" | "dirty" | "conflicted" | "error" | "missing_target";
-export type CompileStatus =
+export type DocumentFileStatus = "missing_target" | "dirty" | "ready" | "conflicted" | "error";
+
+export type DocumentProcessStatus =
   | "idle"
   | "editing"
   | "saving"
-  | "compiling"
+  | "writing"
   | "synced"
-  | "error"
-  | "conflicted";
+  | "conflicted"
+  | "error";
 
 export type WorkspaceSummary = {
   id: string;
   name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DocumentSummary = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  content: string;
+  contentHash: string;
   targetPath: string | null;
-  defaultRecipeId: string | null;
-  status: WorkspaceStatus;
-  lastCompiledAt: string | null;
-  lastCompiledHash: string | null;
+  fileStatus: DocumentFileStatus;
+  lastWrittenAt: string | null;
+  lastWrittenHash: string | null;
+  sortOrder: number;
+  deletedAt: string | null;
+  description: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -26,8 +39,9 @@ export type Fragment = {
   name: string;
   content: string;
   contentHash: string;
+  tags: string;
+  category: string | null;
   sortOrder: number;
-  isArchived: boolean;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -38,7 +52,7 @@ export type Recipe = {
   workspaceId: string;
   name: string;
   description: string;
-  isActive: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -53,74 +67,98 @@ export type RecipeItem = {
 
 export type SnapshotSummary = {
   id: string;
-  workspaceId: string;
-  recipeId: string;
-  label: string;
-  compiledText: string;
-  compiledHash: string;
+  documentId: string;
+  label: string | null;
+  content: string;
+  contentHash: string;
   createdAt: string;
 };
 
-export type AppState = {
+export type RightPanelTab = "fragments" | "recipes" | "snapshots";
+export type CenterMode = "edit" | "split" | "preview" | "history";
+
+export type UiState = {
+  theme: "light" | "dark" | "system";
+  centerMode: CenterMode;
+  sidebarWidth: number;
+  rightPanelWidth: number;
+  rightPanelTab: RightPanelTab;
+  rightPanelCollapsed: boolean;
+  zenMode: boolean;
+  cheatsheetOpen: boolean;
+  settingsDialogOpen: boolean;
+};
+
+export type HydrateInput = {
   workspaces: WorkspaceSummary[];
-  activeWorkspaceId: string | null;
-  activeRecipeId: string | null;
-  activeFragmentId: string | null;
-  selectedSnapshotId: string | null;
+  activeWorkspaceId?: string | null;
+  documents: DocumentSummary[];
   fragments: Fragment[];
   recipes: Recipe[];
   recipeItems: RecipeItem[];
-  snapshots: SnapshotSummary[];
-  editorDrafts: Record<string, string>;
-  compileStatus: CompileStatus;
-  workspaceStatusMessage: string | null;
-  ui: {
-    theme: "light" | "dark" | "system";
-    activeMainTab: "edit" | "preview" | "history";
-    sidebarCollapsed: boolean;
-    zenMode: boolean;
-    sidebarWidth: number;
-    assemblyWidth: number;
-    cheatsheetOpen: boolean;
-    settingsDialogOpen: boolean;
-  };
-  hydrate: (
-    initial: Pick<AppState, "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots">,
-  ) => void;
-  loadWorkspaces: (
-    initial: Pick<AppState, "workspaces" | "fragments" | "recipes" | "recipeItems" | "snapshots">,
-  ) => void;
+  snapshotsByDocumentId: Record<string, SnapshotSummary[]>;
+  activeDocumentId?: string | null;
+};
+
+export type LoadWorkspaceBundleInput = {
+  documents: DocumentSummary[];
+  fragments: Fragment[];
+  recipes: Recipe[];
+  recipeItems: RecipeItem[];
+  snapshotsByDocumentId: Record<string, SnapshotSummary[]>;
+};
+
+export type AppState = {
+  // Persisted workspace bundle
+  workspaces: WorkspaceSummary[];
+  activeWorkspaceId: string | null;
+
+  documents: DocumentSummary[];
+  activeDocumentId: string | null;
+
+  fragments: Fragment[];
+  recipes: Recipe[];
+  recipeItems: RecipeItem[];
+
+  snapshotsByDocumentId: Record<string, SnapshotSummary[]>;
+  selectedSnapshotId: string | null;
+
+  // Per-document runtime state (NOT persisted)
+  documentDrafts: Record<string, string>;
+  documentProcessStatus: Record<string, DocumentProcessStatus>;
+  documentStatusMessage: Record<string, string | null>;
+
+  ui: UiState;
+
+  // Hydration & bundle
+  hydrate: (input: HydrateInput) => void;
+  loadWorkspaceBundle: (input: LoadWorkspaceBundleInput) => void;
   setWorkspaceList: (workspaces: WorkspaceSummary[]) => void;
-  setWorkspaceBundle: (
-    bundle: Pick<AppState, "fragments" | "recipes" | "recipeItems" | "snapshots">,
-  ) => void;
-  updateWorkspaceSummary: (
-    workspaceId: string,
-    patch: Partial<Pick<WorkspaceSummary, "status" | "lastCompiledAt" | "lastCompiledHash">>,
-  ) => void;
   setActiveWorkspace: (workspaceId: string | null) => void;
-  setActiveRecipe: (recipeId: string | null) => void;
-  setActiveFragment: (fragmentId: string | null) => void;
-  setActiveMainTab: (tab: "edit" | "preview" | "history") => void;
-  setTheme: (theme: "light" | "dark" | "system") => void;
+  setActiveDocument: (documentId: string | null) => void;
+
+  // Document runtime
+  updateDocumentDraft: (documentId: string, content: string) => void;
+  flushDocumentDraft: (documentId: string) => void;
+  clearDocumentDraft: (documentId: string) => void;
+  patchDocument: (documentId: string, patch: Partial<DocumentSummary>) => void;
+  setDocumentProcessStatus: (documentId: string, status: DocumentProcessStatus) => void;
+  setDocumentStatusMessage: (documentId: string, message: string | null) => void;
+
+  // Snapshots
+  setSelectedSnapshot: (snapshotId: string | null) => void;
+
+  // UI
+  setTheme: (theme: UiState["theme"]) => void;
+  setCenterMode: (mode: CenterMode) => void;
   setZenMode: (zenMode: boolean) => void;
   toggleZenMode: () => void;
   setCheatsheetOpen: (open: boolean) => void;
   toggleCheatsheet: () => void;
   setSettingsDialogOpen: (open: boolean) => void;
   setSidebarWidth: (width: number) => void;
-  setAssemblyWidth: (width: number) => void;
-  setCompileStatus: (status: CompileStatus) => void;
-  updateEditorDraft: (fragmentId: string, content: string) => void;
-  flushEditorDraft: (fragmentId: string) => void;
-  clearEditorDraft: (fragmentId: string) => void;
-  restoreFragmentContent: (fragmentId: string, content: string) => void;
-  reorderRecipeItems: (recipeId: string, orderedFragmentIds: string[]) => void;
-  toggleRecipeItem: (recipeId: string, fragmentId: string, enabled: boolean) => void;
-  compileActiveWorkspace: () => string;
-  resolveConflict: () => void;
-  createSnapshot: (label?: string) => void;
-  restoreSnapshot: (snapshotId: string) => void;
-  setSelectedSnapshot: (snapshotId: string | null) => void;
-  setWorkspaceStatusMessage: (message: string | null) => void;
+  setRightPanelWidth: (width: number) => void;
+  setRightPanelTab: (tab: RightPanelTab) => void;
+  setRightPanelCollapsed: (collapsed: boolean) => void;
+  toggleRightPanelCollapsed: () => void;
 };

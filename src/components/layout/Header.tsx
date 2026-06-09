@@ -6,7 +6,7 @@ import { CommandPalette } from "@/features/commands/CommandPalette";
 import { GlobalSearch } from "@/features/search/GlobalSearch";
 import { tMaybe } from "@/i18n/tMaybe";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveWorkspace } from "@/store/selectors";
+import { selectActiveDocument, selectActiveDocumentStatusMessage } from "@/store/selectors";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -22,12 +22,16 @@ const THEME_OPTIONS: Array<{
 
 export function Header() {
   const { t, i18n } = useTranslation();
-  const workspaceStatusMessage = useAppStore((state) => state.workspaceStatusMessage);
+  const message = useAppStore(selectActiveDocumentStatusMessage);
+  const setDocumentStatusMessage = useAppStore((state) => state.setDocumentStatusMessage);
   const theme = useAppStore((state) => state.ui.theme);
   const setTheme = useAppStore((state) => state.setTheme);
-  const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
   const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
+  const activeWorkspace = useAppStore(
+    (s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId) ?? null,
+  );
+  const activeDocument = useAppStore(selectActiveDocument);
+  const activeDocumentId = useAppStore((state) => state.activeDocumentId);
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const language = i18n.resolvedLanguage ?? i18n.language;
 
@@ -72,7 +76,7 @@ export function Header() {
         </div>
         <strong>{t("app_name")}</strong>
         <span style={{ color: "hsl(var(--muted-foreground))", fontSize: 12 }}>
-          {activeWorkspace?.name ?? t("no_workspace")}
+          {activeDocument?.name ?? activeWorkspace?.name ?? t("no_workspace")}
         </span>
       </div>
       <GlobalSearch />
@@ -223,7 +227,7 @@ export function Header() {
         </button>
       </div>
       <CommandPalette openRef={undefined} />
-      {workspaceStatusMessage ? (
+      {message && activeDocumentId ? (
         <div
           data-testid="workspace-status-popover"
           style={{
@@ -239,10 +243,10 @@ export function Header() {
             boxShadow: "0 10px 24px rgba(0, 0, 0, 0.14)",
           }}
         >
-          {tMaybe(t, workspaceStatusMessage)}
+          {tMaybe(t, message)}
           <button
             type="button"
-            onClick={() => setWorkspaceStatusMessage(null)}
+            onClick={() => setDocumentStatusMessage(activeDocumentId, null)}
             style={{
               marginLeft: 8,
               fontSize: 12,

@@ -1,10 +1,11 @@
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SyncStatusBadge } from "@/features/sync/SyncStatusBadge";
 import { tMaybe } from "@/i18n/tMaybe";
+import { createSnapshot } from "@/lib/api/snapshots";
+import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveWorkspace } from "@/store/selectors";
+import { selectActiveDocument, selectActiveDocumentProcessStatus } from "@/store/selectors";
 
 function countWords(text: string): number {
   if (!text.trim()) return 0;
@@ -28,35 +29,42 @@ export function StatusBar() {
   const zenMode = useAppStore((state) => state.ui.zenMode);
   const toggleZenMode = useAppStore((state) => state.toggleZenMode);
   const setZenMode = useAppStore((state) => state.setZenMode);
+  const activeDocument = useAppStore(selectActiveDocument);
+  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const processStatus = useAppStore(selectActiveDocumentProcessStatus);
+  const setDocumentStatusMessage = useAppStore((state) => state.setDocumentStatusMessage);
   const fragments = useAppStore((state) => state.fragments);
-  const recipeItems = useAppStore((state) => state.recipeItems);
-  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
-  const createSnapshot = useAppStore((state) => state.createSnapshot);
   const [, force] = useState(0);
 
+  const visibleFragments = useMemo(
+    () =>
+      fragments.filter(
+        (fragment) => fragment.workspaceId === activeWorkspaceId && fragment.deletedAt === null,
+      ),
+    [fragments, activeWorkspaceId],
+  );
+
   useEffect(() => {
-    if (!activeWorkspace?.lastCompiledAt) return;
+    if (!activeDocument?.lastWrittenAt) return;
     const id = window.setInterval(() => force((value) => value + 1), 30_000);
     return () => window.clearInterval(id);
-  }, [activeWorkspace?.lastCompiledAt]);
+  }, [activeDocument?.lastWrittenAt]);
 
-  const activeWorkspaceId = activeWorkspace?.id ?? null;
-  const visibleFragments = fragments.filter(
-    (fragment) => fragment.workspaceId === activeWorkspaceId && fragment.deletedAt === null,
-  );
-  const wordCount = visibleFragments.reduce(
-    (total, fragment) => total + countWords(fragment.content),
-    0,
-  );
-  const recipeItemCount = recipeItems.filter((item) => item.recipeId === activeRecipeId).length;
-  const enabledCount = recipeItems.filter(
-    (item) => item.recipeId === activeRecipeId && item.enabled,
-  ).length;
+  const wordCount = countWords(activeDocument?.content ?? "");
+  const lastWrittenAt = activeDocument?.lastWrittenAt ?? null;
+  const fileStatus = activeDocument?.fileStatus ?? null;
+  const canSnapshot = Boolean(activeWorkspaceId && activeDocument);
 
-  const handleSnapshot = () => {
-    if (!activeWorkspaceId) return;
-    createSnapshot(tMaybe(t, "auto_snapshot"));
+  const handleSnapshot = async () => {
+    if (!activeDocument) return;
+    try {
+      await createSnapshot({
+        documentId: activeDocument.id,
+        label: tMaybe(t, "auto_snapshot"),
+      });
+    } catch (error) {
+      setDocumentStatusMessage(activeDocument.id, normalizeAppError(error));
+    }
   };
 
   return (
@@ -70,12 +78,29 @@ export function StatusBar() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-        <SyncStatusBadge />
-        {activeWorkspace ? (
+        <span
+          data-testid="status-process"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "3px 10px",
+            borderRadius: 999,
+            border: "1px solid hsl(var(--border))",
+            background: "hsl(var(--card))",
+            fontSize: 12,
+            lineHeight: 1.2,
+          }}
+        >
           <span style={{ color: "hsl(var(--muted-foreground))" }}>
-            {t("last_compiled", {
-              time: formatRelativeTime(t, activeWorkspace.lastCompiledAt),
-            })}
+            {t("status")}: {tMaybe(t, processStatus)}
+          </span>
+        </span>
+        {activeDocument ? (
+          <span style={{ color: "hsl(var(--muted-foreground))" }}>
+            {fileStatus ? tMaybe(t, fileStatus) : ""}
+            {fileStatus ? " · " : ""}
+            {t("last_written", { time: formatRelativeTime(t, lastWrittenAt) })}
           </span>
         ) : null}
       </div>
@@ -97,12 +122,6 @@ export function StatusBar() {
         </span>
         <span data-testid="status-fragment-count">
           {t("fragment_count", { count: visibleFragments.length })}
-        </span>
-        <span aria-hidden style={{ opacity: 0.4 }}>
-          ·
-        </span>
-        <span data-testid="status-enabled-count">
-          {t("enabled_count", { enabled: enabledCount, total: recipeItemCount })}
         </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
@@ -137,8 +156,8 @@ export function StatusBar() {
         <button
           type="button"
           data-testid="status-snapshot"
-          disabled={!activeWorkspaceId}
-          onClick={handleSnapshot}
+          disabled={!canSnapshot}
+          onClick={() => void handleSnapshot()}
           aria-label={t("create_snapshot")}
           title={t("create_snapshot")}
           style={{
@@ -149,8 +168,8 @@ export function StatusBar() {
             borderRadius: 8,
             border: "1px solid hsl(var(--border))",
             background: "hsl(var(--card))",
-            cursor: activeWorkspaceId ? "pointer" : "not-allowed",
-            opacity: activeWorkspaceId ? 1 : 0.5,
+            cursor: canSnapshot ? "pointer" : "not-allowed",
+            opacity: canSnapshot ? 1 : 0.5,
             fontSize: 12,
             color: "hsl(var(--foreground))",
           }}

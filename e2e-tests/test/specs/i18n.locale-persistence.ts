@@ -1,5 +1,5 @@
 import { browser, expect } from "@wdio/globals";
-import { dismissWorkspaceStatus, safeClick } from "../support/ui";
+import { dismissDocumentStatus, safeClick } from "../support/ui";
 
 const languageToggleSelector = "[data-testid='header-language-toggle']";
 
@@ -32,12 +32,15 @@ async function waitForLanguageButton(label: "EN" | "ZH", timeoutMs = 20000) {
 
 describe("i18n", () => {
   it("persists locale across app restart", async () => {
-    await dismissWorkspaceStatus();
+    // The status popover helper was renamed from `dismissWorkspaceStatus`
+    // to `dismissDocumentStatus` (it's now the per-document status
+    // popover, not the workspace one).
+    await dismissDocumentStatus();
 
     // Start from English to avoid flakiness if another spec left it in ZH.
-    const maybeZhButton = await $(languageToggleSelector);
-    if (await maybeZhButton.isExisting()) {
-      const currentLanguage = (await maybeZhButton.getText()).trim().toUpperCase();
+    const maybeEnButton = await $(languageToggleSelector);
+    if (await maybeEnButton.isExisting()) {
+      const currentLanguage = (await maybeEnButton.getText()).trim().toUpperCase();
       if (currentLanguage.startsWith("ZH")) {
         await safeClick(languageToggleSelector);
         await waitForLanguageButton("EN");
@@ -48,7 +51,9 @@ describe("i18n", () => {
       await waitForLanguageButton("EN");
     }
 
-    // Switch to Chinese and assert UI changes + localStorage updated.
+    // Switch to Chinese and assert the search input placeholder flips
+    // to the new Chinese copy. The new placeholder covers all 5 search
+    // kinds (workspace, fragment, recipe, snapshot + document).
     await safeClick(languageToggleSelector);
     await waitForLanguageButton("ZH");
     await expect($("[data-testid='global-search-input']")).toHaveAttribute(

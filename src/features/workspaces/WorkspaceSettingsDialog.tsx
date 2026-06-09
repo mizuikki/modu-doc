@@ -1,6 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Switch from "@radix-ui/react-switch";
-import { save } from "@tauri-apps/plugin-dialog";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/toast/ToastProvider";
@@ -47,17 +46,15 @@ export function WorkspaceSettingsDialog({
   const toast = useToast();
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const activeWorkspace = useAppStore(selectActiveWorkspace);
+  const setDocumentStatusMessage = useAppStore((state) => state.setDocumentStatusMessage);
   const [internalOpen, setInternalOpen] = useState(false);
   const [section, setSection] = useState<WorkspaceSettingsSection>(defaultSection);
   const [name, setName] = useState(activeWorkspace?.name ?? "");
-  const [targetPath, setTargetPath] = useState(activeWorkspace?.targetPath ?? "");
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("safe_sync");
   const [autoSyncOnEdit, setAutoSyncOnEdit] = useState(true);
   const [syncDebounceMs, setSyncDebounceMs] = useState(800);
   const [importStrategy, setImportStrategy] = useState<ImportStrategy>("import_as_fragment");
   const [markdownSplitRule, setMarkdownSplitRule] = useState<MarkdownSplitRule>("h2");
-  const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
-  const setCompileStatus = useAppStore((state) => state.setCompileStatus);
 
   const isControlled = openProp !== undefined;
   const open = isControlled ? openProp : internalOpen;
@@ -70,32 +67,24 @@ export function WorkspaceSettingsDialog({
     if (open) setSection(defaultSection);
   }, [open, defaultSection]);
 
-  const chooseTarget = async () => {
-    const selected = await save({
-      defaultPath: targetPath || `${activeWorkspace?.name ?? "workspace"}.md`,
-      filters: [{ name: "Markdown", extensions: ["md"] }],
-    });
-    if (selected) {
-      setTargetPath(selected);
-    }
-  };
-
   const handleSave = async () => {
     if (!activeWorkspaceId) return;
     const trimmedName = name.trim();
-    const trimmedTargetPath = targetPath.trim();
     try {
       await updateWorkspace({
         id: activeWorkspaceId,
         name: trimmedName || null,
-        targetPath: trimmedTargetPath || null,
-        clearTargetPath: trimmedTargetPath.length === 0,
       });
       setOpen(false);
     } catch (error) {
-      setWorkspaceStatusMessage(normalizeAppError(error));
-      setCompileStatus("error");
-      toast.error(normalizeAppError(error), t("action_failed"));
+      const message = normalizeAppError(error);
+      // Workspace-level errors don't have a documentId; surface via the first
+      // visible document if there is one, otherwise fall back to a toast.
+      const firstDocumentId = useAppStore.getState().documents[0]?.id ?? null;
+      if (firstDocumentId) {
+        setDocumentStatusMessage(firstDocumentId, message);
+      }
+      toast.error(message, t("action_failed"));
     }
   };
 
@@ -103,7 +92,6 @@ export function WorkspaceSettingsDialog({
     setOpen(nextOpen);
     if (nextOpen) {
       setName(activeWorkspace?.name ?? "");
-      setTargetPath(activeWorkspace?.targetPath ?? "");
     }
   };
 
@@ -238,28 +226,9 @@ export function WorkspaceSettingsDialog({
                       style={inputStyle}
                     />
                   </label>
-                  <label style={labeledFieldStyle}>
-                    <span style={labelTextStyle}>{t("target_file")}</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input
-                        data-testid="workspace-settings-target"
-                        value={targetPath}
-                        onChange={(event) => setTargetPath(event.target.value)}
-                        placeholder={t("target_path_prompt")}
-                        style={{ ...inputStyle, flex: 1 }}
-                      />
-                      <button
-                        type="button"
-                        onClick={chooseTarget}
-                        data-testid="workspace-settings-choose"
-                      >
-                        {t("choose_target")}
-                      </button>
-                    </div>
-                    <span style={{ color: "hsl(var(--muted-foreground))", fontSize: 12 }}>
-                      {t("current_target")}: {activeWorkspace?.targetPath ?? t("missing_target")}
-                    </span>
-                  </label>
+                  <p style={{ margin: 0, fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                    {tMaybe(t, "workspace_target_per_document_hint")}
+                  </p>
                 </>
               ) : null}
               {section === "sync" ? (

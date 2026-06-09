@@ -1,50 +1,60 @@
-import { useEffect } from "react";
-import { applyScreenshotScenario, isScreenshotMode } from "@/app/screenshotMode";
-import { logDebugPerf } from "@/lib/debugPerf";
-import { useAppStore } from "@/store/appStore";
+import { useEffect, useState } from "react";
 import {
-  refreshWorkspaceBundleToStore,
-  refreshWorkspaceListToStore,
-} from "../data/workspaceRefresh";
+  createWorkspaceWithFirstDocument,
+  fetchWorkspaceBundle,
+  fetchWorkspaces,
+} from "@/app/data/workspaceData";
+import { applyScreenshotScenario, isScreenshotMode } from "@/app/screenshotMode";
+import { useAppStore } from "@/store/appStore";
+
+export type BootstrapStatus = "idle" | "loading" | "ready" | "error";
 
 export function useWorkspaceBootstrap() {
-  const loadWorkspaces = useAppStore((state) => state.loadWorkspaces);
-  const setWorkspaceList = useAppStore((state) => state.setWorkspaceList);
-  const setWorkspaceBundle = useAppStore((state) => state.setWorkspaceBundle);
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const [status, setStatus] = useState<BootstrapStatus>("idle");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isScreenshotMode()) {
-      applyScreenshotScenario();
-      return;
-    }
-    void (async () => {
-      void logDebugPerf("workspace bootstrap: list start");
-      await refreshWorkspaceListToStore({ loadWorkspaces, setWorkspaceList });
-      void logDebugPerf("workspace bootstrap: list done", {
-        activeWorkspaceId: useAppStore.getState().activeWorkspaceId,
-      });
-      void logDebugPerf("workspace bootstrap: initial bundle start", {
-        activeWorkspaceId: useAppStore.getState().activeWorkspaceId,
-      });
-      await refreshWorkspaceBundleToStore({
-        workspaceId: useAppStore.getState().activeWorkspaceId,
-        setWorkspaceBundle,
-      });
-      void logDebugPerf("workspace bootstrap: initial bundle done", {
-        activeWorkspaceId: useAppStore.getState().activeWorkspaceId,
-      });
-    })();
-  }, [loadWorkspaces, setWorkspaceBundle, setWorkspaceList]);
+    let cancelled = false;
+    (async () => {
+      if (isScreenshotMode()) {
+        applyScreenshotScenario();
+        if (!cancelled) {
+          setError(null);
+          setStatus("ready");
+        }
+        return;
+      }
 
-  useEffect(() => {
-    if (isScreenshotMode()) {
-      return;
-    }
-    void (async () => {
-      void logDebugPerf("workspace bootstrap: active bundle start", { activeWorkspaceId });
-      await refreshWorkspaceBundleToStore({ workspaceId: activeWorkspaceId, setWorkspaceBundle });
-      void logDebugPerf("workspace bootstrap: active bundle done", { activeWorkspaceId });
+      setStatus("loading");
+      setError(null);
+      try {
+        const list = await fetchWorkspaces();
+        if (cancelled) return;
+        const state = useAppStore.getState();
+        const activeId = state.activeWorkspaceId ?? list[0]?.id ?? null;
+        if (!activeId) {
+          if (!cancelled) {
+            setStatus("ready");
+          }
+          return;
+        }
+        await fetchWorkspaceBundle(activeId);
+        if (cancelled) return;
+        setStatus("ready");
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setStatus("error");
+      }
     })();
-  }, [activeWorkspaceId, setWorkspaceBundle]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const createAndOpen = async (name: string) => {
+    await createWorkspaceWithFirstDocument(name);
+  };
+
+  return { status, error, createAndOpen };
 }

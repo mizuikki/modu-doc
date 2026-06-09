@@ -1,36 +1,30 @@
 import * as Select from "@radix-ui/react-select";
 import { useTranslation } from "react-i18next";
-import { activateRecipe } from "@/lib/api/recipes";
-import { useAppStore } from "@/store/appStore";
+import type { Recipe } from "@/store/types";
 
-export function RecipeSelect() {
+type RecipeSelectProps = {
+  recipes: Recipe[];
+  value: string | null;
+  onChange: (recipeId: string | null) => void;
+  testIdPrefix?: string;
+};
+
+/**
+ * Recipe selection is now scoped to whichever panel is composing a recipe
+ * (typically the right panel). The previously-global `activeRecipeId` is
+ * gone; the right panel keeps the chosen id in its own local state and feeds
+ * it in here as a controlled prop.
+ */
+export function RecipeSelect({ recipes, value, onChange, testIdPrefix }: RecipeSelectProps) {
   const { t } = useTranslation();
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
-  const recipes = useAppStore((state) => state.recipes);
-  const setActiveRecipe = useAppStore((state) => state.setActiveRecipe);
-
-  const workspaceRecipes = recipes.filter((recipe) => recipe.workspaceId === activeWorkspaceId);
+  const testId = testIdPrefix ? `${testIdPrefix}-recipe-select` : "recipe-select";
 
   return (
-    <Select.Root
-      value={activeRecipeId ?? ""}
-      onValueChange={(value) => {
-        const recipeId = value || null;
-        setActiveRecipe(recipeId);
-        if (recipeId) {
-          void activateRecipe(recipeId);
-        }
-      }}
-    >
+    <Select.Root value={value ?? ""} onValueChange={(next) => onChange(next || null)}>
       <Select.Trigger
-        data-testid="recipe-select"
+        data-testid={testId}
         aria-label={t("assembly")}
-        title={
-          activeRecipeId
-            ? (workspaceRecipes.find((recipe) => recipe.id === activeRecipeId)?.name ?? "")
-            : ""
-        }
+        title={value ? (recipes.find((recipe) => recipe.id === value)?.name ?? "") : ""}
         style={{
           display: "flex",
           alignItems: "center",
@@ -89,7 +83,7 @@ export function RecipeSelect() {
             >
               {t("assembly")}
             </div>
-            {workspaceRecipes.length === 0 ? (
+            {recipes.length === 0 ? (
               <div
                 style={{
                   padding: "8px 10px",
@@ -100,7 +94,7 @@ export function RecipeSelect() {
                 {t("no_active_recipe")}
               </div>
             ) : (
-              workspaceRecipes.map((recipe) => (
+              recipes.map((recipe) => (
                 <Select.Item
                   key={recipe.id}
                   value={recipe.id}

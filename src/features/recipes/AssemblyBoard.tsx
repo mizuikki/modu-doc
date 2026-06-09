@@ -14,25 +14,19 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, CopyPlus, Plus, X } from "lucide-react";
+import { ChevronDown, CopyPlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getScreenshotDialogMode, isScreenshotMode } from "@/app/screenshotMode";
 import { useAppDialog } from "@/components/dialog/DialogProvider";
 import { useToast } from "@/components/toast/ToastProvider";
 import { FragmentList } from "@/features/fragments/FragmentList";
-import { RecipeSelect } from "@/features/recipes/RecipeSelect";
 import { SortableFragmentCard } from "@/features/recipes/SortableFragmentCard";
 import { createFragment } from "@/lib/api/fragments";
-import { activateRecipe, createRecipe, updateRecipeItems } from "@/lib/api/recipes";
+import { createRecipe, updateRecipeItems } from "@/lib/api/recipes";
 import { normalizeAppError } from "@/lib/appError";
 import { summarizeForPreview } from "@/lib/markdownPreview";
-import { scheduleWorkspaceSync } from "@/lib/syncScheduler";
-import { applyWorkspaceWriteError } from "@/lib/workspaceWrite";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveWorkspace } from "@/store/selectors";
 
 type RecipeItemRecord = {
   id: string;
@@ -41,8 +35,6 @@ type RecipeItemRecord = {
   enabled: boolean;
   sortOrder: number;
 };
-
-type LibraryMode = "insert" | "manage";
 
 function serializeRecipeItem(item: RecipeItemRecord) {
   return {
@@ -54,74 +46,49 @@ function serializeRecipeItem(item: RecipeItemRecord) {
   };
 }
 
-function replaceRecipeItemsInStore(
-  recipeId: string,
-  nextItems: RecipeItemRecord[],
-  nextActiveFragmentId: string | null,
-) {
-  useAppStore.setState((state) => ({
-    recipeItems: [...state.recipeItems.filter((item) => item.recipeId !== recipeId), ...nextItems],
-    activeRecipeId: recipeId,
-    activeFragmentId: nextActiveFragmentId,
-    compileStatus: "compiling",
-  }));
-}
-
-export function AssemblyBoard() {
+/**
+ * Recipe is no longer the default editing path. The board is now an
+ * advanced editor opened from the right panel's Recipes tab (or a command
+ * palette action). It edits a single recipe, picked via local panel state
+ * and fed in as the `recipeId` prop (or the first non-deleted recipe of the
+ * active workspace if `null`).
+ */
+export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?: string | null }) {
   const { t } = useTranslation();
   const dialog = useAppDialog();
   const toast = useToast();
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const activeRecipeId = useAppStore((state) => state.activeRecipeId);
-  const activeFragmentId = useAppStore((state) => state.activeFragmentId);
   const fragments = useAppStore((state) => state.fragments);
   const recipes = useAppStore((state) => state.recipes);
   const recipeItems = useAppStore((state) => state.recipeItems);
-  const setActiveRecipe = useAppStore((state) => state.setActiveRecipe);
-  const setActiveFragment = useAppStore((state) => state.setActiveFragment);
-  const reorderRecipeItems = useAppStore((state) => state.reorderRecipeItems);
-  const toggleRecipeItem = useAppStore((state) => state.toggleRecipeItem);
-  const setWorkspaceStatusMessage = useAppStore((state) => state.setWorkspaceStatusMessage);
-  const setCompileStatus = useAppStore((state) => state.setCompileStatus);
 
+  const [recipeId, setRecipeId] = useState<string | null>(initialRecipeId);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const [libraryDialogOpen, setLibraryDialogOpen] = useState(false);
-  const [libraryMode, setLibraryMode] = useState<LibraryMode>("insert");
-  const [libraryQuery, setLibraryQuery] = useState("");
 
-  const workspaceRecipes = recipes.filter((recipe) => recipe.workspaceId === activeWorkspaceId);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
-  const currentRecipeId =
-    activeRecipeId && workspaceRecipes.some((recipe) => recipe.id === activeRecipeId)
-      ? activeRecipeId
-      : (workspaceRecipes[0]?.id ?? null);
+  const workspaceRecipes = useMemo(
+    () =>
+      recipes.filter(
+        (recipe) => recipe.workspaceId === activeWorkspaceId && recipe.deletedAt === null,
+      ),
+    [recipes, activeWorkspaceId],
+  );
 
+  // Default to the first non-deleted recipe in the workspace if no explicit
+  // id is given. (The right panel is the long-term owner of this selection.)
   useEffect(() => {
-    if (!currentRecipeId || currentRecipeId === activeRecipeId) {
-      return;
+    if (recipeId) return;
+    if (workspaceRecipes[0]) {
+      setRecipeId(workspaceRecipes[0].id);
     }
-    setActiveRecipe(currentRecipeId);
-  }, [activeRecipeId, currentRecipeId, setActiveRecipe]);
-
-  useEffect(() => {
-    if (!isScreenshotMode()) {
-      return;
-    }
-    const dialogMode = getScreenshotDialogMode();
-    if (dialogMode === "insert") {
-      setLibraryMode(dialogMode);
-      setLibraryQuery("");
-      setLibraryDialogOpen(true);
-    }
-  }, []);
+  }, [recipeId, workspaceRecipes]);
 
   const currentRecipeItems = useMemo<RecipeItemRecord[]>(
     () =>
       recipeItems
-        .filter((item) => item.recipeId === currentRecipeId)
+        .filter((item) => item.recipeId === recipeId)
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder),
-    [currentRecipeId, recipeItems],
+    [recipeId, recipeItems],
   );
 
   const activeFragmentsById = useMemo(() => {
@@ -160,115 +127,74 @@ export function AssemblyBoard() {
     }),
   );
 
-  const activeRecipe = workspaceRecipes.find((recipe) => recipe.id === currentRecipeId) ?? null;
+  const activeRecipe = workspaceRecipes.find((recipe) => recipe.id === recipeId) ?? null;
   const recipeFragmentIds = new Set(currentRecipeItems.map((item) => item.fragmentId));
   const insertableFragmentCount = fragments.filter(
     (fragment) => fragment.deletedAt === null && !recipeFragmentIds.has(fragment.id),
   ).length;
 
   const persistRecipeItems = async (nextItems: RecipeItemRecord[]) => {
-    if (!currentRecipeId) {
+    if (!recipeId) {
       return false;
     }
     try {
       await updateRecipeItems({
-        recipeId: currentRecipeId,
+        recipeId,
         items: nextItems.map(serializeRecipeItem),
       });
-      if (activeWorkspace?.targetPath) {
-        scheduleWorkspaceSync({
-          workspaceId: activeWorkspace.id,
-          setWorkspaceStatusMessage,
-          setCompileStatus,
-        });
-      }
       return true;
     } catch (error) {
-      const message = applyWorkspaceWriteError(setWorkspaceStatusMessage, setCompileStatus, error);
-      toast.error(message, t("action_failed"));
+      toast.error(normalizeAppError(error), t("action_failed"));
       return false;
     }
   };
 
-  const handleCreateFragment = async (closeDialogOnSuccess = false) => {
+  const handleCreateFragment = async () => {
     if (!activeWorkspaceId) return;
     const result = await dialog.prompt({ title: t("fragment_name_prompt") });
     if (!result.ok) return;
     const name = result.value.trim();
     if (!name) return;
     try {
-      const created = (await createFragment({
+      await createFragment({
         workspaceId: activeWorkspaceId,
         name,
         content: "",
-        attachToRecipe: true,
-      })) as { id: string };
-      setActiveFragment(created.id);
-      if (closeDialogOnSuccess) {
-        setLibraryDialogOpen(false);
-      }
+      });
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
   };
 
-  const openLibraryDialog = (mode: LibraryMode) => {
-    setLibraryMode(mode);
-    setLibraryQuery("");
-    setLibraryDialogOpen(true);
-  };
-
   const appendFragmentToRecipe = async (fragmentId: string) => {
-    if (!currentRecipeId || recipeFragmentIds.has(fragmentId)) {
+    if (!recipeId || recipeFragmentIds.has(fragmentId)) {
       return;
     }
-    const previousItems = currentRecipeItems;
-    const nextItems = [
+    const nextItems: RecipeItemRecord[] = [
       ...currentRecipeItems,
       {
         id: crypto.randomUUID(),
-        recipeId: currentRecipeId,
+        recipeId,
         fragmentId,
         enabled: true,
         sortOrder: currentRecipeItems.length,
       },
     ];
-
-    replaceRecipeItemsInStore(currentRecipeId, nextItems, fragmentId);
-    const success = await persistRecipeItems(nextItems);
-    if (!success) {
-      replaceRecipeItemsInStore(currentRecipeId, previousItems, activeFragmentId);
-      return;
-    }
-
-    setActiveFragment(fragmentId);
-    setLibraryDialogOpen(false);
+    await persistRecipeItems(nextItems);
   };
 
   const removeFragmentFromRecipe = async (fragmentId: string) => {
-    if (!currentRecipeId) {
+    if (!recipeId) {
       return;
     }
-    const previousItems = currentRecipeItems;
     const nextItems = currentRecipeItems
       .filter((item) => item.fragmentId !== fragmentId)
-      .map((item, index) => ({
-        ...item,
-        sortOrder: index,
-      }));
-    const nextActiveFragmentId =
-      activeFragmentId === fragmentId ? (nextItems[0]?.fragmentId ?? null) : activeFragmentId;
-
-    replaceRecipeItemsInStore(currentRecipeId, nextItems, nextActiveFragmentId);
-    const success = await persistRecipeItems(nextItems);
-    if (!success) {
-      replaceRecipeItemsInStore(currentRecipeId, previousItems, activeFragmentId);
-      return;
-    }
+      .map((item, index) => ({ ...item, sortOrder: index }));
+    await persistRecipeItems(nextItems);
   };
 
   const cloneRecipe = async () => {
-    if (!activeWorkspaceId || !currentRecipeId) return;
+    if (!activeWorkspaceId || !recipeId) return;
     const result = await dialog.prompt({
       title: t("recipe_name_prompt"),
       defaultValue: `${activeRecipe?.name ?? t("no_active_recipe")} ${t("recipe_copy_suffix")}`,
@@ -292,8 +218,7 @@ export function AssemblyBoard() {
           }),
         ),
       });
-      setActiveRecipe(recipe.id);
-      await activateRecipe(recipe.id);
+      setRecipeId(recipe.id);
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
@@ -306,7 +231,7 @@ export function AssemblyBoard() {
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragId(null);
     const { active, over } = event;
-    if (!currentRecipeId || !over || active.id === over.id) {
+    if (!recipeId || !over || active.id === over.id) {
       return;
     }
     const orderedIds = currentRecipeItems.map((item) => item.fragmentId);
@@ -318,15 +243,11 @@ export function AssemblyBoard() {
     const next = orderedIds.slice();
     const [moved] = next.splice(oldIndex, 1);
     next.splice(newIndex, 0, moved);
-    reorderRecipeItems(currentRecipeId, next);
     void persistRecipeItems(
-      currentRecipeItems.map((item) => {
-        const sortOrder = next.indexOf(item.fragmentId);
-        return {
-          ...item,
-          sortOrder,
-        };
-      }),
+      currentRecipeItems.map((item) => ({
+        ...item,
+        sortOrder: next.indexOf(item.fragmentId),
+      })),
     );
   };
 
@@ -383,7 +304,6 @@ export function AssemblyBoard() {
             background: "hsl(var(--card))",
           }}
         >
-          <RecipeSelect />
           <button
             type="button"
             onClick={cloneRecipe}
@@ -416,7 +336,7 @@ export function AssemblyBoard() {
             >
               <button
                 type="button"
-                onClick={() => openLibraryDialog("insert")}
+                onClick={() => void appendFragmentToRecipe(insertableFragmentCount > 0 ? "" : "")}
                 data-testid="recipe-add-fragment"
                 style={{
                   display: "inline-flex",
@@ -491,32 +411,13 @@ export function AssemblyBoard() {
                 >
                   + {t("new_fragment")}
                 </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  data-testid="recipe-manage-library"
-                  onSelect={() => {
-                    openLibraryDialog("manage");
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    fontSize: 13,
-                    color: "hsl(var(--foreground))",
-                    cursor: "pointer",
-                    outline: "none",
-                  }}
-                >
-                  {t("manage_library")}
-                </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         </div>
       </div>
 
-      {!currentRecipeId ? (
+      {!recipeId ? (
         <div
           style={{
             border: "1px dashed hsl(var(--border))",
@@ -545,7 +446,6 @@ export function AssemblyBoard() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={() => openLibraryDialog("insert")}
               data-testid="recipe-empty-add-fragment"
               style={{
                 border: "1px solid hsl(var(--primary))",
@@ -595,22 +495,17 @@ export function AssemblyBoard() {
                   summary={item.summary || t("empty_fragment")}
                   enabled={item.enabled}
                   active={item.fragmentId === activeDragId}
-                  selected={item.fragmentId === activeFragmentId}
+                  selected={false}
                   t={t}
                   onRemove={() => {
                     void removeFragmentFromRecipe(item.fragmentId);
                   }}
-                  onSelect={() => setActiveFragment(item.fragmentId)}
+                  onSelect={() => undefined}
                   onToggle={() => {
-                    const nextEnabled = !item.enabled;
-                    toggleRecipeItem(currentRecipeId, item.fragmentId, nextEnabled);
                     void persistRecipeItems(
                       currentRecipeItems.map((entry) =>
                         entry.fragmentId === item.fragmentId
-                          ? {
-                              ...entry,
-                              enabled: nextEnabled,
-                            }
+                          ? { ...entry, enabled: !entry.enabled }
                           : entry,
                       ),
                     );
@@ -654,233 +549,21 @@ export function AssemblyBoard() {
         </DndContext>
       )}
 
-      <Dialog.Root open={libraryDialogOpen} onOpenChange={setLibraryDialogOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(15, 23, 42, 0.42)",
-              backdropFilter: "blur(4px)",
-              zIndex: 70,
-            }}
-          />
-          <Dialog.Content
-            data-testid="fragment-library-dialog"
-            aria-label={t("library_dialog_title")}
-            style={{
-              position: "fixed",
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              width: "min(720px, calc(100vw - 32px))",
-              maxHeight: "82vh",
-              background: "hsl(var(--card))",
-              color: "hsl(var(--foreground))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: 16,
-              boxShadow: "0 24px 72px rgba(15, 23, 42, 0.22)",
-              display: "grid",
-              gridTemplateRows: "auto auto minmax(0, 1fr)",
-              overflow: "hidden",
-              zIndex: 71,
-            }}
-          >
-            <div
-              style={{
-                padding: "14px 18px",
-                borderBottom: "1px solid hsl(var(--border))",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div style={{ display: "grid", gap: 4 }}>
-                <Dialog.Title style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-                  {t("library_dialog_title")}
-                </Dialog.Title>
-                <Dialog.Description
-                  style={{ margin: 0, fontSize: 12, color: "hsl(var(--muted-foreground))" }}
-                >
-                  {libraryMode === "insert"
-                    ? t("library_insert_hint", { count: insertableFragmentCount })
-                    : t("library_manage_hint")}
-                </Dialog.Description>
-              </div>
-              <Dialog.Close asChild>
-                <button
-                  type="button"
-                  data-testid="fragment-library-close"
-                  aria-label={t("close")}
-                  title={t("close")}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 30,
-                    height: 30,
-                    borderRadius: 8,
-                    border: "1px solid hsl(var(--border))",
-                    background: "hsl(var(--card))",
-                    color: "hsl(var(--muted-foreground))",
-                    cursor: "pointer",
-                    padding: 0,
-                    flexShrink: 0,
-                  }}
-                >
-                  <X size={14} strokeWidth={1.8} aria-hidden />
-                </button>
-              </Dialog.Close>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gap: 8,
-                padding: "12px 18px",
-                borderBottom: "1px solid hsl(var(--border))",
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignSelf: "start",
-                  alignItems: "center",
-                  gap: 2,
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 999,
-                  padding: 2,
-                  background: "hsl(var(--card))",
-                }}
-              >
-                <button
-                  type="button"
-                  data-testid="fragment-library-mode-insert"
-                  onClick={() => setLibraryMode("insert")}
-                  aria-pressed={libraryMode === "insert"}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    minWidth: 0,
-                    height: 28,
-                    padding: "0 8px",
-                    border: 0,
-                    borderRadius: 999,
-                    background: libraryMode === "insert" ? "hsl(var(--muted))" : "transparent",
-                    color: "hsl(var(--foreground))",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    lineHeight: 1,
-                    whiteSpace: "nowrap",
-                    flexShrink: 0,
-                  }}
-                >
-                  {t("library_add_to_recipe")}
-                </button>
-                <button
-                  type="button"
-                  data-testid="fragment-library-mode-manage"
-                  onClick={() => setLibraryMode("manage")}
-                  aria-pressed={libraryMode === "manage"}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    minWidth: 0,
-                    height: 28,
-                    padding: "0 8px",
-                    border: 0,
-                    borderRadius: 999,
-                    background: libraryMode === "manage" ? "hsl(var(--muted))" : "transparent",
-                    color: "hsl(var(--foreground))",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    lineHeight: 1,
-                    whiteSpace: "nowrap",
-                    flexShrink: 0,
-                  }}
-                >
-                  {t("manage_library")}
-                </button>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <input
-                  value={libraryQuery}
-                  onChange={(event) => setLibraryQuery(event.target.value)}
-                  data-testid="fragment-library-search"
-                  placeholder={t("library_search_placeholder")}
-                  aria-label={t("search")}
-                  style={{
-                    flex: "1 1 220px",
-                    minWidth: 180,
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid hsl(var(--border))",
-                    background: "hsl(var(--background))",
-                    color: "hsl(var(--foreground))",
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleCreateFragment(true)}
-                  disabled={!activeWorkspaceId}
-                  data-testid="fragment-library-new"
-                  style={{
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: 10,
-                    padding: "8px 12px",
-                    background: "hsl(var(--card))",
-                    color: "hsl(var(--foreground))",
-                    cursor: activeWorkspaceId ? "pointer" : "not-allowed",
-                    opacity: activeWorkspaceId ? 1 : 0.6,
-                    fontSize: 12,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  + {t("new_fragment")}
-                </button>
-              </div>
-            </div>
-            <div style={{ minHeight: 0, padding: 18 }}>
-              {libraryMode === "insert" ? (
-                <FragmentList
-                  rootTestId="fragment-library-insert-list"
-                  hideHeader
-                  filterMode="not_in_recipe"
-                  showDeletedSection={false}
-                  searchQuery={libraryQuery}
-                  emptyMessage={t("no_insertable_fragments")}
-                  onAddFragment={(fragmentId) => {
-                    void appendFragmentToRecipe(fragmentId);
-                  }}
-                  onCreateFragment={() => handleCreateFragment(true)}
-                />
-              ) : (
-                <FragmentList
-                  rootTestId="fragment-library-manage-list"
-                  hideHeader
-                  showDeletedSection
-                  searchQuery={libraryQuery}
-                  onAddFragment={(fragmentId) => {
-                    void appendFragmentToRecipe(fragmentId);
-                  }}
-                  onCreateFragment={() => handleCreateFragment(true)}
-                />
-              )}
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      {/* Library manager (no dialog wrapper here — owners render this inside
+          the right panel or a modal). Kept as a slot for downstream consumers. */}
+      <div data-testid="assembly-library-slot" hidden>
+        <FragmentList
+          rootTestId="fragment-library-insert-list"
+          hideHeader
+          filterMode="not_in_recipe"
+          showDeletedSection={false}
+          emptyMessage={t("no_insertable_fragments")}
+          onAddFragment={(fragmentId) => {
+            void appendFragmentToRecipe(fragmentId);
+          }}
+          onCreateFragment={() => handleCreateFragment()}
+        />
+      </div>
     </div>
   );
 }

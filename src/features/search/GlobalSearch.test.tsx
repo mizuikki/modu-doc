@@ -14,11 +14,18 @@ vi.mock("@/lib/api/search", () => ({
       subtitle: "Hello",
     },
     {
+      kind: "document",
+      id: "document-1",
+      workspace_id: "workspace-a",
+      title: "Main",
+      subtitle: "Document body",
+    },
+    {
       kind: "workspace",
       id: "workspace-b",
       workspace_id: null,
       title: "Workspace B",
-      subtitle: "dirty",
+      subtitle: "ready",
     },
   ]),
 }));
@@ -31,27 +38,35 @@ describe("GlobalSearch", () => {
         {
           id: "workspace-a",
           name: "Workspace A",
-          targetPath: null,
-          defaultRecipeId: null,
-          status: "missing_target",
-          lastCompiledAt: null,
-          lastCompiledHash: null,
           createdAt: "t",
           updatedAt: "t",
         },
         {
           id: "workspace-b",
           name: "Workspace B",
-          targetPath: null,
-          defaultRecipeId: null,
-          status: "dirty",
-          lastCompiledAt: null,
-          lastCompiledHash: null,
           createdAt: "t",
           updatedAt: "t",
         },
       ],
       activeWorkspaceId: "workspace-a",
+      documents: [
+        {
+          id: "document-1",
+          workspaceId: "workspace-a",
+          name: "Main",
+          content: "Document body",
+          contentHash: "",
+          targetPath: null,
+          fileStatus: "dirty",
+          lastWrittenAt: null,
+          lastWrittenHash: null,
+          sortOrder: 0,
+          deletedAt: null,
+          description: null,
+          createdAt: "t",
+          updatedAt: "t",
+        },
+      ],
     });
   });
 
@@ -75,7 +90,16 @@ describe("GlobalSearch", () => {
     const fragmentResult = await screen.findByRole("option", { name: /intro/i });
     fireEvent.click(fragmentResult);
     expect(useAppStore.getState().activeWorkspaceId).toBe("workspace-a");
-    expect(useAppStore.getState().activeFragmentId).toBe("fragment-1");
+    expect(useAppStore.getState().ui.rightPanelTab).toBe("fragments");
+
+    fireEvent.change(input, { target: { value: "main" } });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const documentResult = await screen.findByRole("option", { name: /main/i });
+    fireEvent.click(documentResult);
+    expect(useAppStore.getState().activeWorkspaceId).toBe("workspace-a");
+    expect(useAppStore.getState().activeDocumentId).toBe("document-1");
+    expect(useAppStore.getState().ui.centerMode).toBe("edit");
 
     fireEvent.change(input, { target: { value: "workspace" } });
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -99,7 +123,7 @@ describe("GlobalSearch", () => {
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(useAppStore.getState().activeFragmentId).toBe("fragment-1");
+    expect(useAppStore.getState().ui.rightPanelTab).toBe("fragments");
 
     fireEvent.change(input, { target: { value: "intro" } });
     await new Promise((resolve) => setTimeout(resolve, 200));

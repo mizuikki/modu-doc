@@ -11,26 +11,30 @@
   <img alt="React" src="https://img.shields.io/badge/React-19-61dafb.svg" />
 </p>
 
-ModuDoc is a local-first desktop app for building Markdown documents from reusable fragments. Create small pieces of content, arrange them into recipes, preview the compiled result, and write it to any target `.md` file on your machine.
+ModuDoc is a local-first desktop app for writing Markdown documents backed by a reusable content library. Edit each document in-app, optionally bind it to a real on-disk `.md` file, and reuse fragments across many documents without duplicating content.
 
 ## Overview
 
 ModuDoc is designed for people who maintain structured Markdown documents that need to be assembled from repeatable sections: agent instructions, project docs, templates, checklists, prompts, and other living documents.
 
-Each workspace keeps its fragments, recipes, snapshots, and target-file metadata in a local SQLite database. The app can bind a workspace to an arbitrary Markdown file, detect external changes, and export or import complete workspaces as `.agentpack` archives.
+The primary object is the **Document**. Each document is a Markdown file edited in-app, with an optional `target_path` that binds it to a real on-disk file. A workspace is a pure container that groups documents together. Fragments are a content-copy material library available across the workspace. Recipes are an advanced entry that one-shot-generates a document from a chosen fragment set. Snapshots are per-document, not per-workspace.
+
+Data lives in a local SQLite database. The app detects external edits to bound files and offers four conflict-resolution policies: `import_external`, `overwrite_external`, `backup_and_overwrite`, and `cancel`. Document processing state (`process_status`) is tracked in the frontend store only and is never persisted.
 
 ## Features
 
-- Local-first workspaces backed by SQLite.
-- Markdown fragments with editing and preview support.
-- Recipes for ordering fragments and enabling or disabling sections.
-- One-click sync to a bound target Markdown file.
-- External target-file conflict detection and resolution.
-- Snapshots for reviewing and restoring compiled output.
-- Global search across workspaces, fragments, recipes, and snapshots.
-- `.agentpack` import and export for portable workspaces.
+- Local-first workspaces backed by SQLite, with Markdown documents as the primary object.
+- In-app Markdown editor and live preview per document.
+- Per-document `target_path` binding to any `.md` file on disk.
+- Per-document `file_status` with conflict detection and four resolution policies (`import_external`, `overwrite_external`, `backup_and_overwrite`, `cancel`).
+- `write_document_to_file` flow for safe writes with external-change awareness.
+- Per-document snapshots for reviewing and restoring prior content.
+- Fragment library: reusable Markdown sections that are copied into documents on use.
+- Recipes (advanced): one-shot document generation from a curated fragment set.
+- Three-column default layout: sidebar, document editor, right panel.
+- Global search across workspaces, documents, fragments, and snapshots.
 - English and Chinese UI localization.
-- Cross-platform desktop packaging through Tauri.
+- Cross-platform desktop packaging through Tauri v2.
 
 ## Getting Started
 
@@ -155,21 +159,44 @@ If you want to pre-warm these dependencies (recommended for fresh Windows enviro
 
 The i18n locale persistence check is covered by `e2e-tests/test/specs/i18n.locale-persistence.ts`.
 
-## Package Format
+## Document Model
 
-ModuDoc workspaces can be exported as `.agentpack` files. An `.agentpack` file is a ZIP archive that contains the workspace manifest, fragments, recipes, snapshots, and reserved asset storage.
-
-Current top-level layout:
+ModuDoc is structured around a small, explicit set of relationships:
 
 ```text
-workspace.json
-fragments.json
-recipes.json
-snapshots/
-assets/
+Workspace
+  |-- Document (1..N)  -- primary object, Markdown edited in-app
+  |     |-- target_path  -- optional binding to a real on-disk .md file
+  |     |-- file_status   -- current sync state with the bound file
+  |     `-- Snapshot (1..N) -- per-document history (not per-workspace)
+  |
+  |-- Fragment library  -- reusable Markdown sections, copied into documents on use
+  `-- Recipe            -- advanced one-shot generator: produces a new Document
 ```
 
-Imported packages create a new workspace. Any exported target path is treated as a hint only, so imported workspaces do not automatically write to the original target file.
+- **Workspace**: a pure container that groups documents. It owns the document list, the fragment library, and any recipes.
+- **Document**: the primary object. Each document is Markdown content with an optional `target_path` and a `file_status` that reflects the relationship with the bound file.
+- **Snapshot**: a point-in-time capture of a single document's content, stored per-document.
+- **Fragment library**: a workspace-scoped content-copy library. Inserting a fragment into a document copies its text; later edits to the fragment do not retroactively change documents that already used it.
+- **Recipe**: an advanced entry that one-shot-generates a new document from a chosen fragment set and configuration.
+- **Write flow**: `write_document_to_file` writes the document's current content to its `target_path`. If the file changed on disk since the last read, the document's `file_status` becomes `conflicted` and the user must pick one of the four resolution policies.
+- **`process_status`**: a transient, frontend-only state for the current document (e.g. saving, syncing). It lives in the frontend store and is never persisted.
+
+Default UI is a three-column layout:
+
+```text
++--------+----------------------------+--------------------+
+|        |                            |                    |
+| Side   |       Document Editor      |    Right Panel     |
+| bar    |       (Markdown + prev)    |  (metadata, snap-  |
+|        |                            |   shots, actions)  |
+|        |                            |                    |
++--------+----------------------------+--------------------+
+```
+
+## Package Format
+
+`.agentpack` import and export has been removed. Workspaces are local-only and backed by SQLite. To move data between machines, copy the workspace's SQLite database directly.
 
 ## Contributing
 
