@@ -2,13 +2,13 @@ use super::*;
 use std::collections::HashMap;
 
 #[tauri::command]
-pub async fn list_workspaces(state: State<'_, db::DbState>) -> Result<Vec<Workspace>, String> {
+pub async fn list_projects(state: State<'_, db::DbState>) -> Result<Vec<Project>, String> {
     let started = std::time::Instant::now();
-    crate::debug_log!("[rust] list_workspaces start");
-    let rows = sqlx::query_as::<_, WorkspaceRow>(
+    crate::debug_log!("[rust] list_projects start");
+    let rows = sqlx::query_as::<_, ProjectRow>(
         r#"
         SELECT id, name, created_at, updated_at
-        FROM workspaces
+        FROM projects
         ORDER BY created_at ASC
         "#,
     )
@@ -16,26 +16,26 @@ pub async fn list_workspaces(state: State<'_, db::DbState>) -> Result<Vec<Worksp
     .await
     .map_err(crate::error::normalize_error)?;
     crate::debug_log!(
-        "[rust] list_workspaces done rows={} took={:.1}ms",
+        "[rust] list_projects done rows={} took={:.1}ms",
         rows.len(),
         started.elapsed().as_secs_f64() * 1000.0
     );
-    Ok(rows.into_iter().map(Workspace::from).collect())
+    Ok(rows.into_iter().map(Project::from).collect())
 }
 
 #[tauri::command]
-pub async fn create_workspace(
+pub async fn create_project(
     app: AppHandle,
     state: State<'_, db::DbState>,
     name: String,
     initial_document_name: Option<String>,
-) -> Result<Workspace, String> {
+) -> Result<Project, String> {
     let id = Uuid::new_v4().to_string();
     let document_id = Uuid::new_v4().to_string();
     let timestamp = now();
     let document_name = initial_document_name
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "Main.md".to_string());
+        .unwrap_or_else(|| "Untitled.md".to_string());
 
     let mut tx = pool(&state)
         .begin()
@@ -44,7 +44,7 @@ pub async fn create_workspace(
 
     sqlx::query(
         r#"
-        INSERT INTO workspaces (id, name, created_at, updated_at)
+        INSERT INTO projects (id, name, created_at, updated_at)
         VALUES (?1, ?2, ?3, ?4)
         "#,
     )
@@ -59,10 +59,10 @@ pub async fn create_workspace(
     sqlx::query(
         r#"
         INSERT INTO documents (
-            id, workspace_id, name, content, content_hash,
-            target_path, file_status, sort_order, created_at, updated_at
+            id, project_id, name, content, content_hash,
+            target_path, save_state, sort_order, created_at, updated_at
         )
-        VALUES (?1, ?2, ?3, '', '', NULL, 'missing_target', 0, ?4, ?5)
+        VALUES (?1, ?2, ?3, '', '', NULL, 'draft', 0, ?4, ?5)
         "#,
     )
     .bind(&document_id)
@@ -76,8 +76,8 @@ pub async fn create_workspace(
 
     tx.commit().await.map_err(crate::error::normalize_error)?;
 
-    emit_workspace_status_for(&app, "workspace_created", &id);
-    Ok(Workspace {
+    emit_project_status_for(&app, "project_created", &id);
+    Ok(Project {
         id,
         name,
         created_at: timestamp.clone(),
@@ -86,16 +86,16 @@ pub async fn create_workspace(
 }
 
 #[tauri::command]
-pub async fn update_workspace(
+pub async fn update_project(
     app: AppHandle,
     state: State<'_, db::DbState>,
     id: String,
     name: Option<String>,
-) -> Result<Workspace, String> {
-    let current = sqlx::query_as::<_, WorkspaceRow>(
+) -> Result<Project, String> {
+    let current = sqlx::query_as::<_, ProjectRow>(
         r#"
         SELECT id, name, created_at, updated_at
-        FROM workspaces WHERE id = ?1
+        FROM projects WHERE id = ?1
         "#,
     )
     .bind(&id)
@@ -111,7 +111,7 @@ pub async fn update_workspace(
 
     sqlx::query(
         r#"
-        UPDATE workspaces
+        UPDATE projects
         SET name = ?2, updated_at = ?3
         WHERE id = ?1
         "#,
@@ -123,8 +123,8 @@ pub async fn update_workspace(
     .await
     .map_err(crate::error::normalize_error)?;
 
-    emit_workspace_status_for(&app, "workspace_updated", &id);
-    Ok(Workspace {
+    emit_project_status_for(&app, "project_updated", &id);
+    Ok(Project {
         id,
         name: updated_name,
         created_at: current.created_at,
@@ -133,32 +133,32 @@ pub async fn update_workspace(
 }
 
 #[tauri::command]
-pub async fn delete_workspace(
+pub async fn delete_project(
     app: AppHandle,
     state: State<'_, db::DbState>,
     id: String,
 ) -> Result<(), String> {
-    sqlx::query("DELETE FROM workspaces WHERE id = ?1")
+    sqlx::query("DELETE FROM projects WHERE id = ?1")
         .bind(&id)
         .execute(pool(&state))
         .await
         .map_err(crate::error::normalize_error)?;
-    emit_workspace_status_for(&app, "workspace_deleted", &id);
+    emit_project_status_for(&app, "project_deleted", &id);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn load_workspace(
+pub async fn load_project(
     state: State<'_, db::DbState>,
     id: String,
-) -> Result<WorkspaceLoadResult, String> {
+) -> Result<ProjectLoadResult, String> {
     let started = std::time::Instant::now();
-    crate::debug_log!("[rust] load_workspace start id={}", id);
+    crate::debug_log!("[rust] load_project start id={}", id);
 
-    let workspace: Workspace = sqlx::query_as::<_, WorkspaceRow>(
+    let project: Project = sqlx::query_as::<_, ProjectRow>(
         r#"
         SELECT id, name, created_at, updated_at
-        FROM workspaces WHERE id = ?1
+        FROM projects WHERE id = ?1
         "#,
     )
     .bind(&id)
@@ -167,17 +167,17 @@ pub async fn load_workspace(
     .map_err(crate::error::normalize_error)?
     .into();
     crate::debug_log!(
-        "[rust] load_workspace workspace row took={:.1}ms",
+        "[rust] load_project project row took={:.1}ms",
         started.elapsed().as_secs_f64() * 1000.0
     );
 
     let documents: Vec<Document> = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path,
-               file_status, last_written_at, last_written_hash, sort_order,
+        SELECT id, project_id, name, content, content_hash, target_path,
+               save_state, last_written_at, last_written_hash, sort_order,
                deleted_at, description, created_at, updated_at
         FROM documents
-        WHERE workspace_id = ?1
+        WHERE project_id = ?1
         ORDER BY (deleted_at IS NOT NULL) ASC, sort_order ASC, created_at ASC
         "#,
     )
@@ -189,17 +189,17 @@ pub async fn load_workspace(
     .map(Document::from)
     .collect();
     crate::debug_log!(
-        "[rust] load_workspace documents={} took={:.1}ms",
+        "[rust] load_project documents={} took={:.1}ms",
         documents.len(),
         started.elapsed().as_secs_f64() * 1000.0
     );
 
     let fragments: Vec<Fragment> = sqlx::query_as::<_, FragmentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, tags, category,
+        SELECT id, project_id, name, content, content_hash, tags, category,
                sort_order, deleted_at, created_at, updated_at
         FROM fragments
-        WHERE workspace_id = ?1
+        WHERE project_id = ?1
         ORDER BY (deleted_at IS NOT NULL) ASC, sort_order ASC, created_at ASC
         "#,
     )
@@ -211,16 +211,16 @@ pub async fn load_workspace(
     .map(Fragment::from)
     .collect();
     crate::debug_log!(
-        "[rust] load_workspace fragments={} took={:.1}ms",
+        "[rust] load_project fragments={} took={:.1}ms",
         fragments.len(),
         started.elapsed().as_secs_f64() * 1000.0
     );
 
     let recipes: Vec<Recipe> = sqlx::query_as::<_, RecipeRow>(
         r#"
-        SELECT id, workspace_id, name, description, deleted_at, created_at, updated_at
+        SELECT id, project_id, name, description, deleted_at, created_at, updated_at
         FROM recipes
-        WHERE workspace_id = ?1
+        WHERE project_id = ?1
         ORDER BY created_at ASC
         "#,
     )
@@ -232,7 +232,7 @@ pub async fn load_workspace(
     .map(Recipe::from)
     .collect();
     crate::debug_log!(
-        "[rust] load_workspace recipes={} took={:.1}ms",
+        "[rust] load_project recipes={} took={:.1}ms",
         recipes.len(),
         started.elapsed().as_secs_f64() * 1000.0
     );
@@ -241,7 +241,7 @@ pub async fn load_workspace(
         r#"
         SELECT id, recipe_id, fragment_id, enabled, sort_order
         FROM recipe_items
-        WHERE recipe_id IN (SELECT id FROM recipes WHERE workspace_id = ?1)
+        WHERE recipe_id IN (SELECT id FROM recipes WHERE project_id = ?1)
         ORDER BY sort_order ASC, id ASC
         "#,
     )
@@ -253,7 +253,7 @@ pub async fn load_workspace(
     .map(RecipeItem::from)
     .collect();
     crate::debug_log!(
-        "[rust] load_workspace recipe_items={} took={:.1}ms",
+        "[rust] load_project recipe_items={} took={:.1}ms",
         recipe_items.len(),
         started.elapsed().as_secs_f64() * 1000.0
     );
@@ -262,7 +262,7 @@ pub async fn load_workspace(
         r#"
         SELECT id, document_id, label, content, content_hash, created_at
         FROM snapshots
-        WHERE document_id IN (SELECT id FROM documents WHERE workspace_id = ?1)
+        WHERE document_id IN (SELECT id FROM documents WHERE project_id = ?1)
         ORDER BY created_at DESC
         "#,
     )
@@ -279,19 +279,19 @@ pub async fn load_workspace(
             .push(Snapshot::from(row));
     }
     crate::debug_log!(
-        "[rust] load_workspace snapshot_groups={} total_snapshots={} took={:.1}ms",
+        "[rust] load_project snapshot_groups={} total_snapshots={} took={:.1}ms",
         snapshots.len(),
         snapshots.values().map(|items| items.len()).sum::<usize>(),
         started.elapsed().as_secs_f64() * 1000.0
     );
     crate::debug_log!(
-        "[rust] load_workspace done id={} total={:.1}ms",
+        "[rust] load_project done id={} total={:.1}ms",
         id,
         started.elapsed().as_secs_f64() * 1000.0
     );
 
-    Ok(WorkspaceLoadResult {
-        workspace,
+    Ok(ProjectLoadResult {
+        project,
         documents,
         fragments,
         recipes,
@@ -326,34 +326,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_workspace_inserts_first_main_document() {
+    async fn create_project_inserts_first_untitled_document() {
         let pool = test_pool().await;
         let timestamp = "2026-06-09T10:00:00Z".to_string();
-        let workspace_id = "ws-main";
+        let project_id = "ws-main";
         let document_id = "doc-main";
 
         let mut tx = pool.begin().await.expect("tx");
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
         )
-        .bind(workspace_id)
-        .bind("Main Workspace")
+        .bind(project_id)
+        .bind("Main Project")
         .bind(&timestamp)
         .bind(&timestamp)
         .execute(&mut *tx)
         .await
-        .expect("workspace");
+        .expect("project");
         sqlx::query(
             r#"
             INSERT INTO documents (
-                id, workspace_id, name, content, content_hash,
-                target_path, file_status, sort_order, created_at, updated_at
+                id, project_id, name, content, content_hash,
+                target_path, save_state, sort_order, created_at, updated_at
             )
-            VALUES (?1, ?2, 'Main.md', '', '', NULL, 'missing_target', 0, ?3, ?4)
+            VALUES (?1, ?2, 'Untitled.md', '', '', NULL, 'draft', 0, ?3, ?4)
             "#,
         )
         .bind(document_id)
-        .bind(workspace_id)
+        .bind(project_id)
         .bind(&timestamp)
         .bind(&timestamp)
         .execute(&mut *tx)
@@ -361,17 +361,17 @@ mod tests {
         .expect("document");
         tx.commit().await.expect("commit");
 
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM documents WHERE workspace_id = ?1")
-            .bind(workspace_id)
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM documents WHERE project_id = ?1")
+            .bind(project_id)
             .fetch_one(&pool)
             .await
             .expect("count");
         assert_eq!(count, 1);
 
-        let (name, file_status, target_path, sort_order): (String, String, Option<String>, i64) =
+        let (name, save_state, target_path, sort_order): (String, String, Option<String>, i64) =
             sqlx::query_as(
                 r#"
-                SELECT name, file_status, target_path, sort_order
+                SELECT name, save_state, target_path, sort_order
                 FROM documents WHERE id = ?1
                 "#,
             )
@@ -379,41 +379,41 @@ mod tests {
             .fetch_one(&pool)
             .await
             .expect("document row");
-        assert_eq!(name, "Main.md");
-        assert_eq!(file_status, "missing_target");
+        assert_eq!(name, "Untitled.md");
+        assert_eq!(save_state, "draft");
         assert!(target_path.is_none());
         assert_eq!(sort_order, 0);
     }
 
     #[tokio::test]
-    async fn load_workspace_groups_snapshots_by_document_id() {
+    async fn load_project_groups_snapshots_by_document_id() {
         let pool = test_pool().await;
         let timestamp = "2026-06-09T10:00:00Z".to_string();
-        let workspace_id = "ws-snap";
+        let project_id = "ws-snap";
 
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
         )
-        .bind(workspace_id)
-        .bind("Snap Workspace")
+        .bind(project_id)
+        .bind("Snap Project")
         .bind(&timestamp)
         .bind(&timestamp)
         .execute(&pool)
         .await
-        .expect("workspace");
+        .expect("project");
 
         for (doc_id, doc_name) in [("doc-a", "A.md"), ("doc-b", "B.md")] {
             sqlx::query(
                 r#"
                 INSERT INTO documents (
-                    id, workspace_id, name, content, content_hash,
-                    target_path, file_status, sort_order, created_at, updated_at
+                    id, project_id, name, content, content_hash,
+                    target_path, save_state, sort_order, created_at, updated_at
                 )
-                VALUES (?1, ?2, ?3, '', '', NULL, 'missing_target', 0, ?4, ?5)
+                VALUES (?1, ?2, ?3, '', '', NULL, 'draft', 0, ?4, ?5)
                 "#,
             )
             .bind(doc_id)
-            .bind(workspace_id)
+            .bind(project_id)
             .bind(doc_name)
             .bind(&timestamp)
             .bind(&timestamp)
@@ -445,11 +445,11 @@ mod tests {
             r#"
             SELECT id, document_id, label, content, content_hash, created_at
             FROM snapshots
-            WHERE document_id IN (SELECT id FROM documents WHERE workspace_id = ?1)
+            WHERE document_id IN (SELECT id FROM documents WHERE project_id = ?1)
             ORDER BY created_at DESC
             "#,
         )
-        .bind(workspace_id)
+        .bind(project_id)
         .fetch_all(&pool)
         .await
         .expect("snapshot rows");

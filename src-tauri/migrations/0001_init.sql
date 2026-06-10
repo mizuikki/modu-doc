@@ -1,7 +1,7 @@
 -- ModuDoc document-first baseline migration
 --
 -- This is the new clean schema baseline (no legacy compatibility).
--- Document is the primary object; Workspace is a pure container.
+-- Document is the primary object; Project is a pure container.
 -- Snapshot is bound to document_id; Fragment is a material library;
 -- Recipe is preserved as an advanced feature only.
 
@@ -13,7 +13,7 @@ CREATE TABLE app_meta (
   updated_at TEXT NOT NULL
 );
 
-CREATE TABLE workspaces (
+CREATE TABLE projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -22,13 +22,13 @@ CREATE TABLE workspaces (
 
 CREATE TABLE documents (
   id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
   name TEXT NOT NULL,
   content TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
   target_path TEXT,
-  file_status TEXT NOT NULL DEFAULT 'missing_target' CHECK (
-    file_status IN ('missing_target', 'dirty', 'ready', 'conflicted', 'error')
+  save_state TEXT NOT NULL DEFAULT 'draft' CHECK (
+    save_state IN ('draft', 'unsaved', 'saved', 'conflict', 'error')
   ),
   last_written_at TEXT,
   last_written_hash TEXT,
@@ -37,12 +37,12 @@ CREATE TABLE documents (
   description TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE fragments (
   id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
   name TEXT NOT NULL,
   content TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
@@ -52,18 +52,18 @@ CREATE TABLE fragments (
   deleted_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE recipes (
   id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   deleted_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE recipe_items (
@@ -92,18 +92,18 @@ CREATE TABLE settings (
   updated_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_documents_workspace_order
-  ON documents(workspace_id, deleted_at, sort_order, created_at);
+CREATE INDEX idx_documents_project_order
+  ON documents(project_id, deleted_at, sort_order, created_at);
 
 CREATE UNIQUE INDEX idx_documents_target_path_unique
   ON documents(target_path)
   WHERE target_path IS NOT NULL;
 
-CREATE INDEX idx_fragments_workspace_order
-  ON fragments(workspace_id, deleted_at, sort_order, created_at);
+CREATE INDEX idx_fragments_project_order
+  ON fragments(project_id, deleted_at, sort_order, created_at);
 
-CREATE INDEX idx_recipes_workspace_order
-  ON recipes(workspace_id, deleted_at, created_at);
+CREATE INDEX idx_recipes_project_order
+  ON recipes(project_id, deleted_at, created_at);
 
 CREATE INDEX idx_recipe_items_recipe_order
   ON recipe_items(recipe_id, sort_order);

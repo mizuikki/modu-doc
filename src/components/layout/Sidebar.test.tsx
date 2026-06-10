@@ -13,26 +13,26 @@ describe("Sidebar", () => {
     cleanup();
   });
 
-  it("keeps the document status badge on a single line", () => {
+  it("shows draft documents as local drafts without warning indicators", () => {
     useAppStore.setState({
-      workspaces: [
+      projects: [
         {
           id: "ws-1",
-          name: "Untitled",
+          name: "Untitled Project",
           createdAt: "t",
           updatedAt: "t",
         },
       ],
-      activeWorkspaceId: "ws-1",
+      activeProjectId: "ws-1",
       documents: [
         {
           id: "doc-1",
-          workspaceId: "ws-1",
-          name: "Main.md",
+          projectId: "ws-1",
+          name: "Untitled.md",
           content: "",
           contentHash: "hash",
           targetPath: null,
-          fileStatus: "missing_target",
+          saveState: "draft",
           lastWrittenAt: null,
           lastWrittenHash: null,
           sortOrder: 0,
@@ -51,8 +51,56 @@ describe("Sidebar", () => {
       </AppTestProviders>,
     );
 
-    const status = screen.getByTestId("sidebar-document-status-doc-1");
-    expect(status).toHaveTextContent("Missing target");
-    expect(status).toHaveStyle({ whiteSpace: "nowrap", flexShrink: "0" });
+    expect(screen.queryByTestId("sidebar-document-status-doc-1")).not.toBeInTheDocument();
+    expect(screen.getByText("Local draft")).toBeInTheDocument();
+  });
+
+  it("keeps long document status out of the sidebar row", () => {
+    useAppStore.setState({
+      projects: [
+        {
+          id: "ws-1",
+          name: "A very long project name that should live in the switcher",
+          createdAt: "t",
+          updatedAt: "t",
+        },
+      ],
+      activeProjectId: "ws-1",
+      documents: [
+        {
+          id: "doc-1",
+          projectId: "ws-1",
+          name: "Very long document title that should truncate in the sidebar.md",
+          content: "",
+          contentHash: "hash",
+          targetPath: "/tmp/a-very-long-target-folder/conflict.md",
+          saveState: "unsaved",
+          lastWrittenAt: null,
+          lastWrittenHash: null,
+          sortOrder: 0,
+          deletedAt: null,
+          description: null,
+          createdAt: "t",
+          updatedAt: "t",
+        },
+      ],
+      activeDocumentId: "doc-1",
+    });
+
+    render(
+      <AppTestProviders>
+        <Sidebar />
+      </AppTestProviders>,
+    );
+
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-document-status-doc-1")).toHaveAttribute(
+      "aria-label",
+      "Unsaved changes",
+    );
+    expect(screen.getByTestId("sidebar-project-switcher")).toHaveAttribute(
+      "title",
+      "A very long project name that should live in the switcher",
+    );
   });
 });

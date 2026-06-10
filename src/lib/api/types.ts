@@ -1,6 +1,6 @@
-export type DocumentFileStatus = "missing_target" | "dirty" | "ready" | "conflicted" | "error";
+export type DocumentSaveState = "draft" | "unsaved" | "saved" | "conflict" | "error";
 
-export type WorkspaceWire = {
+export type ProjectWire = {
   id: string;
   name: string;
   created_at: string;
@@ -9,12 +9,12 @@ export type WorkspaceWire = {
 
 export type DocumentWire = {
   id: string;
-  workspace_id: string;
+  project_id: string;
   name: string;
   content: string;
   content_hash: string;
   target_path: string | null;
-  file_status: DocumentFileStatus;
+  save_state: DocumentSaveState;
   last_written_at: string | null;
   last_written_hash: string | null;
   sort_order: number;
@@ -26,7 +26,7 @@ export type DocumentWire = {
 
 export type FragmentWire = {
   id: string;
-  workspace_id: string;
+  project_id: string;
   name: string;
   content: string;
   content_hash: string;
@@ -40,7 +40,7 @@ export type FragmentWire = {
 
 export type RecipeWire = {
   id: string;
-  workspace_id: string;
+  project_id: string;
   name: string;
   description: string;
   deleted_at: string | null;
@@ -65,8 +65,8 @@ export type SnapshotWire = {
   created_at: string;
 };
 
-export type WorkspaceLoadResult = {
-  workspace: WorkspaceWire;
+export type ProjectLoadResult = {
+  project: ProjectWire;
   documents: DocumentWire[];
   fragments: FragmentWire[];
   recipes: RecipeWire[];
@@ -81,9 +81,10 @@ export type DocumentConflictStatus = {
 };
 
 export type SearchResult = {
-  kind: "workspace" | "fragment" | "recipe" | "snapshot" | "document";
+  kind: "project" | "fragment" | "recipe" | "snapshot" | "document";
   id: string;
-  workspace_id: string | null;
+  project_id: string | null;
+  document_id: string | null;
   title: string;
   subtitle: string;
 };

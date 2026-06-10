@@ -8,8 +8,8 @@ export function resetAppStore() {
   localStorage.clear();
   useAppStore.persist.clearStorage();
   useAppStore.setState({
-    workspaces: [],
-    activeWorkspaceId: null,
+    projects: [],
+    activeProjectId: null,
     documents: [],
     activeDocumentId: null,
     fragments: [],

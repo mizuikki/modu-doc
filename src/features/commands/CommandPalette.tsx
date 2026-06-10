@@ -7,13 +7,13 @@ import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
 import { createDocument } from "@/lib/api/documents";
 import { createFragment } from "@/lib/api/fragments";
+import { createProject } from "@/lib/api/projects";
 import { createSnapshot } from "@/lib/api/snapshots";
-import { createWorkspace } from "@/lib/api/workspaces";
 import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveDocument, selectActiveWorkspace } from "@/store/selectors";
+import { selectActiveDocument, selectActiveProject } from "@/store/selectors";
 
-export type CommandCategory = "workspace" | "document" | "view" | "sync" | "fragment" | "help";
+export type CommandCategory = "project" | "document" | "view" | "sync" | "fragment" | "help";
 
 export type Command = {
   id: string;
@@ -34,7 +34,7 @@ type CommandPaletteProps = {
 };
 
 const CATEGORY_ORDER: CommandCategory[] = [
-  "workspace",
+  "project",
   "document",
   "view",
   "sync",
@@ -43,8 +43,8 @@ const CATEGORY_ORDER: CommandCategory[] = [
 ];
 
 const CATEGORY_LABEL_KEYS: Record<CommandCategory, string> = {
-  workspace: "category_workspace",
-  document: "category_workspace",
+  project: "category_project",
+  document: "category_project",
   view: "category_view",
   sync: "category_sync",
   fragment: "category_fragment",
@@ -110,7 +110,7 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
+  const activeProject = useAppStore(selectActiveProject);
   const activeDocument = useAppStore(selectActiveDocument);
   const setCenterMode = useAppStore((state) => state.setCenterMode);
 
@@ -145,8 +145,8 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
   }, []);
 
   const handleNewFragment = useCallback(async () => {
-    if (!activeWorkspace?.id) {
-      toast.error(t("no_workspace_selected"));
+    if (!activeProject?.id) {
+      toast.error(t("no_project_selected"));
       return;
     }
     const result = await dialog.prompt({ title: t("fragment_name_prompt") });
@@ -154,15 +154,15 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
     const name = result.value.trim();
     if (!name) return;
     try {
-      await createFragment({ workspaceId: activeWorkspace.id, name });
+      await createFragment({ projectId: activeProject.id, name });
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
-  }, [activeWorkspace?.id, dialog, toast, t]);
+  }, [activeProject?.id, dialog, toast, t]);
 
   const handleNewDocument = useCallback(async () => {
-    if (!activeWorkspace?.id) {
-      toast.error(t("no_workspace_selected"));
+    if (!activeProject?.id) {
+      toast.error(t("no_project_selected"));
       return;
     }
     // Reuse the fragment name prompt for the document name; the new key
@@ -172,17 +172,17 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
     const name = result.value.trim();
     if (!name) return;
     try {
-      const doc = await createDocument({ workspaceId: activeWorkspace.id, name });
+      const doc = await createDocument({ projectId: activeProject.id, name });
       useAppStore.getState().setActiveDocument(doc.id);
       setCenterMode("edit");
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }
-  }, [activeWorkspace?.id, dialog, setCenterMode, toast, t]);
+  }, [activeProject?.id, dialog, setCenterMode, toast, t]);
 
   const handleCreateSnapshot = useCallback(async () => {
     if (!activeDocument) {
-      toast.error(t("no_workspace_selected"));
+      toast.error(t("no_project_selected"));
       return;
     }
     try {
@@ -194,20 +194,20 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
 
   const handleFocusDocument = useCallback(() => {
     if (!activeDocument) {
-      toast.error(t("no_workspace_selected"));
+      toast.error(t("no_project_selected"));
       return;
     }
     setCenterMode("edit");
   }, [activeDocument, setCenterMode, toast, t]);
 
-  const handleNewWorkspace = useCallback(async () => {
-    const result = await dialog.prompt({ title: t("workspace_name_prompt") });
+  const handleNewProject = useCallback(async () => {
+    const result = await dialog.prompt({ title: t("project_name_prompt") });
     if (!result.ok) return;
     const name = result.value.trim();
     if (!name) return;
     try {
-      const workspace = await createWorkspace({ name, initialDocumentName: "Main.md" });
-      useAppStore.getState().setActiveWorkspace(workspace.id);
+      const project = await createProject({ name, initialDocumentName: "Untitled.md" });
+      useAppStore.getState().setActiveProject(project.id);
       setCenterMode("edit");
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
@@ -223,17 +223,17 @@ export function CommandPalette({ openRef, onOpenSearch }: CommandPaletteProps) {
         void handleNewFragment();
       } else if (detail.id === "new-document") {
         void handleNewDocument();
-      } else if (detail.id === "new-workspace") {
-        void handleNewWorkspace();
-      } else if (detail.id === "workspace-settings") {
-        window.dispatchEvent(new CustomEvent("modudoc:open-workspace-settings"));
+      } else if (detail.id === "new-project") {
+        void handleNewProject();
+      } else if (detail.id === "project-settings") {
+        window.dispatchEvent(new CustomEvent("modudoc:open-project-settings"));
       } else if (detail.id === "show-shortcuts") {
         toast.info(t("show_shortcuts_cmd"));
       }
     };
     window.addEventListener("modudoc:command", handleCommandEvent);
     return () => window.removeEventListener("modudoc:command", handleCommandEvent);
-  }, [open, handleNewFragment, handleNewDocument, handleNewWorkspace, toast, t]);
+  }, [open, handleNewFragment, handleNewDocument, handleNewProject, toast, t]);
 
   const commands = useMemo<Command[]>(
     () =>
@@ -573,22 +573,20 @@ export function buildCommands(args: {
 }): Command[] {
   return [
     {
-      id: "new-workspace",
-      labelKey: "new_workspace_cmd",
-      category: "workspace",
+      id: "new-project",
+      labelKey: "new_project_cmd",
+      category: "project",
       run: () => {
-        window.dispatchEvent(
-          new CustomEvent("modudoc:command", { detail: { id: "new-workspace" } }),
-        );
+        window.dispatchEvent(new CustomEvent("modudoc:command", { detail: { id: "new-project" } }));
       },
     },
     {
-      id: "workspace-settings",
-      labelKey: "workspace_settings_cmd",
-      category: "workspace",
+      id: "project-settings",
+      labelKey: "project_settings_cmd",
+      category: "project",
       run: () => {
         window.dispatchEvent(
-          new CustomEvent("modudoc:command", { detail: { id: "workspace-settings" } }),
+          new CustomEvent("modudoc:command", { detail: { id: "project-settings" } }),
         );
       },
     },

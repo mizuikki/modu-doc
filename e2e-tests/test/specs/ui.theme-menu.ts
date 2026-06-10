@@ -1,6 +1,6 @@
 import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject } from "../support/project";
 import { safeClick } from "../support/ui";
-import { createAndOpenWorkspace } from "../support/workspace";
 
 async function isDocumentDark(): Promise<boolean> {
   return (await browser.execute(() =>
@@ -19,9 +19,9 @@ async function waitForThemeItem(value: "light" | "dark" | "system", timeoutMs = 
 
 describe("Theme menu", () => {
   it("switches between light and dark via the header theme menu", async () => {
-    // 1. Open a fresh workspace so the header is fully rendered.
-    const workspaceName = `E2E Theme ${Date.now()}`;
-    await createAndOpenWorkspace(workspaceName);
+    // 1. Open a fresh project so the header is fully rendered.
+    const projectName = `E2E Theme ${Date.now()}`;
+    await createAndOpenProject(projectName);
 
     // 2. Open the theme menu and pick light. Document root should drop
     //    the .dark class.

@@ -1,3 +1,5 @@
+import { SnapshotDiff } from "@/features/history/SnapshotDiff";
+import { SnapshotTimeline } from "@/features/history/SnapshotTimeline";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveDocument } from "@/store/selectors";
 import { DocumentHeader } from "./DocumentHeader";
@@ -24,7 +26,10 @@ export function DocumentEditor() {
         </div>
       )}
       {centerMode === "history" && (
-        <div className="history-view">Snapshot timeline placeholder for {doc.name}</div>
+        <div className="history-view">
+          <SnapshotTimeline />
+          <SnapshotDiff />
+        </div>
       )}
     </div>
   );

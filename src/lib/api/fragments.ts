@@ -2,14 +2,14 @@ import { tauriInvoke } from "./tauri";
 import type { FragmentWire } from "./types";
 
 export async function createFragment(args: {
-  workspaceId: string;
+  projectId: string;
   name: string;
   content?: string | null;
   tags?: string[] | null;
   category?: string | null;
 }) {
   return await tauriInvoke<FragmentWire>("create_fragment", {
-    workspaceId: args.workspaceId,
+    projectId: args.projectId,
     name: args.name,
     content: args.content ?? null,
     tags: args.tags ?? null,

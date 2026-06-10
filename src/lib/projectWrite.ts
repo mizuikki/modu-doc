@@ -9,7 +9,7 @@ export const SAFE_SYNC_POLICY: ConflictPolicy = "overwrite_external";
 
 /**
  * Phase 1: write a single document to its bound target file. This replaces
- * the old workspace-level `writeTargetFile` (which has been removed in
+ * the old project-level `writeTargetFile` (which has been removed in
  * document-first mode). Pass the active document id directly.
  */
 export async function writeTargetFile(documentId: string, _conflictPolicy: string) {
@@ -33,13 +33,13 @@ export async function resolveConflict(documentId: string, policy: ConflictPolicy
  * `writeDocumentToFile`. Returns a normalised message and a process status
  * to display.
  */
-export function applyWorkspaceWriteError(error: unknown): {
+export function applyProjectWriteError(error: unknown): {
   message: string;
-  status: "conflicted" | "error";
+  status: "conflict" | "error";
 } {
   const message = normalizeAppError(error);
   return {
     message,
-    status: message === "external_conflict" ? "conflicted" : "error",
+    status: message === "external_conflict" ? "conflict" : "error",
   };
 }

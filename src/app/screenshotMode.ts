@@ -1,9 +1,9 @@
 import { initialUI, useAppStore } from "@/store/appStore";
-import type { AppState, DocumentFileStatus } from "@/store/types";
+import type { AppState, DocumentSaveState } from "@/store/types";
 
 type ScreenshotScenarioId =
   | "default"
-  | "workspace-ready"
+  | "project-ready"
   | "edit-fragment"
   | "preview"
   | "history"
@@ -12,9 +12,9 @@ type ScreenshotScenarioId =
 type ScreenshotScenario = {
   app: Pick<
     AppState,
-    "workspaces" | "documents" | "fragments" | "recipes" | "recipeItems" | "snapshotsByDocumentId"
+    "projects" | "documents" | "fragments" | "recipes" | "recipeItems" | "snapshotsByDocumentId"
   >;
-  activeWorkspaceId: string | null;
+  activeProjectId: string | null;
   activeDocumentId: string | null;
   selectedSnapshotId: string | null;
   documentProcessStatus: AppState["documentProcessStatus"];
@@ -64,7 +64,7 @@ export function getScreenshotScenarioId(): ScreenshotScenarioId | null {
   }
   const allowed = new Set<ScreenshotScenarioId>([
     "default",
-    "workspace-ready",
+    "project-ready",
     "edit-fragment",
     "preview",
     "history",
@@ -86,10 +86,10 @@ const FIRST_RUN_UPDATED = "2026-06-09T14:19:54.000Z";
 
 const screenshotScenarioReadyState: ScreenshotScenario = {
   app: {
-    workspaces: [
+    projects: [
       {
-        id: "workspace-screenshot",
-        name: "E2E Workspace 1779597644735",
+        id: "project-screenshot",
+        name: "E2E Project 1779597644735",
         createdAt: DOC_BASE,
         updatedAt: DOC_UPDATED,
       },
@@ -97,12 +97,12 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
     documents: [
       {
         id: "document-main",
-        workspaceId: "workspace-screenshot",
-        name: "Main.md",
+        projectId: "project-screenshot",
+        name: "Untitled.md",
         content: "Main document body",
         contentHash: "hash-main",
         targetPath: "/tmp/main.md",
-        fileStatus: "ready" satisfies DocumentFileStatus,
+        saveState: "saved" satisfies DocumentSaveState,
         lastWrittenAt: "2026-06-03T08:40:00.000Z",
         lastWrittenHash: "written-hash-main",
         sortOrder: 0,
@@ -115,7 +115,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
     fragments: [
       {
         id: "fragment-intro",
-        workspaceId: "workspace-screenshot",
+        projectId: "project-screenshot",
         name: "Intro",
         content: "Intro body",
         contentHash: "hash-intro",
@@ -128,7 +128,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
       },
       {
         id: "fragment-middle",
-        workspaceId: "workspace-screenshot",
+        projectId: "project-screenshot",
         name: "Middle",
         content: "Middle body",
         contentHash: "hash-middle",
@@ -141,7 +141,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
       },
       {
         id: "fragment-outro",
-        workspaceId: "workspace-screenshot",
+        projectId: "project-screenshot",
         name: "Outro",
         content: "Outro body",
         contentHash: "hash-outro",
@@ -154,7 +154,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
       },
       {
         id: "fragment-unknown",
-        workspaceId: "workspace-screenshot",
+        projectId: "project-screenshot",
         name: "Unknown fragment",
         content: "Empty fragment",
         contentHash: "hash-unknown",
@@ -167,7 +167,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
       },
       {
         id: "fragment-test",
-        workspaceId: "workspace-screenshot",
+        projectId: "project-screenshot",
         name: "test",
         content: "test123",
         contentHash: "hash-test",
@@ -180,7 +180,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
       },
       {
         id: "fragment-library-only",
-        workspaceId: "workspace-screenshot",
+        projectId: "project-screenshot",
         name: "Appendix",
         content: "Library-only body",
         contentHash: "hash-library",
@@ -195,7 +195,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
     recipes: [
       {
         id: "recipe-default",
-        workspaceId: "workspace-screenshot",
+        projectId: "project-screenshot",
         name: "Default",
         description: "",
         deletedAt: null,
@@ -261,7 +261,7 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
       ],
     },
   },
-  activeWorkspaceId: "workspace-screenshot",
+  activeProjectId: "project-screenshot",
   activeDocumentId: "document-main",
   selectedSnapshotId: "snapshot-latest",
   documentProcessStatus: { "document-main": "idle" },
@@ -279,28 +279,28 @@ const screenshotScenarioReadyState: ScreenshotScenario = {
 
 const screenshotScenarioFirstRun: ScreenshotScenario = {
   app: {
-    workspaces: [
+    projects: [
       {
-        id: "workspace-1",
-        name: "Untitled",
+        id: "project-1",
+        name: "Untitled Project",
         createdAt: DOC_BASE,
         updatedAt: FIRST_RUN_UPDATED,
       },
       {
-        id: "workspace-2",
-        name: "Untitled",
+        id: "project-2",
+        name: "Untitled Project",
         createdAt: DOC_BASE,
         updatedAt: FIRST_RUN_UPDATED,
       },
       {
-        id: "workspace-3",
-        name: "Untitled",
+        id: "project-3",
+        name: "Untitled Project",
         createdAt: DOC_BASE,
         updatedAt: FIRST_RUN_UPDATED,
       },
       {
-        id: "workspace-4",
-        name: "Untitled",
+        id: "project-4",
+        name: "Untitled Project",
         createdAt: DOC_BASE,
         updatedAt: FIRST_RUN_UPDATED,
       },
@@ -308,12 +308,12 @@ const screenshotScenarioFirstRun: ScreenshotScenario = {
     documents: [
       {
         id: "document-main",
-        workspaceId: "workspace-4",
-        name: "Main.md",
+        projectId: "project-4",
+        name: "Untitled.md",
         content: "",
         contentHash: "hash-main-empty",
         targetPath: null,
-        fileStatus: "missing_target" satisfies DocumentFileStatus,
+        saveState: "draft" satisfies DocumentSaveState,
         lastWrittenAt: null,
         lastWrittenHash: null,
         sortOrder: 0,
@@ -328,7 +328,7 @@ const screenshotScenarioFirstRun: ScreenshotScenario = {
     recipeItems: [],
     snapshotsByDocumentId: {},
   },
-  activeWorkspaceId: "workspace-4",
+  activeProjectId: "project-4",
   activeDocumentId: "document-main",
   selectedSnapshotId: null,
   documentProcessStatus: { "document-main": "idle" },
@@ -361,7 +361,7 @@ function createScenario(
 
 const screenshotScenarios: Record<ScreenshotScenarioId, ScreenshotScenario> = {
   default: screenshotScenarioFirstRun,
-  "workspace-ready": screenshotScenarioReadyState,
+  "project-ready": screenshotScenarioReadyState,
   "edit-fragment": screenshotScenarioReadyState,
   preview: createScenario(screenshotScenarioReadyState, {
     ui: {
@@ -394,7 +394,7 @@ export function applyScreenshotScenario() {
   useAppStore.setState({
     ...current,
     ...scenario.app,
-    activeWorkspaceId: scenario.activeWorkspaceId,
+    activeProjectId: scenario.activeProjectId,
     activeDocumentId: scenario.activeDocumentId,
     selectedSnapshotId: scenario.selectedSnapshotId,
     documentProcessStatus: scenario.documentProcessStatus,
@@ -457,7 +457,7 @@ function screenshotSceneLooksReady() {
 
   if (
     (scenarioId === "default" ||
-      scenarioId === "workspace-ready" ||
+      scenarioId === "project-ready" ||
       scenarioId === "edit-fragment") &&
     !document.querySelector("[data-testid='editor-pane-textarea']")
   ) {

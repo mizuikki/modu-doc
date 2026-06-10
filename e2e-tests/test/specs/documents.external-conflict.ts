@@ -3,16 +3,16 @@ import os from "node:os";
 import path from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { setDocumentEditorContent } from "../support/editor";
+import { createAndOpenProject, loadProject } from "../support/project";
 import { tauriInvoke } from "../support/tauri";
 import {
-  assertDocumentFileStatus,
+  assertDocumentSaveState,
   clickConflictPolicy,
   clickTargetBarWrite,
   dismissDocumentStatus,
   safeClick,
   waitForTargetBarConflict,
 } from "../support/ui";
-import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
 
 /**
  * Bind the active document to a target file, type some content, and
@@ -21,27 +21,27 @@ import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
  */
 async function bindSeedAndWrite(
   documentId: string,
-  workspaceId: string,
+  projectId: string,
   targetPath: string,
   initialContent: string,
 ) {
-  await tauriInvoke("update_document", { id: documentId, target_path: targetPath });
+  await tauriInvoke("update_document", { request: { id: documentId, targetPath } });
   await browser.waitUntil(async () => {
-    const bundle = await loadWorkspace(workspaceId);
+    const bundle = await loadProject(projectId);
     const doc = bundle.documents.find((entry) => entry.id === documentId);
     return doc?.target_path === targetPath;
   });
-  await assertDocumentFileStatus(documentId, "missing_target");
+  await assertDocumentSaveState(documentId, "draft");
 
   await setDocumentEditorContent(initialContent);
-  await assertDocumentFileStatus(documentId, "dirty");
+  await assertDocumentSaveState(documentId, "unsaved");
   await clickTargetBarWrite();
-  await assertDocumentFileStatus(documentId, "ready");
+  await assertDocumentSaveState(documentId, "saved");
 
   // Sanity: last_written_hash must be populated so that a subsequent
   // external edit will be detected as a conflict.
   await browser.waitUntil(async () => {
-    const bundle = await loadWorkspace(workspaceId);
+    const bundle = await loadProject(projectId);
     const doc = bundle.documents.find((entry) => entry.id === documentId);
     return Boolean(doc?.last_written_hash);
   });
@@ -60,31 +60,31 @@ describe("Documents — external conflict", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "modudoc-e2e-conflict-"));
     await mkdir(tempDir, { recursive: true });
     const targetPath = path.join(tempDir, "conflict.md");
-    const workspaceName = `E2E Conflict ${Date.now()}`;
-    const { workspaceId, documentId } = await createAndOpenWorkspace(workspaceName);
+    const projectName = `E2E Conflict ${Date.now()}`;
+    const { projectId, documentId } = await createAndOpenProject(projectName);
 
     const original = `original content ${Date.now()}`;
-    await bindSeedAndWrite(documentId, workspaceId, targetPath, original);
+    await bindSeedAndWrite(documentId, projectId, targetPath, original);
 
     // Externally modify the file so the next write detects a conflict.
     const externalPayload = `EXTERNAL EDIT ${Date.now()}\n`;
     await writeFile(targetPath, externalPayload, "utf8");
 
     await triggerConflictViaWrite();
-    await assertDocumentFileStatus(documentId, "conflicted");
+    await assertDocumentSaveState(documentId, "conflict");
 
     // ---- Policy 1: import_external ----
     // The document content should now equal the external file content,
-    // and the file on disk is left untouched. Status becomes dirty
-    // because content moved off the on-disk version.
+    // and the file on disk is left untouched. Importing accepts the
+    // external file as the new saved baseline.
     await safeClick("[data-testid='target-bar-resolve-import_external']", 20000);
     await browser.waitUntil(async () => {
-      const bundle = await loadWorkspace(workspaceId);
+      const bundle = await loadProject(projectId);
       const doc = bundle.documents.find((entry) => entry.id === documentId);
-      return doc?.file_status === "dirty";
+      return doc?.save_state === "saved";
     });
     {
-      const bundle = await loadWorkspace(workspaceId);
+      const bundle = await loadProject(projectId);
       const doc = bundle.documents.find((entry) => entry.id === documentId);
       expect(doc?.content).toBe(externalPayload);
     }
@@ -95,17 +95,17 @@ describe("Documents — external conflict", () => {
     await dismissDocumentStatus();
     await setDocumentEditorContent(`second pass ${Date.now()}`);
     await clickTargetBarWrite();
-    await assertDocumentFileStatus(documentId, "ready");
+    await assertDocumentSaveState(documentId, "saved");
     const externalPayload2 = `EXTERNAL EDIT 2 ${Date.now()}\n`;
     await writeFile(targetPath, externalPayload2, "utf8");
     await triggerConflictViaWrite();
-    await assertDocumentFileStatus(documentId, "conflicted");
+    await assertDocumentSaveState(documentId, "conflict");
 
     // ---- Policy 2: overwrite_external ----
     // The on-disk file is replaced with the document content. Status
-    // becomes ready and the file no longer contains the external text.
+    // becomes saved and the file no longer contains the external text.
     await safeClick("[data-testid='target-bar-resolve-overwrite_external']", 20000);
-    await assertDocumentFileStatus(documentId, "ready");
+    await assertDocumentSaveState(documentId, "saved");
     {
       const after = await readFile(targetPath, "utf8");
       expect(after).not.toBe(externalPayload2);
@@ -116,22 +116,20 @@ describe("Documents — external conflict", () => {
     await dismissDocumentStatus();
     await setDocumentEditorContent(`third pass ${Date.now()}`);
     await clickTargetBarWrite();
-    await assertDocumentFileStatus(documentId, "ready");
+    await assertDocumentSaveState(documentId, "saved");
     const externalPayload3 = `EXTERNAL EDIT 3 ${Date.now()}\n`;
     await writeFile(targetPath, externalPayload3, "utf8");
     await triggerConflictViaWrite();
-    await assertDocumentFileStatus(documentId, "conflicted");
+    await assertDocumentSaveState(documentId, "conflict");
 
     // ---- Policy 3: backup_and_overwrite ----
     // A timestamped .bak file is created next to the target, the target
     // is overwritten with the document content, and the conflict clears.
     await safeClick("[data-testid='target-bar-resolve-backup_and_overwrite']", 20000);
-    await assertDocumentFileStatus(documentId, "ready");
+    await assertDocumentSaveState(documentId, "saved");
     {
       const entries = await readdir(tempDir);
-      const backupName = entries.find(
-        (entry) => entry.startsWith("conflict.") && entry.endsWith(externalPayload3.slice(0, 1)),
-      );
+      const backupName = entries.find((entry) => entry.startsWith("conflict.bak."));
       expect(backupName).toBeTruthy();
       const backupFile = path.join(tempDir, backupName ?? "");
       const backupBody = await readFile(backupFile, "utf8");
@@ -144,11 +142,11 @@ describe("Documents — external conflict", () => {
     await dismissDocumentStatus();
     await setDocumentEditorContent(`fourth pass ${Date.now()}`);
     await clickTargetBarWrite();
-    await assertDocumentFileStatus(documentId, "ready");
+    await assertDocumentSaveState(documentId, "saved");
     const externalPayload4 = `EXTERNAL EDIT 4 ${Date.now()}\n`;
     await writeFile(targetPath, externalPayload4, "utf8");
     await triggerConflictViaWrite();
-    await assertDocumentFileStatus(documentId, "conflicted");
+    await assertDocumentSaveState(documentId, "conflict");
 
     // ---- Policy 4: cancel ----
     // The conflict bar is dismissed, file on disk is preserved, and
@@ -163,11 +161,11 @@ describe("Documents — external conflict", () => {
       expect(onDisk).toBe(externalPayload4);
     }
     {
-      const bundle = await loadWorkspace(workspaceId);
+      const bundle = await loadProject(projectId);
       const doc = bundle.documents.find((entry) => entry.id === documentId);
       // The backend keeps the document content under the user's edits
       // (cancel means "leave my work intact"). The status moves to
-      // dirty because the on-disk hash no longer matches.
+      // unsaved because the on-disk hash no longer matches.
       expect(doc?.content).toContain("fourth pass");
     }
 

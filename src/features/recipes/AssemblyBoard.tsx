@@ -51,13 +51,13 @@ function serializeRecipeItem(item: RecipeItemRecord) {
  * advanced editor opened from the right panel's Recipes tab (or a command
  * palette action). It edits a single recipe, picked via local panel state
  * and fed in as the `recipeId` prop (or the first non-deleted recipe of the
- * active workspace if `null`).
+ * active project if `null`).
  */
 export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?: string | null }) {
   const { t } = useTranslation();
   const dialog = useAppDialog();
   const toast = useToast();
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
   const fragments = useAppStore((state) => state.fragments);
   const recipes = useAppStore((state) => state.recipes);
   const recipeItems = useAppStore((state) => state.recipeItems);
@@ -65,22 +65,20 @@ export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?:
   const [recipeId, setRecipeId] = useState<string | null>(initialRecipeId);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
-  const workspaceRecipes = useMemo(
+  const projectRecipes = useMemo(
     () =>
-      recipes.filter(
-        (recipe) => recipe.workspaceId === activeWorkspaceId && recipe.deletedAt === null,
-      ),
-    [recipes, activeWorkspaceId],
+      recipes.filter((recipe) => recipe.projectId === activeProjectId && recipe.deletedAt === null),
+    [recipes, activeProjectId],
   );
 
-  // Default to the first non-deleted recipe in the workspace if no explicit
+  // Default to the first non-deleted recipe in the project if no explicit
   // id is given. (The right panel is the long-term owner of this selection.)
   useEffect(() => {
     if (recipeId) return;
-    if (workspaceRecipes[0]) {
-      setRecipeId(workspaceRecipes[0].id);
+    if (projectRecipes[0]) {
+      setRecipeId(projectRecipes[0].id);
     }
-  }, [recipeId, workspaceRecipes]);
+  }, [recipeId, projectRecipes]);
 
   const currentRecipeItems = useMemo<RecipeItemRecord[]>(
     () =>
@@ -127,7 +125,7 @@ export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?:
     }),
   );
 
-  const activeRecipe = workspaceRecipes.find((recipe) => recipe.id === recipeId) ?? null;
+  const activeRecipe = projectRecipes.find((recipe) => recipe.id === recipeId) ?? null;
   const recipeFragmentIds = new Set(currentRecipeItems.map((item) => item.fragmentId));
   const insertableFragmentCount = fragments.filter(
     (fragment) => fragment.deletedAt === null && !recipeFragmentIds.has(fragment.id),
@@ -150,14 +148,14 @@ export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?:
   };
 
   const handleCreateFragment = async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeProjectId) return;
     const result = await dialog.prompt({ title: t("fragment_name_prompt") });
     if (!result.ok) return;
     const name = result.value.trim();
     if (!name) return;
     try {
       await createFragment({
-        workspaceId: activeWorkspaceId,
+        projectId: activeProjectId,
         name,
         content: "",
       });
@@ -194,7 +192,7 @@ export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?:
   };
 
   const cloneRecipe = async () => {
-    if (!activeWorkspaceId || !recipeId) return;
+    if (!activeProjectId || !recipeId) return;
     const result = await dialog.prompt({
       title: t("recipe_name_prompt"),
       defaultValue: `${activeRecipe?.name ?? t("no_active_recipe")} ${t("recipe_copy_suffix")}`,
@@ -203,7 +201,7 @@ export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?:
     if (!nextName) return;
     try {
       const recipe = await createRecipe({
-        workspaceId: activeWorkspaceId,
+        projectId: activeProjectId,
         name: nextName,
         description: "",
       });
@@ -263,7 +261,7 @@ export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?:
           <h2 style={{ margin: 0, fontSize: 18 }}>{t("current_recipe_title")}</h2>
           <span
             data-testid="recipe-compile-badge"
-            title={t("continuous_workspace_hint", {
+            title={t("continuous_project_hint", {
               enabled: enabledCount,
               total: currentRecipeItems.length,
             })}
@@ -460,7 +458,7 @@ export function AssemblyBoard({ recipeId: initialRecipeId = null }: { recipeId?:
             <button
               type="button"
               onClick={() => void handleCreateFragment()}
-              disabled={!activeWorkspaceId}
+              disabled={!activeProjectId}
               style={{
                 border: "1px solid hsl(var(--border))",
                 borderRadius: 10,

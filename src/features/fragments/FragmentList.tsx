@@ -58,19 +58,19 @@ export function FragmentList({
   const { t } = useTranslation();
   const dialog = useAppDialog();
   const toast = useToast();
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
   const fragments = useAppStore((state) => state.fragments);
   const recipeItems = useAppStore((state) => state.recipeItems);
   const [viewingFragmentId, setViewingFragmentId] = useState<string | null>(null);
 
-  // Resolve the active recipe (first non-deleted recipe in the workspace) for
+  // Resolve the active recipe (first non-deleted recipe in the project) for
   // "in-recipe" / "not-in-recipe" filtering, but only when the consumer cares
   // about it. This used to be `activeRecipeId` from the global store; in the
   // new model recipes are an advanced feature and the active recipe is local
   // state inside the right panel that owns the assembly view.
   const activeRecipeId = useAppStore((state) => {
     const recipes = state.recipes.filter(
-      (recipe) => recipe.workspaceId === state.activeWorkspaceId && recipe.deletedAt === null,
+      (recipe) => recipe.projectId === state.activeProjectId && recipe.deletedAt === null,
     );
     return recipes[0]?.id ?? null;
   });
@@ -135,14 +135,14 @@ export function FragmentList({
       await onCreateFragment();
       return;
     }
-    if (!activeWorkspaceId) return;
+    if (!activeProjectId) return;
     const result = await dialog.prompt({ title: t("fragment_name_prompt") });
     if (!result.ok) return;
     const name = result.value.trim();
     if (!name) return;
     try {
       await createFragment({
-        workspaceId: activeWorkspaceId,
+        projectId: activeProjectId,
         name,
         content: "",
       });
@@ -208,7 +208,7 @@ export function FragmentList({
           <button
             type="button"
             onClick={() => void handleCreateFragment()}
-            disabled={!activeWorkspaceId}
+            disabled={!activeProjectId}
             data-testid={createButtonTestId}
             style={{
               border: "1px solid hsl(var(--border))",

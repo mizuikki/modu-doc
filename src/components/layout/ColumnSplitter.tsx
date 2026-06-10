@@ -6,6 +6,7 @@ type ColumnSplitterProps = {
   maxPx?: number;
   currentPx: number;
   ariaLabel: string;
+  className?: string;
   testId?: string;
 };
 
@@ -15,6 +16,7 @@ export function ColumnSplitter({
   maxPx = 480,
   currentPx,
   ariaLabel,
+  className,
   testId,
 }: ColumnSplitterProps) {
   const dragRef = useRef<{ pointerId: number; startX: number; startPx: number } | null>(null);
@@ -51,6 +53,7 @@ export function ColumnSplitter({
   return (
     <button
       type="button"
+      className={className}
       aria-label={ariaLabel}
       data-testid={testId}
       onPointerDown={handlePointerDown}

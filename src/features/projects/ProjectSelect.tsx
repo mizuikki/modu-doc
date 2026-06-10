@@ -2,28 +2,28 @@ import * as Select from "@radix-ui/react-select";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store/appStore";
 
-export function WorkspaceSelect() {
+export function ProjectSelect() {
   const { t } = useTranslation();
-  const workspaces = useAppStore((state) => state.workspaces);
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace);
+  const projects = useAppStore((state) => state.projects);
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
+  const setActiveProject = useAppStore((state) => state.setActiveProject);
 
   return (
     <div>
-      <label htmlFor="workspace-select" style={{ display: "block", fontSize: 12, marginBottom: 8 }}>
-        {t("workspace")}
+      <label htmlFor="project-select" style={{ display: "block", fontSize: 12, marginBottom: 8 }}>
+        {t("project")}
       </label>
       <Select.Root
-        value={activeWorkspaceId ?? ""}
-        onValueChange={(value) => setActiveWorkspace(value ? value : null)}
+        value={activeProjectId ?? ""}
+        onValueChange={(value) => setActiveProject(value ? value : null)}
       >
         <Select.Trigger
-          data-testid="workspace-select-trigger"
-          data-current-workspace-id={activeWorkspaceId ?? ""}
-          aria-label={t("workspace")}
+          data-testid="project-select-trigger"
+          data-current-project-id={activeProjectId ?? ""}
+          aria-label={t("project")}
           title={
-            activeWorkspaceId
-              ? (workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.name ?? "")
+            activeProjectId
+              ? (projects.find((project) => project.id === activeProjectId)?.name ?? "")
               : ""
           }
           style={{
@@ -40,7 +40,7 @@ export function WorkspaceSelect() {
           }}
         >
           <Select.Value
-            placeholder={t("select_workspace")}
+            placeholder={t("select_project")}
             style={{
               flex: 1,
               minWidth: 0,
@@ -80,14 +80,14 @@ export function WorkspaceSelect() {
                   color: "hsl(var(--muted-foreground))",
                 }}
               >
-                {t("select_workspace")}
+                {t("select_project")}
               </div>
-              {workspaces.map((workspace) => (
+              {projects.map((project) => (
                 <Select.Item
-                  key={workspace.id}
-                  value={workspace.id}
-                  data-testid={`workspace-select-item-${workspace.id}`}
-                  title={workspace.name}
+                  key={project.id}
+                  value={project.id}
+                  data-testid={`project-select-item-${project.id}`}
+                  title={project.name}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
@@ -95,7 +95,7 @@ export function WorkspaceSelect() {
                     outline: "none",
                   }}
                 >
-                  <Select.ItemText>{workspace.name}</Select.ItemText>
+                  <Select.ItemText>{project.name}</Select.ItemText>
                 </Select.Item>
               ))}
             </Select.Viewport>

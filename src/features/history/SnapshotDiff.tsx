@@ -209,7 +209,7 @@ function buildSegments(leftText: string, rightText: string): Segment[] {
 /**
  * Document-first snapshot diff: compares the active document's draft (or
  * saved content) against the selected snapshot for the active document.
- * Snapshots are now per-document, not per-workspace, so the "right side"
+ * Snapshots are now per-document, not per-project, so the "right side"
  * of the diff is the document being edited, and the "left side" is the
  * historical snapshot.
  */

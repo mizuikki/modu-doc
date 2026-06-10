@@ -9,8 +9,8 @@
 //! 3. Skip if the file's hash matches the document's
 //!    `last_written_hash` (i.e. the only "change" is from our own
 //!    atomic rename, or a touch).
-//! 4. Otherwise mark the document `conflicted` and emit
-//!    `document_conflicted`.
+//! 4. Otherwise mark the document `conflict` and emit
+//!    `document_conflict`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -220,8 +220,8 @@ async fn handle_document_event(
         // own atomic rename or a touch. Nothing to do.
         return;
     }
-    let workspace_id: Option<String> = match sqlx::query_scalar(
-        "SELECT workspace_id FROM documents WHERE id = ?1",
+    let project_id: Option<String> = match sqlx::query_scalar(
+        "SELECT project_id FROM documents WHERE id = ?1",
     )
     .bind(&document_id)
     .fetch_optional(&pool)
@@ -230,7 +230,7 @@ async fn handle_document_event(
         Ok(value) => value.flatten(),
         Err(err) => {
             debug_log!(
-                "[modudoc][watcher] workspace_id lookup failed document_id={} err={}",
+                "[modudoc][watcher] project_id lookup failed document_id={} err={}",
                 document_id,
                 err
             );
@@ -238,7 +238,7 @@ async fn handle_document_event(
         }
     };
     if let Err(err) = sqlx::query(
-        "UPDATE documents SET file_status = 'conflicted', updated_at = ?2 WHERE id = ?1",
+        "UPDATE documents SET save_state = 'conflict', updated_at = ?2 WHERE id = ?1",
     )
     .bind(&document_id)
     .bind(db::now_iso())
@@ -259,8 +259,8 @@ async fn handle_document_event(
     );
     commands::emit_document_status(
         &app,
-        "document_conflicted",
-        workspace_id.as_deref(),
+        "document_conflict",
+        project_id.as_deref(),
         Some(&document_id),
     );
 }
@@ -298,13 +298,13 @@ mod tests {
 
     #[test]
     fn watches_parent_directory_for_target_file() {
-        let target = Path::new("/tmp/modudoc/workspace.md");
+        let target = Path::new("/tmp/modudoc/project.md");
         assert_eq!(watch_path_for_target(target), PathBuf::from("/tmp/modudoc"));
     }
 
     #[test]
     fn event_filter_matches_only_target_file() {
-        let target = PathBuf::from("/tmp/modudoc/workspace.md");
+        let target = PathBuf::from("/tmp/modudoc/project.md");
         let matching = Event {
             kind: EventKind::Create(notify::event::CreateKind::File),
             paths: vec![target.clone()],

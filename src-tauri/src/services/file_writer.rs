@@ -28,7 +28,7 @@ impl FileWriterService {
             ErrorKind::NotFound => "target_missing".into(),
             ErrorKind::PermissionDenied => "target_not_writable".into(),
             // NOTE: the fallback string is "database_error" — a misnomer
-            // inherited from the workspace-dimension code. We keep it for
+            // inherited from the project-dimension code. We keep it for
             // now to avoid breaking callers that already branch on this
             // code; a follow-up PR should rename it to a generic
             // "write_failed" (or similar).
@@ -42,7 +42,7 @@ impl FileWriterService {
     /// 1. Bail with `"target_missing"` if the document has no target.
     /// 2. Detect external conflict: if the file already exists on disk
     ///    AND its hash differs from `document.last_written_hash`, mark
-    ///    the document `conflicted` and return `"external_conflict"`.
+    ///    the document `conflict` and return `"external_conflict"`.
     ///    (The command layer runs `check_document_conflict` first as a
     ///    fast-path; this check is defense-in-depth for the window
     ///    between check and write.)
@@ -55,8 +55,25 @@ impl FileWriterService {
         state: State<'_, crate::db::DbState>,
         document: Document,
     ) -> Result<Document, String> {
+        Self::write_document_to_file_inner(app, state, document, true).await
+    }
+
+    pub async fn overwrite_document_to_file(
+        app: AppHandle<impl Runtime>,
+        state: State<'_, crate::db::DbState>,
+        document: Document,
+    ) -> Result<Document, String> {
+        Self::write_document_to_file_inner(app, state, document, false).await
+    }
+
+    async fn write_document_to_file_inner(
+        app: AppHandle<impl Runtime>,
+        state: State<'_, crate::db::DbState>,
+        document: Document,
+        detect_conflict: bool,
+    ) -> Result<Document, String> {
         let document_id = document.id.clone();
-        let workspace_id = document.workspace_id.clone();
+        let project_id = document.project_id.clone();
         let target_path = match document.target_path.clone() {
             Some(value) => value,
             None => {
@@ -68,35 +85,32 @@ impl FileWriterService {
 
         // Conflict detection. We only fire this branch if the file is
         // already on disk and differs from the hash we last wrote.
-        if let Some(last_hash) = document.last_written_hash.as_deref() {
-            if tokio::fs::metadata(target).await.is_ok() {
-                let existing = match tokio::fs::read_to_string(target).await {
-                    Ok(value) => value,
-                    Err(err) => {
-                        let code = Self::map_io_error(err);
-                        Self::set_document_status(state.pool(), &document_id, "error").await;
-                        return Err(code);
+        if detect_conflict {
+            if let Some(last_hash) = document.last_written_hash.as_deref() {
+                if tokio::fs::metadata(target).await.is_ok() {
+                    let existing = match tokio::fs::read_to_string(target).await {
+                        Ok(value) => value,
+                        Err(err) => {
+                            let code = Self::map_io_error(err);
+                            Self::set_document_status(state.pool(), &document_id, "error").await;
+                            return Err(code);
+                        }
+                    };
+                    if db::content_hash(&existing) != last_hash {
+                        debug_log!(
+                            "[modudoc][write_document_to_file] external_conflict document_id={} target={}",
+                            document_id,
+                            target_path
+                        );
+                        Self::set_document_status(state.pool(), &document_id, "conflict").await;
+                        commands::emit_document_status(
+                            &app,
+                            "document_conflict",
+                            Some(&project_id),
+                            Some(&document_id),
+                        );
+                        return Err("external_conflict".into());
                     }
-                };
-                if db::content_hash(&existing) != last_hash {
-                    debug_log!(
-                        "[modudoc][write_document_to_file] external_conflict document_id={} target={}",
-                        document_id,
-                        target_path
-                    );
-                    Self::set_document_status(
-                        state.pool(),
-                        &document_id,
-                        "conflicted",
-                    )
-                    .await;
-                    commands::emit_document_status(
-                        &app,
-                        "document_conflicted",
-                        Some(&workspace_id),
-                        Some(&document_id),
-                    );
-                    return Err("external_conflict".into());
                 }
             }
         }
@@ -110,7 +124,7 @@ impl FileWriterService {
                     commands::emit_document_status(
                         &app,
                         "document_writing_failed",
-                        Some(&workspace_id),
+                        Some(&project_id),
                         Some(&document_id),
                     );
                     return Err(code);
@@ -133,30 +147,26 @@ impl FileWriterService {
             commands::emit_document_status(
                 &app,
                 "document_writing_failed",
-                Some(&workspace_id),
+                Some(&project_id),
                 Some(&document_id),
             );
             return Err(err);
         }
 
-        // Best-effort pre-write snapshot. Only create one if the content
-        // hash actually changed since the last write.
-        if let Some(prev) = document.last_written_hash.as_deref() {
-            if prev != new_hash {
-                if let Err(err) = crate::services::snapshot::SnapshotService::create_for_document(
-                    state.pool(),
-                    &document_id,
-                    "Before write",
-                )
-                .await
-                {
-                    debug_log!(
-                        "[modudoc][write_document_to_file] snapshot create failed document_id={} err={}",
-                        document_id,
-                        err
-                    );
-                }
-            }
+        // Best-effort pre-write snapshot. SnapshotService de-duplicates by
+        // content hash, so this can run for every write including first save.
+        if let Err(err) = crate::services::snapshot::SnapshotService::create_for_document(
+            state.pool(),
+            &document_id,
+            "Before write",
+        )
+        .await
+        {
+            debug_log!(
+                "[modudoc][write_document_to_file] snapshot create failed document_id={} err={}",
+                document_id,
+                err
+            );
         }
 
         // Update the document row in a single statement.
@@ -166,7 +176,7 @@ impl FileWriterService {
             UPDATE documents
             SET last_written_at = ?2,
                 last_written_hash = ?3,
-                file_status = 'ready',
+                save_state = 'saved',
                 updated_at = ?2
             WHERE id = ?1
             "#,
@@ -181,7 +191,7 @@ impl FileWriterService {
         commands::emit_document_status(
             &app,
             "document_written",
-            Some(&workspace_id),
+            Some(&project_id),
             Some(&document_id),
         );
 
@@ -197,7 +207,7 @@ impl FileWriterService {
 
     async fn set_document_status(pool: &sqlx::SqlitePool, document_id: &str, status: &str) {
         let _ = sqlx::query(
-            "UPDATE documents SET file_status = ?2, updated_at = ?3 WHERE id = ?1",
+            "UPDATE documents SET save_state = ?2, updated_at = ?3 WHERE id = ?1",
         )
         .bind(document_id)
         .bind(status)
@@ -288,47 +298,47 @@ mod tests {
         pool
     }
 
-    async fn seed_workspace_and_document(
+    async fn seed_project_and_document(
         pool: &sqlx::SqlitePool,
         target_path: &str,
         last_written_hash: Option<&str>,
     ) -> (String, String) {
         let timestamp = "2026-05-23T10:00:00Z".to_string();
-        let workspace_id = "workspace-writer".to_string();
+        let project_id = "project-writer".to_string();
         let document_id = "document-writer".to_string();
 
         sqlx::query(
             r#"
-            INSERT INTO workspaces (id, name, created_at, updated_at)
+            INSERT INTO projects (id, name, created_at, updated_at)
             VALUES (?1, ?2, ?3, ?3)
             "#,
         )
-        .bind(&workspace_id)
+        .bind(&project_id)
         .bind("Writer")
         .bind(&timestamp)
         .execute(pool)
         .await
-        .expect("workspace");
+        .expect("project");
 
         sqlx::query(
             r#"
             INSERT INTO documents (
-              id, workspace_id, name, content, content_hash, target_path,
-              file_status, last_written_at, last_written_hash, sort_order,
+              id, project_id, name, content, content_hash, target_path,
+              save_state, last_written_at, last_written_hash, sort_order,
               deleted_at, description, created_at, updated_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, NULL, NULL, ?10, ?10)
             "#,
         )
         .bind(&document_id)
-        .bind(&workspace_id)
+        .bind(&project_id)
         .bind("Doc")
         .bind("current content")
         .bind(db::content_hash("current content"))
         .bind(target_path)
         .bind(if last_written_hash.is_some() {
-            "ready"
+            "saved"
         } else {
-            "dirty"
+            "unsaved"
         })
         .bind(timestamp.clone())
         .bind(last_written_hash)
@@ -337,7 +347,7 @@ mod tests {
         .await
         .expect("document");
 
-        (workspace_id, document_id)
+        (project_id, document_id)
     }
 
     async fn load_document(pool: &sqlx::SqlitePool, id: &str) -> Document {
@@ -358,7 +368,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_document_to_file_marks_conflicted_when_external_change_detected() {
+    async fn write_document_to_file_marks_conflict_when_external_change_detected() {
         let pool = test_pool().await;
         let dir = tempfile::tempdir().expect("tempdir");
         let target_path = dir.path().join("doc.md");
@@ -368,7 +378,7 @@ mod tests {
 
         // Last-written hash is the hash of "previous" — which differs
         // from the actual file content "external change".
-        let (_, document_id) = seed_workspace_and_document(
+        let (_, document_id) = seed_project_and_document(
             &pool,
             &target_path.to_string_lossy(),
             Some(&db::content_hash("previous")),
@@ -390,7 +400,7 @@ mod tests {
         assert_eq!(err, "external_conflict");
 
         let updated = load_document(&pool, &document_id).await;
-        assert_eq!(updated.file_status, "conflicted");
+        assert_eq!(updated.save_state, "conflict");
     }
 
     #[tokio::test]
@@ -403,7 +413,7 @@ mod tests {
             .await
             .expect("write previous");
 
-        let (_, document_id) = seed_workspace_and_document(
+        let (_, document_id) = seed_project_and_document(
             &pool,
             &target_path.to_string_lossy(),
             Some(&db::content_hash("previous")),
@@ -423,7 +433,7 @@ mod tests {
         .await
         .expect("write succeeds");
 
-        assert_eq!(updated.file_status, "ready");
+        assert_eq!(updated.save_state, "saved");
         assert_eq!(
             updated.last_written_hash.as_deref(),
             Some(db::content_hash("current content").as_str())

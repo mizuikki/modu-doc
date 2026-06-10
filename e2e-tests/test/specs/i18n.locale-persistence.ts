@@ -32,9 +32,9 @@ async function waitForLanguageButton(label: "EN" | "ZH", timeoutMs = 20000) {
 
 describe("i18n", () => {
   it("persists locale across app restart", async () => {
-    // The status popover helper was renamed from `dismissWorkspaceStatus`
+    // The status popover helper was renamed from `dismissProjectStatus`
     // to `dismissDocumentStatus` (it's now the per-document status
-    // popover, not the workspace one).
+    // popover, not the project one).
     await dismissDocumentStatus();
 
     // Start from English to avoid flakiness if another spec left it in ZH.
@@ -53,12 +53,12 @@ describe("i18n", () => {
 
     // Switch to Chinese and assert the search input placeholder flips
     // to the new Chinese copy. The new placeholder covers all 5 search
-    // kinds (workspace, fragment, recipe, snapshot + document).
+    // kinds (project, fragment, recipe, snapshot + document).
     await safeClick(languageToggleSelector);
     await waitForLanguageButton("ZH");
     await expect($("[data-testid='global-search-input']")).toHaveAttribute(
       "placeholder",
-      "搜索工作区、片段、配方、快照",
+      "搜索项目、片段、配方、快照",
     );
     await browser.waitUntil(async () => (await readLocalStorage("i18nextLng")) === "zh", {
       timeout: 20000,
@@ -82,7 +82,7 @@ describe("i18n", () => {
     await waitForLanguageButton("ZH", 40000);
     await expect($("[data-testid='global-search-input']")).toHaveAttribute(
       "placeholder",
-      "搜索工作区、片段、配方、快照",
+      "搜索项目、片段、配方、快照",
     );
 
     // Reset back to English for subsequent specs that rely on English text selectors.

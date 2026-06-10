@@ -13,7 +13,7 @@ import {
   selectActiveDocumentProcessStatus,
   selectActiveDocumentSnapshots,
   selectActiveDocumentStatusMessage,
-  selectActiveWorkspace,
+  selectActiveProject,
   selectVisibleDocuments,
   selectVisibleFragments,
 } from "./selectors";
@@ -23,10 +23,10 @@ function iso(offsetMs = 0) {
   return new Date(2024, 0, 1, 0, 0, 0, offsetMs).toISOString();
 }
 
-function makeWorkspace(id = "ws-1") {
+function makeProject(id = "ws-1") {
   return {
     id,
-    name: "Workspace 1",
+    name: "Project 1",
     createdAt: iso(0),
     updatedAt: iso(0),
   };
@@ -34,17 +34,17 @@ function makeWorkspace(id = "ws-1") {
 
 function makeDocument(
   id: string,
-  workspaceId: string,
+  projectId: string,
   overrides: Partial<DocumentSummary> = {},
 ): DocumentSummary {
   return {
     id,
-    workspaceId,
+    projectId,
     name: id,
     content: `# ${id}`,
     contentHash: "",
     targetPath: null,
-    fileStatus: "missing_target",
+    saveState: "draft",
     lastWrittenAt: null,
     lastWrittenHash: null,
     sortOrder: 0,
@@ -56,10 +56,10 @@ function makeDocument(
   };
 }
 
-function makeFragment(id: string, workspaceId: string): Fragment {
+function makeFragment(id: string, projectId: string): Fragment {
   return {
     id,
-    workspaceId,
+    projectId,
     name: id,
     content: "",
     contentHash: "",
@@ -72,10 +72,10 @@ function makeFragment(id: string, workspaceId: string): Fragment {
   };
 }
 
-function makeRecipe(id: string, workspaceId: string): Recipe {
+function makeRecipe(id: string, projectId: string): Recipe {
   return {
     id,
-    workspaceId,
+    projectId,
     name: id,
     description: "",
     deletedAt: null,
@@ -118,15 +118,15 @@ function resetStore() {
   const initialPersisted = {
     state: {
       ui: { ...initialUI },
-      activeWorkspaceId: null,
+      activeProjectId: null,
       activeDocumentId: null,
     },
     version: 5,
   };
   localStorage.setItem("modudoc-app-store", JSON.stringify(initialPersisted));
   useAppStore.setState({
-    workspaces: [],
-    activeWorkspaceId: null,
+    projects: [],
+    activeProjectId: null,
     activeDocumentId: null,
     documents: [],
     fragments: [],
@@ -154,7 +154,7 @@ describe("appStore", () => {
     });
 
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [docA, docB],
       fragments: [],
       recipes: [],
@@ -165,9 +165,9 @@ describe("appStore", () => {
     expect(useAppStore.getState().activeDocumentId).toBe("doc-a");
   });
 
-  it("loadWorkspaceBundle_replaces_documents_and_picks_active", () => {
+  it("loadProjectBundle_replaces_documents_and_picks_active", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1")],
       fragments: [],
       recipes: [],
@@ -175,7 +175,7 @@ describe("appStore", () => {
       snapshotsByDocumentId: {},
     });
 
-    useAppStore.getState().loadWorkspaceBundle({
+    useAppStore.getState().loadProjectBundle({
       documents: [
         makeDocument("doc-b", "ws-1", { sortOrder: 0 }),
         makeDocument("doc-c", "ws-1", { sortOrder: 1 }),
@@ -193,7 +193,7 @@ describe("appStore", () => {
 
   it("updateDocumentDraft_writes_draft_and_marks_editing", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1")],
       fragments: [],
       recipes: [],
@@ -210,7 +210,7 @@ describe("appStore", () => {
 
   it("flushDocumentDraft_persists_draft_into_document_content", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1")],
       fragments: [],
       recipes: [],
@@ -230,7 +230,7 @@ describe("appStore", () => {
 
   it("patchDocument_merges_partial_fields", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1")],
       fragments: [],
       recipes: [],
@@ -247,7 +247,7 @@ describe("appStore", () => {
 
   it("selectors_select_active_document_returns_null_when_no_active", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1")],
       fragments: [],
       recipes: [],
@@ -261,7 +261,7 @@ describe("appStore", () => {
 
   it("selectors_select_active_document_draft_returns_draft_when_present", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1", { content: "saved" })],
       fragments: [],
       recipes: [],
@@ -275,7 +275,7 @@ describe("appStore", () => {
 
   it("selectors_select_active_document_snapshots_returns_per_document_list", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1"), makeDocument("doc-b", "ws-1", { sortOrder: 1 })],
       fragments: [],
       recipes: [],
@@ -298,8 +298,8 @@ describe("appStore", () => {
     useAppStore.getState().setSidebarWidth(9999);
     expect(useAppStore.getState().ui.sidebarWidth).toBe(SIDEBAR_WIDTH_MAX);
 
-    useAppStore.getState().setSidebarWidth(220);
-    expect(useAppStore.getState().ui.sidebarWidth).toBe(220);
+    useAppStore.getState().setSidebarWidth(280);
+    expect(useAppStore.getState().ui.sidebarWidth).toBe(280);
   });
 
   it("setRightPanelCollapsed_toggles", () => {
@@ -333,7 +333,7 @@ describe("appStore", () => {
         activeRecipeId: "recipe-1",
         activeFragmentId: "fragment-1",
         compileStatus: "synced",
-        workspaceStatusMessage: "ok",
+        projectStatusMessage: "ok",
       },
       3,
     );
@@ -374,10 +374,10 @@ describe("appStore", () => {
     });
   });
 
-  it("selectors_helpers_cover_workspace_and_fragments", () => {
+  it("selectors_helpers_cover_project_and_fragments", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
-      activeWorkspaceId: "ws-1",
+      projects: [makeProject()],
+      activeProjectId: "ws-1",
       documents: [
         makeDocument("doc-a", "ws-1", { sortOrder: 0 }),
         makeDocument("doc-b", "ws-1", { sortOrder: 1, deletedAt: iso(1) }),
@@ -389,14 +389,14 @@ describe("appStore", () => {
     });
 
     const state = useAppStore.getState();
-    expect(selectActiveWorkspace(state)?.id).toBe("ws-1");
+    expect(selectActiveProject(state)?.id).toBe("ws-1");
     expect(selectVisibleDocuments(state).map((d) => d.id)).toEqual(["doc-a"]);
     expect(selectVisibleFragments(state).map((f) => f.id)).toEqual(["frag-a"]);
   });
 
   it("per_document_process_status_and_message_selectors", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1")],
       fragments: [],
       recipes: [],
@@ -414,7 +414,7 @@ describe("appStore", () => {
 
   it("setActiveDocument_resets_selected_snapshot_to_first", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1"), makeDocument("doc-b", "ws-1", { sortOrder: 1 })],
       fragments: [],
       recipes: [],
@@ -428,9 +428,9 @@ describe("appStore", () => {
     expect(useAppStore.getState().selectedSnapshotId).toBe("snap-b1");
   });
 
-  it("setWorkspaceList_drops_active_document_when_no_workspace_remains", () => {
+  it("setProjectList_drops_active_document_when_no_project_remains", () => {
     useAppStore.getState().hydrate({
-      workspaces: [makeWorkspace()],
+      projects: [makeProject()],
       documents: [makeDocument("doc-a", "ws-1")],
       fragments: [],
       recipes: [],
@@ -438,10 +438,10 @@ describe("appStore", () => {
       snapshotsByDocumentId: {},
     });
 
-    useAppStore.getState().setWorkspaceList([]);
+    useAppStore.getState().setProjectList([]);
 
     const state = useAppStore.getState();
-    expect(state.activeWorkspaceId).toBeNull();
+    expect(state.activeProjectId).toBeNull();
     expect(state.activeDocumentId).toBeNull();
   });
 

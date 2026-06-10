@@ -14,6 +14,6 @@ describe("api/errors", () => {
 
   it("normalizes nested payload shapes", () => {
     expect(normalizeApiErrorCode({ payload: "invalid_target_path" })).toBe("invalid_target_path");
-    expect(normalizeApiErrorCode({ message: "workspace_not_found" })).toBe("workspace_not_found");
+    expect(normalizeApiErrorCode({ message: "project_not_found" })).toBe("project_not_found");
   });
 });

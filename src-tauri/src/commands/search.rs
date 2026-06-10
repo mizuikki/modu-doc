@@ -1,6 +1,6 @@
 use super::*;
 
-pub(crate) async fn search_workspace_content_impl(
+pub(crate) async fn search_project_content_impl(
     pool: &sqlx::SqlitePool,
     query: &str,
     limit: i64,
@@ -9,12 +9,12 @@ pub(crate) async fn search_workspace_content_impl(
 }
 
 #[tauri::command]
-pub async fn search_workspace_content(
+pub async fn search_project_content(
     state: State<'_, db::DbState>,
     query: String,
     limit: Option<i64>,
 ) -> Result<Vec<SearchResult>, String> {
-    search_workspace_content_impl(pool(&state), &query, limit.unwrap_or(8)).await
+    search_project_content_impl(pool(&state), &query, limit.unwrap_or(8)).await
 }
 
 #[cfg(test)]
@@ -41,19 +41,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn search_workspace_content_impl_returns_results() {
+    async fn search_project_content_impl_returns_results() {
         let pool = test_pool().await;
         let timestamp = "2026-05-23T10:00:00Z".to_string();
-        sqlx::query("INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)")
-            .bind("workspace-search")
+        sqlx::query("INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)")
+            .bind("project-search")
             .bind("Search Space")
             .bind(&timestamp)
             .execute(&pool)
             .await
-            .expect("workspace");
-        sqlx::query("INSERT INTO fragments (id, workspace_id, name, content, content_hash, tags, category, sort_order, deleted_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, '', '[]', NULL, 0, NULL, ?5, ?5)")
+            .expect("project");
+        sqlx::query("INSERT INTO fragments (id, project_id, name, content, content_hash, tags, category, sort_order, deleted_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, '', '[]', NULL, 0, NULL, ?5, ?5)")
             .bind("fragment-search")
-            .bind("workspace-search")
+            .bind("project-search")
             .bind("Intro")
             .bind("Hello Search")
             .bind(&timestamp)
@@ -61,10 +61,10 @@ mod tests {
             .await
             .expect("fragment");
 
-        let results = search_workspace_content_impl(&pool, "search", 8)
+        let results = search_project_content_impl(&pool, "search", 8)
             .await
             .expect("search");
-        assert!(results.iter().any(|entry| entry.kind == "workspace"));
+        assert!(results.iter().any(|entry| entry.kind == "project"));
         assert!(results.iter().any(|entry| entry.kind == "fragment"));
     }
 }

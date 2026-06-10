@@ -1,22 +1,22 @@
 import type {
   DocumentWire,
   FragmentWire,
+  ProjectLoadResult,
+  ProjectWire,
   RecipeItemWire,
   RecipeWire,
   SnapshotWire,
-  WorkspaceLoadResult,
-  WorkspaceWire,
 } from "@/lib/api/types";
 import type {
   DocumentSummary,
   Fragment,
+  ProjectSummary,
   Recipe,
   RecipeItem,
   SnapshotSummary,
-  WorkspaceSummary,
 } from "@/store/types";
 
-export function mapWorkspace(wire: WorkspaceWire): WorkspaceSummary {
+export function mapProject(wire: ProjectWire): ProjectSummary {
   return {
     id: wire.id,
     name: wire.name,
@@ -28,12 +28,12 @@ export function mapWorkspace(wire: WorkspaceWire): WorkspaceSummary {
 export function mapDocument(wire: DocumentWire): DocumentSummary {
   return {
     id: wire.id,
-    workspaceId: wire.workspace_id,
+    projectId: wire.project_id,
     name: wire.name,
     content: wire.content,
     contentHash: wire.content_hash,
     targetPath: wire.target_path,
-    fileStatus: wire.file_status,
+    saveState: wire.save_state,
     lastWrittenAt: wire.last_written_at,
     lastWrittenHash: wire.last_written_hash,
     sortOrder: wire.sort_order,
@@ -47,7 +47,7 @@ export function mapDocument(wire: DocumentWire): DocumentSummary {
 export function mapFragment(wire: FragmentWire): Fragment {
   return {
     id: wire.id,
-    workspaceId: wire.workspace_id,
+    projectId: wire.project_id,
     name: wire.name,
     content: wire.content,
     contentHash: wire.content_hash,
@@ -64,7 +64,7 @@ export function mapFragment(wire: FragmentWire): Fragment {
 export function mapRecipe(wire: RecipeWire): Recipe {
   return {
     id: wire.id,
-    workspaceId: wire.workspace_id,
+    projectId: wire.project_id,
     name: wire.name,
     description: wire.description,
     deletedAt: wire.deleted_at,
@@ -95,7 +95,7 @@ export function mapSnapshot(wire: SnapshotWire): SnapshotSummary {
 }
 
 export type LoadResultBundle = {
-  workspace: WorkspaceSummary;
+  project: ProjectSummary;
   documents: DocumentSummary[];
   fragments: Fragment[];
   recipes: Recipe[];
@@ -103,7 +103,7 @@ export type LoadResultBundle = {
   snapshotsByDocumentId: Record<string, SnapshotSummary[]>;
 };
 
-export function mapLoadResult(wire: WorkspaceLoadResult): LoadResultBundle {
+export function mapLoadResult(wire: ProjectLoadResult): LoadResultBundle {
   const fragments = wire.fragments.map(mapFragment);
   const recipes = wire.recipes.map(mapRecipe);
   const recipeItems = wire.recipe_items.map(mapRecipeItem);
@@ -113,7 +113,7 @@ export function mapLoadResult(wire: WorkspaceLoadResult): LoadResultBundle {
     snapshotsByDocumentId[docId] = list.map(mapSnapshot);
   }
   return {
-    workspace: mapWorkspace(wire.workspace),
+    project: mapProject(wire.project),
     documents,
     fragments,
     recipes,

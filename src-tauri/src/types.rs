@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Public, fully-decoded workspace payload. Workspace is a pure container
+/// Public, fully-decoded project payload. Project is a pure container
 /// in the document-first model: no target path, no recipe binding, no
 /// status. All file state lives on `Document`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Workspace {
+pub struct Project {
     pub id: String,
     pub name: String,
     pub created_at: String,
@@ -13,7 +13,7 @@ pub struct Workspace {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct WorkspaceRow {
+pub struct ProjectRow {
     pub id: String,
     pub name: String,
     pub created_at: String,
@@ -22,17 +22,17 @@ pub struct WorkspaceRow {
 
 /// Document is the primary object. `target_path` is the normalized absolute
 /// path (canonicalized by the Rust service layer before persist).
-/// `file_status` mirrors one of the `DocumentFileStatus` constants and is
+/// `save_state` mirrors one of the `DocumentSaveState` constants and is
 /// driven exclusively by the backend writer / watcher.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: String,
-    pub workspace_id: String,
+    pub project_id: String,
     pub name: String,
     pub content: String,
     pub content_hash: String,
     pub target_path: Option<String>,
-    pub file_status: String,
+    pub save_state: String,
     pub last_written_at: Option<String>,
     pub last_written_hash: Option<String>,
     pub sort_order: i64,
@@ -45,12 +45,12 @@ pub struct Document {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct DocumentRow {
     pub id: String,
-    pub workspace_id: String,
+    pub project_id: String,
     pub name: String,
     pub content: String,
     pub content_hash: String,
     pub target_path: Option<String>,
-    pub file_status: String,
+    pub save_state: String,
     pub last_written_at: Option<String>,
     pub last_written_hash: Option<String>,
     pub sort_order: i64,
@@ -60,14 +60,14 @@ pub struct DocumentRow {
     pub updated_at: String,
 }
 
-/// Fragment is a workspace-scoped material library entry. `tags` is a
+/// Fragment is a project-scoped material library entry. `tags` is a
 /// JSON string array (kept as a string in Phase 1 to avoid an extra table).
 /// `category` is an optional human group. `is_archived` is gone: use
 /// `deleted_at` to mean "soft deleted".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fragment {
     pub id: String,
-    pub workspace_id: String,
+    pub project_id: String,
     pub name: String,
     pub content: String,
     pub content_hash: String,
@@ -82,7 +82,7 @@ pub struct Fragment {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct FragmentRow {
     pub id: String,
-    pub workspace_id: String,
+    pub project_id: String,
     pub name: String,
     pub content: String,
     pub content_hash: String,
@@ -99,7 +99,7 @@ pub struct FragmentRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {
     pub id: String,
-    pub workspace_id: String,
+    pub project_id: String,
     pub name: String,
     pub description: String,
     pub deleted_at: Option<String>,
@@ -110,7 +110,7 @@ pub struct Recipe {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct RecipeRow {
     pub id: String,
-    pub workspace_id: String,
+    pub project_id: String,
     pub name: String,
     pub description: String,
     pub deleted_at: Option<String>,
@@ -136,7 +136,7 @@ pub struct RecipeItemRow {
     pub sort_order: i64,
 }
 
-/// Snapshot binds to a single Document, not a workspace or recipe.
+/// Snapshot binds to a single Document, not a project or recipe.
 /// `content` is the document content at snapshot time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -158,12 +158,12 @@ pub struct SnapshotRow {
     pub created_at: String,
 }
 
-/// Result returned by `load_workspace`. Snapshots are grouped by
+/// Result returned by `load_project`. Snapshots are grouped by
 /// `document_id` so the frontend can hydrate per-document timelines
 /// without an extra round-trip.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspaceLoadResult {
-    pub workspace: Workspace,
+pub struct ProjectLoadResult {
+    pub project: Project,
     pub documents: Vec<Document>,
     pub fragments: Vec<Fragment>,
     pub recipes: Vec<Recipe>,
@@ -175,15 +175,16 @@ pub struct WorkspaceLoadResult {
 pub struct SearchResult {
     pub kind: String,
     pub id: String,
-    pub workspace_id: Option<String>,
+    pub project_id: Option<String>,
+    pub document_id: Option<String>,
     pub title: String,
     pub subtitle: String,
 }
 
 // ---- conversions ----
 
-impl From<WorkspaceRow> for Workspace {
-    fn from(value: WorkspaceRow) -> Self {
+impl From<ProjectRow> for Project {
+    fn from(value: ProjectRow) -> Self {
         Self {
             id: value.id,
             name: value.name,
@@ -197,12 +198,12 @@ impl From<DocumentRow> for Document {
     fn from(value: DocumentRow) -> Self {
         Self {
             id: value.id,
-            workspace_id: value.workspace_id,
+            project_id: value.project_id,
             name: value.name,
             content: value.content,
             content_hash: value.content_hash,
             target_path: value.target_path,
-            file_status: value.file_status,
+            save_state: value.save_state,
             last_written_at: value.last_written_at,
             last_written_hash: value.last_written_hash,
             sort_order: value.sort_order,
@@ -218,7 +219,7 @@ impl From<FragmentRow> for Fragment {
     fn from(value: FragmentRow) -> Self {
         Self {
             id: value.id,
-            workspace_id: value.workspace_id,
+            project_id: value.project_id,
             name: value.name,
             content: value.content,
             content_hash: value.content_hash,
@@ -236,7 +237,7 @@ impl From<RecipeRow> for Recipe {
     fn from(value: RecipeRow) -> Self {
         Self {
             id: value.id,
-            workspace_id: value.workspace_id,
+            project_id: value.project_id,
             name: value.name,
             description: value.description,
             deleted_at: value.deleted_at,

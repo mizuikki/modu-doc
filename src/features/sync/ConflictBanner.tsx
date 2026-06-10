@@ -35,7 +35,7 @@ const POLICIES: Array<{ value: ConflictPolicy; labelKey: string; testId: string 
 
 /**
  * Document-first conflict banner. Reads the conflict signal from
- * `document.fileStatus === "conflicted"` and resolves it with the new
+ * `document.saveState === "conflict"` and resolves it with the new
  * `resolveDocumentConflict` API. Falls back to the active document if no
  * `document` prop is provided (e.g. when used as a top-level indicator).
  */
@@ -51,7 +51,7 @@ export function ConflictBanner({ document: documentProp }: ConflictBannerProps =
   const [isResolving, setIsResolving] = useState(false);
 
   if (!document) return null;
-  if (document.fileStatus !== "conflicted") return null;
+  if (document.saveState !== "conflict") return null;
 
   const handleResolve = async (policy: ConflictPolicy) => {
     if (policy === "cancel") {

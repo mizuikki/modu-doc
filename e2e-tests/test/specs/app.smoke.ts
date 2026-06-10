@@ -1,45 +1,47 @@
-import { expect } from "@wdio/globals";
-import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
+import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject, loadProject } from "../support/project";
 
 describe("ModuDoc app", () => {
-  it("smokes the root window", async () => {
-    await expect($("header strong")).toHaveText("ModuDoc");
-    await expect($("main")).toBeDisplayed();
+  it("smokes the empty root window", async () => {
+    const welcome = await $("[data-testid='welcome-screen']");
+    await welcome.waitForExist({ timeout: 20000 });
+    await expect(welcome).toBeDisplayed();
+    await expect($("[data-testid='welcome-title']")).toHaveText("ModuDoc");
+    await expect($("[data-testid='welcome-create-project']")).toBeDisplayed();
   });
 
-  it("renders the sidebar Documents header before any workspace exists", async () => {
-    // The sidebar always renders a "Documents" section header (alongside the
-    // workspace list and the "More" trigger) so the user can find it even
-    // with no active workspace. The header text comes from the i18n catalog
-    // and is matched case-insensitively.
-    const headers = await $$("aside *");
-    let found = false;
-    for (const node of headers) {
-      const text = (await node.getText()).trim().toLowerCase();
-      if (text === "documents") {
-        found = true;
-        break;
-      }
-    }
-    expect(found).toBe(true);
+  it("starts with the project creation call to action before any project exists", async () => {
+    await expect($("[data-testid='welcome-subtitle']")).toHaveText(
+      "Document-first markdown editor.",
+    );
   });
 
-  it("auto-activates Main.md and binds the document editor after creating a workspace", async () => {
-    const workspaceName = `E2E Smoke auto-main ${Date.now()}`;
-    const { workspaceId, documentId } = await createAndOpenWorkspace(workspaceName);
+  it("auto-activates Untitled.md and binds the document editor after creating a project", async () => {
+    const projectName = `E2E Smoke auto-main ${Date.now()}`;
+    const { projectId, documentId } = await createAndOpenProject(projectName);
 
-    // 1. Sidebar must mark Main.md as the active document.
+    // 1. Sidebar must mark Untitled.md as the active document.
     const sidebarRow = await $(`[data-testid='sidebar-document-${documentId}']`);
     await sidebarRow.waitForExist({ timeout: 20000 });
     await expect(sidebarRow).toHaveAttribute("data-active", "true");
 
-    // 2. Document header is rendered and shows Main.md as the active title.
+    // 2. Document header is rendered and shows Untitled.md as the active title.
     const header = await $("[data-testid='document-header']");
     await header.waitForExist({ timeout: 20000 });
     const title = await $("[data-testid='document-header-title']");
     await title.waitForExist({ timeout: 20000 });
-    const titleText = (await title.getText()).trim();
-    expect(titleText).toBe("Main.md");
+    const titleText = await browser.waitUntil(
+      async () => {
+        const value = await browser.execute(() => {
+          return (
+            document.querySelector("[data-testid='document-header-title']")?.textContent ?? ""
+          ).trim();
+        });
+        return value || null;
+      },
+      { timeout: 20000, interval: 200, timeoutMsg: "document title text not rendered" },
+    );
+    expect(titleText).toBe("Untitled.md");
 
     // 3. The center editor textarea must exist and be bound to the active
     //    document (i.e. the active document in the store matches the one
@@ -48,10 +50,10 @@ describe("ModuDoc app", () => {
     await textarea.waitForExist({ timeout: 20000 });
     await expect(textarea).toBeDisplayed();
 
-    // 4. load_workspace confirms the workspace now contains Main.md.
-    const bundle = await loadWorkspace(workspaceId);
+    // 4. load_project confirms the project now contains Untitled.md.
+    const bundle = await loadProject(projectId);
     const doc = bundle.documents.find((entry) => entry.id === documentId);
     expect(doc).toBeTruthy();
-    expect(doc?.name).toBe("Main.md");
+    expect(doc?.name).toBe("Untitled.md");
   });
 });

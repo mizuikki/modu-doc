@@ -5,7 +5,12 @@ import { tMaybe } from "@/i18n/tMaybe";
 import { createSnapshot } from "@/lib/api/snapshots";
 import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveDocument, selectActiveDocumentProcessStatus } from "@/store/selectors";
+import {
+  selectActiveDocument,
+  selectActiveDocumentProcessStatus,
+  selectActiveDocumentStatusMessage,
+} from "@/store/selectors";
+import type { DocumentSaveState } from "@/store/types";
 
 function countWords(text: string): number {
   if (!text.trim()) return 0;
@@ -30,8 +35,12 @@ export function StatusBar() {
   const toggleZenMode = useAppStore((state) => state.toggleZenMode);
   const setZenMode = useAppStore((state) => state.setZenMode);
   const activeDocument = useAppStore(selectActiveDocument);
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
   const processStatus = useAppStore(selectActiveDocumentProcessStatus);
+  const statusMessage = useAppStore(selectActiveDocumentStatusMessage);
+  const activeDocumentDraft = useAppStore((state) =>
+    activeDocument ? state.documentDrafts[activeDocument.id] : undefined,
+  );
   const setDocumentStatusMessage = useAppStore((state) => state.setDocumentStatusMessage);
   const fragments = useAppStore((state) => state.fragments);
   const [, force] = useState(0);
@@ -39,9 +48,9 @@ export function StatusBar() {
   const visibleFragments = useMemo(
     () =>
       fragments.filter(
-        (fragment) => fragment.workspaceId === activeWorkspaceId && fragment.deletedAt === null,
+        (fragment) => fragment.projectId === activeProjectId && fragment.deletedAt === null,
       ),
-    [fragments, activeWorkspaceId],
+    [fragments, activeProjectId],
   );
 
   useEffect(() => {
@@ -50,10 +59,15 @@ export function StatusBar() {
     return () => window.clearInterval(id);
   }, [activeDocument?.lastWrittenAt]);
 
-  const wordCount = countWords(activeDocument?.content ?? "");
+  const visibleContent = activeDocumentDraft ?? activeDocument?.content ?? "";
+  const wordCount = countWords(visibleContent);
   const lastWrittenAt = activeDocument?.lastWrittenAt ?? null;
-  const fileStatus = activeDocument?.fileStatus ?? null;
-  const canSnapshot = Boolean(activeWorkspaceId && activeDocument);
+  const hasLocalChanges =
+    activeDocumentDraft !== undefined && activeDocumentDraft !== activeDocument?.content;
+  const saveState = activeDocument
+    ? getVisibleSaveState(activeDocument.saveState, hasLocalChanges)
+    : null;
+  const canSnapshot = Boolean(activeProjectId && activeDocument);
 
   const handleSnapshot = async () => {
     if (!activeDocument) return;
@@ -93,14 +107,16 @@ export function StatusBar() {
           }}
         >
           <span style={{ color: "hsl(var(--muted-foreground))" }}>
-            {t("status")}: {tMaybe(t, processStatus)}
+            {activeDocument
+              ? documentSaveSummary(t, saveState, processStatus, lastWrittenAt)
+              : t("no_project_selected")}
           </span>
         </span>
-        {activeDocument ? (
+        {statusMessage ? (
+          <span style={{ color: "hsl(var(--muted-foreground))" }}>{tMaybe(t, statusMessage)}</span>
+        ) : activeDocument?.targetPath ? (
           <span style={{ color: "hsl(var(--muted-foreground))" }}>
-            {fileStatus ? tMaybe(t, fileStatus) : ""}
-            {fileStatus ? " · " : ""}
-            {t("last_written", { time: formatRelativeTime(t, lastWrittenAt) })}
+            {basename(activeDocument.targetPath)}
           </span>
         ) : null}
       </div>
@@ -180,4 +196,45 @@ export function StatusBar() {
       </div>
     </div>
   );
+}
+
+function basename(path: string): string {
+  return path.split(/[\\/]/u).filter(Boolean).at(-1) ?? path;
+}
+
+function getVisibleSaveState(
+  saveState: DocumentSaveState,
+  hasLocalChanges: boolean,
+): DocumentSaveState {
+  if (hasLocalChanges && saveState === "saved") return "unsaved";
+  return saveState;
+}
+
+function documentSaveSummary(
+  t: ReturnType<typeof useTranslation>["t"],
+  saveState: DocumentSaveState | null,
+  processStatus: string,
+  lastWrittenAt: string | null,
+): string {
+  if (processStatus === "saving") return t("saving_draft");
+  if (processStatus === "writing") return t("saving_to_file");
+  if (processStatus === "editing" && saveState === "draft") return t("draft_not_saved_to_file");
+  if (processStatus === "editing") return t("unsaved_changes");
+
+  switch (saveState) {
+    case "draft":
+      return t("draft_not_saved_to_file");
+    case "unsaved":
+      return t("unsaved_changes");
+    case "saved":
+      return lastWrittenAt
+        ? t("saved_to_file_time", { time: formatRelativeTime(t, lastWrittenAt) })
+        : t("saved_to_file");
+    case "conflict":
+      return t("file_changed_externally");
+    case "error":
+      return t("save_failed");
+    default:
+      return t("idle");
+  }
 }

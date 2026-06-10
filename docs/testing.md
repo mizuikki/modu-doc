@@ -49,7 +49,7 @@ Frontend tests live next to the code they exercise and follow the
 | API wrappers      | `src/lib/api/errors.test.ts`                            |
 | Selectors / util  | `src/lib/markdownPreview.test.ts`                       |
 | Components        | `src/components/layout/StatusBar.test.tsx`              |
-| Feature modules   | `src/features/workspaces/MainPanel.test.tsx`            |
+| Feature modules   | `src/features/projects/MainPanel.test.tsx`            |
 | Conflict UI       | `src/features/sync/ConflictBanner.test.tsx`             |
 
 Conventions:
@@ -138,7 +138,7 @@ Specs are grouped by topic and live alongside each other in
 | Topic                       | Spec(s)                                                 |
 |-----------------------------|---------------------------------------------------------|
 | Smoke                       | `app.smoke.ts`                                          |
-| Workspace CRUD              | `workspaces.delete.ts`                                  |
+| Project CRUD              | `projects.delete.ts`                                  |
 | Document create / edit / write | `documents.create-edit-write.ts`                     |
 | External conflict           | `documents.external-conflict.ts`                        |
 | Fragment library            | `fragments.delete-restore.ts`                           |
@@ -151,7 +151,7 @@ Specs are grouped by topic and live alongside each other in
 | Theme                       | `ui.theme-menu.ts`                                      |
 | Cheatsheet                  | `ui.cheatsheet.ts`                                      |
 | Settings                    | `ui.settings-categorized.ts`                            |
-| File manager                | `workspace-preview.open-target-folder.ts`               |
+| File manager                | `project-preview.open-target-folder.ts`               |
 | Performance (Milkdown / UI) | `perf.milkdown-diagnostics.ts`                          |
 
 ### Performance Diagnostics

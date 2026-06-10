@@ -120,7 +120,22 @@ export async function setDocumentEditorContent(text: string, timeoutMs = 20000) 
   const textarea = await $("[data-testid='editor-pane-textarea']");
   await textarea.waitForExist({ timeout: timeoutMs });
   await ensureInteractable(textarea, timeoutMs);
-  await safeSetValue("[data-testid='editor-pane-textarea']", text, timeoutMs);
+  await browser.execute((nextValue) => {
+    const textarea = document.querySelector(
+      "[data-testid='editor-pane-textarea']",
+    ) as HTMLTextAreaElement | null;
+    if (!textarea) return;
+    textarea.focus();
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(textarea, String(nextValue));
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.dispatchEvent(new Event("change", { bubbles: true }));
+  }, text);
+  await browser.waitUntil(async () => (await textarea.getValue()) === text, {
+    timeout: timeoutMs,
+    interval: 100,
+    timeoutMsg: "document editor textarea value was not set",
+  });
   await blurActiveElement();
 }
 

@@ -14,12 +14,12 @@ const statusColor: Record<DocumentProcessStatus, string> = {
   writing: "hsl(219 84% 56%)",
   synced: "hsl(var(--primary))",
   error: "hsl(0 84% 60%)",
-  conflicted: "hsl(8 84% 60%)",
+  conflict: "hsl(8 84% 60%)",
 };
 
 /**
  * Shows the active document's process status. In the document-first model
- * the per-document status replaces the old workspace-level `compileStatus`.
+ * the per-document status replaces the old project-level `compileStatus`.
  */
 export function SyncStatusBadge() {
   const { t } = useTranslation();

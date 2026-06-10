@@ -12,24 +12,24 @@ describe("MainPanel", () => {
   beforeEach(() => {
     resetAppStore();
     useAppStore.setState({
-      workspaces: [
+      projects: [
         {
-          id: "workspace-1",
-          name: "Workspace 1",
+          id: "project-1",
+          name: "Project 1",
           createdAt: "t",
           updatedAt: "t",
         },
       ],
-      activeWorkspaceId: "workspace-1",
+      activeProjectId: "project-1",
       documents: [
         {
           id: "document-1",
-          workspaceId: "workspace-1",
+          projectId: "project-1",
           name: "My Document",
           content: "Hello",
           contentHash: "h",
           targetPath: null,
-          fileStatus: "missing_target",
+          saveState: "draft",
           lastWrittenAt: null,
           lastWrittenHash: null,
           sortOrder: 0,
@@ -43,7 +43,7 @@ describe("MainPanel", () => {
       fragments: [
         {
           id: "fragment-1",
-          workspaceId: "workspace-1",
+          projectId: "project-1",
           name: "Intro",
           content: "Intro body",
           contentHash: "hash-1",
@@ -58,7 +58,7 @@ describe("MainPanel", () => {
       recipes: [
         {
           id: "recipe-1",
-          workspaceId: "workspace-1",
+          projectId: "project-1",
           name: "Default",
           description: "",
           deletedAt: null,

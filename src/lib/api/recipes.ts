@@ -2,12 +2,12 @@ import { tauriInvoke } from "./tauri";
 import type { DocumentWire, RecipeItemWire, RecipeWire } from "./types";
 
 export async function createRecipe(args: {
-  workspaceId: string;
+  projectId: string;
   name: string;
   description?: string | null;
 }) {
   return await tauriInvoke<RecipeWire>("create_recipe", {
-    workspaceId: args.workspaceId,
+    projectId: args.projectId,
     name: args.name,
     description: args.description ?? null,
   });

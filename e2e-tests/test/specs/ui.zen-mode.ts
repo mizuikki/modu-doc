@@ -1,6 +1,6 @@
 import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject } from "../support/project";
 import { safeClick } from "../support/ui";
-import { createAndOpenWorkspace } from "../support/workspace";
 
 async function readZenAttribute(): Promise<string | null> {
   return (await browser.execute(() => {
@@ -11,10 +11,10 @@ async function readZenAttribute(): Promise<string | null> {
 
 describe("Zen mode", () => {
   it("toggles data-zen on the main panel from the status bar", async () => {
-    // 1. Create a workspace so the status bar (and the zen-toggle in it)
+    // 1. Create a project so the status bar (and the zen-toggle in it)
     //    are rendered.
-    const workspaceName = `E2E Zen ${Date.now()}`;
-    await createAndOpenWorkspace(workspaceName);
+    const projectName = `E2E Zen ${Date.now()}`;
+    await createAndOpenProject(projectName);
 
     // 2. Sanity: data-zen starts as "false".
     const initial = await readZenAttribute();

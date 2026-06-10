@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
+import { mapDocument } from "@/app/projectMappers";
 import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
 import { createSnapshot, restoreSnapshot } from "@/lib/api/snapshots";
@@ -20,6 +21,8 @@ export function SnapshotTimeline() {
   const snapshots = useAppStore(useShallow(selectActiveDocumentSnapshots));
   const selectedSnapshotId = useAppStore((state) => state.selectedSnapshotId);
   const setSelectedSnapshot = useAppStore((state) => state.setSelectedSnapshot);
+  const patchDocument = useAppStore((state) => state.patchDocument);
+  const clearDocumentDraft = useAppStore((state) => state.clearDocumentDraft);
 
   const handleCreateSnapshot = async () => {
     if (!activeDocumentId) return;
@@ -33,11 +36,13 @@ export function SnapshotTimeline() {
   const handleRestoreSnapshot = async (snapshotId: string) => {
     if (!activeDocumentId) return;
     try {
-      await restoreSnapshot({
+      const updated = await restoreSnapshot({
         documentId: activeDocumentId,
         snapshotId,
         mode: "overwrite",
       });
+      patchDocument(updated.id, mapDocument(updated));
+      clearDocumentDraft(updated.id);
     } catch (error) {
       toast.error(normalizeAppError(error), t("action_failed"));
     }

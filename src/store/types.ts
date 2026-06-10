@@ -1,4 +1,4 @@
-export type DocumentFileStatus = "missing_target" | "dirty" | "ready" | "conflicted" | "error";
+export type DocumentSaveState = "draft" | "unsaved" | "saved" | "conflict" | "error";
 
 export type DocumentProcessStatus =
   | "idle"
@@ -6,10 +6,10 @@ export type DocumentProcessStatus =
   | "saving"
   | "writing"
   | "synced"
-  | "conflicted"
+  | "conflict"
   | "error";
 
-export type WorkspaceSummary = {
+export type ProjectSummary = {
   id: string;
   name: string;
   createdAt: string;
@@ -18,12 +18,12 @@ export type WorkspaceSummary = {
 
 export type DocumentSummary = {
   id: string;
-  workspaceId: string;
+  projectId: string;
   name: string;
   content: string;
   contentHash: string;
   targetPath: string | null;
-  fileStatus: DocumentFileStatus;
+  saveState: DocumentSaveState;
   lastWrittenAt: string | null;
   lastWrittenHash: string | null;
   sortOrder: number;
@@ -35,7 +35,7 @@ export type DocumentSummary = {
 
 export type Fragment = {
   id: string;
-  workspaceId: string;
+  projectId: string;
   name: string;
   content: string;
   contentHash: string;
@@ -49,7 +49,7 @@ export type Fragment = {
 
 export type Recipe = {
   id: string;
-  workspaceId: string;
+  projectId: string;
   name: string;
   description: string;
   deletedAt: string | null;
@@ -90,8 +90,8 @@ export type UiState = {
 };
 
 export type HydrateInput = {
-  workspaces: WorkspaceSummary[];
-  activeWorkspaceId?: string | null;
+  projects: ProjectSummary[];
+  activeProjectId?: string | null;
   documents: DocumentSummary[];
   fragments: Fragment[];
   recipes: Recipe[];
@@ -100,7 +100,7 @@ export type HydrateInput = {
   activeDocumentId?: string | null;
 };
 
-export type LoadWorkspaceBundleInput = {
+export type LoadProjectBundleInput = {
   documents: DocumentSummary[];
   fragments: Fragment[];
   recipes: Recipe[];
@@ -109,9 +109,9 @@ export type LoadWorkspaceBundleInput = {
 };
 
 export type AppState = {
-  // Persisted workspace bundle
-  workspaces: WorkspaceSummary[];
-  activeWorkspaceId: string | null;
+  // Persisted project bundle
+  projects: ProjectSummary[];
+  activeProjectId: string | null;
 
   documents: DocumentSummary[];
   activeDocumentId: string | null;
@@ -132,9 +132,9 @@ export type AppState = {
 
   // Hydration & bundle
   hydrate: (input: HydrateInput) => void;
-  loadWorkspaceBundle: (input: LoadWorkspaceBundleInput) => void;
-  setWorkspaceList: (workspaces: WorkspaceSummary[]) => void;
-  setActiveWorkspace: (workspaceId: string | null) => void;
+  loadProjectBundle: (input: LoadProjectBundleInput) => void;
+  setProjectList: (projects: ProjectSummary[]) => void;
+  setActiveProject: (projectId: string | null) => void;
   setActiveDocument: (documentId: string | null) => void;
 
   // Document runtime

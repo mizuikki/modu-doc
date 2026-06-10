@@ -27,7 +27,7 @@ pub async fn initialize<R: Runtime>(app: AppHandle<R>) -> anyhow::Result<SqliteP
         app_data_dir.join("modudoc")
     };
     tokio::fs::create_dir_all(&app_dir).await?;
-    let db_path = app_dir.join("modudoc.sqlite");
+    let db_path = app_dir.join("modudoc-project.sqlite");
     let connect_options =
         SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path.display()))?
             .create_if_missing(true)
@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn migration_enforces_document_file_status_check_constraint() {
+    async fn migration_enforces_document_save_state_check_constraint() {
         let temp_dir = tempdir().expect("temp dir");
         let db_path = temp_dir.path().join("modudoc.sqlite");
         let connect_options =
@@ -138,7 +138,7 @@ mod tests {
             .expect("migration");
 
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
         )
         .bind("ws-check")
         .bind("Check")
@@ -146,23 +146,23 @@ mod tests {
         .bind("2026-01-01T00:00:00Z")
         .execute(&pool)
         .await
-        .expect("workspace");
+        .expect("project");
 
         let valid: Result<sqlx::sqlite::SqliteQueryResult, _> = sqlx::query(
-            "INSERT INTO documents (id, workspace_id, name, file_status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO documents (id, project_id, name, save_state, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )
         .bind("doc-valid")
         .bind("ws-check")
-        .bind("Main.md")
-        .bind("ready")
+        .bind("Untitled.md")
+        .bind("saved")
         .bind("2026-01-01T00:00:00Z")
         .bind("2026-01-01T00:00:00Z")
         .execute(&pool)
         .await;
-        assert!(valid.is_ok(), "valid file_status should insert");
+        assert!(valid.is_ok(), "valid save_state should insert");
 
         let invalid: Result<sqlx::sqlite::SqliteQueryResult, _> = sqlx::query(
-            "INSERT INTO documents (id, workspace_id, name, file_status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO documents (id, project_id, name, save_state, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )
         .bind("doc-invalid")
         .bind("ws-check")
@@ -172,7 +172,7 @@ mod tests {
         .bind("2026-01-01T00:00:00Z")
         .execute(&pool)
         .await;
-        assert!(invalid.is_err(), "invalid file_status must be rejected by CHECK");
+        assert!(invalid.is_err(), "invalid save_state must be rejected by CHECK");
     }
 
     #[tokio::test]
@@ -197,7 +197,7 @@ mod tests {
             .expect("migration");
 
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
         )
         .bind("ws-unique")
         .bind("Unique")
@@ -205,10 +205,10 @@ mod tests {
         .bind("2026-01-01T00:00:00Z")
         .execute(&pool)
         .await
-        .expect("workspace");
+        .expect("project");
 
         sqlx::query(
-            "INSERT INTO documents (id, workspace_id, name, target_path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO documents (id, project_id, name, target_path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )
         .bind("doc-first")
         .bind("ws-unique")
@@ -221,7 +221,7 @@ mod tests {
         .expect("first insert");
 
         let dup: Result<sqlx::sqlite::SqliteQueryResult, _> = sqlx::query(
-            "INSERT INTO documents (id, workspace_id, name, target_path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO documents (id, project_id, name, target_path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )
         .bind("doc-second")
         .bind("ws-unique")

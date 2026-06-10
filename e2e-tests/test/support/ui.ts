@@ -12,18 +12,18 @@ function isWindowsAttachMode() {
 export async function dismissDocumentStatus() {
   await browser.waitUntil(
     async () => {
-      const popover = await $("[data-testid='workspace-status-popover']");
+      const popover = await $("[data-testid='project-status-popover']");
       if (!(await popover.isExisting())) {
         return true;
       }
-      const close = await $("[data-testid='workspace-status-close']");
+      const close = await $("[data-testid='project-status-close']");
       if (await close.isExisting()) {
         try {
           await close.click();
         } catch {
           await browser.execute(() => {
             (
-              document.querySelector("[data-testid='workspace-status-close']") as HTMLElement | null
+              document.querySelector("[data-testid='project-status-close']") as HTMLElement | null
             )?.click();
           });
         }
@@ -127,10 +127,10 @@ export async function safeSetValue(selector: string, value: string, timeoutMs = 
 }
 
 export async function openSidebarMore(timeoutMs = 20000) {
-  const trigger = await $("[data-testid='sidebar-more-trigger']");
+  const trigger = await $("[data-testid='sidebar-project-switcher']");
   await ensureInteractable(trigger, timeoutMs);
-  await safeClick("[data-testid='sidebar-more-trigger']", timeoutMs);
-  const content = await $("[data-testid='sidebar-more-content']");
+  await safeClick("[data-testid='sidebar-project-switcher']", timeoutMs);
+  const content = await $("[data-testid='sidebar-project-menu']");
   await browser.waitUntil(async () => await content.isExisting(), {
     timeout: timeoutMs,
     interval: 100,
@@ -195,13 +195,21 @@ export async function waitForTargetBarConflict(timeoutMs = 20000) {
   });
 }
 
-export async function assertDocumentFileStatus(
+export async function assertDocumentSaveState(
   documentId: string,
-  expected: "missing_target" | "dirty" | "ready" | "conflicted" | "error" | (string & {}),
+  expected: "draft" | "unsaved" | "saved" | "conflict" | "error" | (string & {}),
   timeoutMs = 20000,
 ) {
   await browser.waitUntil(
     async () => {
+      const row = await $(`[data-testid='sidebar-document-${documentId}']`);
+      if (await row.isExisting()) {
+        const saveState = await row.getAttribute("data-save-state");
+        if (saveState) {
+          return saveState.toLowerCase() === expected.toLowerCase();
+        }
+      }
+
       const status = await $(`[data-testid='sidebar-document-status-${documentId}']`);
       if (!(await status.isExisting())) return false;
       const text = (await status.getText()).trim().toLowerCase();
@@ -210,7 +218,7 @@ export async function assertDocumentFileStatus(
     {
       timeout: timeoutMs,
       interval: 200,
-      timeoutMsg: `expected document ${documentId} file_status=${expected}`,
+      timeoutMsg: `expected document ${documentId} save_state=${expected}`,
     },
   );
 }

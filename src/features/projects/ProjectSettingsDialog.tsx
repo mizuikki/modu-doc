@@ -1,19 +1,18 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import * as Switch from "@radix-ui/react-switch";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/toast/ToastProvider";
 import { tMaybe } from "@/i18n/tMaybe";
-import { updateWorkspace } from "@/lib/api/workspaces";
+import { updateProject } from "@/lib/api/projects";
 import { normalizeAppError } from "@/lib/appError";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveWorkspace } from "@/store/selectors";
+import { selectActiveProject } from "@/store/selectors";
 
-export type WorkspaceSettingsSection = "general" | "sync" | "import-export";
+export type ProjectSettingsSection = "general" | "sync";
 
-type WorkspaceSettingsDialogProps = {
+type ProjectSettingsDialogProps = {
   trigger?: ReactNode;
-  defaultSection?: WorkspaceSettingsSection;
+  defaultSection?: ProjectSettingsSection;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 };
@@ -23,38 +22,27 @@ type ConflictPolicy =
   | "overwrite_target"
   | "backup_then_overwrite"
   | "import_as_fragment";
-type ImportStrategy = "import_as_fragment" | "keep_as_single_chunk";
-type MarkdownSplitRule = "h2" | "h1" | "none";
 
-const SECTIONS: { id: WorkspaceSettingsSection; labelKey: string; testId: string }[] = [
-  { id: "general", labelKey: "settings_section_general", testId: "workspace-settings-nav-general" },
-  { id: "sync", labelKey: "settings_section_sync", testId: "workspace-settings-nav-sync" },
-  {
-    id: "import-export",
-    labelKey: "settings_section_import_export",
-    testId: "workspace-settings-nav-import-export",
-  },
+const SECTIONS: { id: ProjectSettingsSection; labelKey: string; testId: string }[] = [
+  { id: "general", labelKey: "settings_section_general", testId: "project-settings-nav-general" },
+  { id: "sync", labelKey: "settings_section_sync", testId: "project-settings-nav-sync" },
 ];
 
-export function WorkspaceSettingsDialog({
+export function ProjectSettingsDialog({
   trigger,
   defaultSection = "general",
   open: openProp,
   onOpenChange: onOpenChangeProp,
-}: WorkspaceSettingsDialogProps) {
+}: ProjectSettingsDialogProps) {
   const { t } = useTranslation();
   const toast = useToast();
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
+  const activeProject = useAppStore(selectActiveProject);
   const setDocumentStatusMessage = useAppStore((state) => state.setDocumentStatusMessage);
   const [internalOpen, setInternalOpen] = useState(false);
-  const [section, setSection] = useState<WorkspaceSettingsSection>(defaultSection);
-  const [name, setName] = useState(activeWorkspace?.name ?? "");
+  const [section, setSection] = useState<ProjectSettingsSection>(defaultSection);
+  const [name, setName] = useState(activeProject?.name ?? "");
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("safe_sync");
-  const [autoSyncOnEdit, setAutoSyncOnEdit] = useState(true);
-  const [syncDebounceMs, setSyncDebounceMs] = useState(800);
-  const [importStrategy, setImportStrategy] = useState<ImportStrategy>("import_as_fragment");
-  const [markdownSplitRule, setMarkdownSplitRule] = useState<MarkdownSplitRule>("h2");
 
   const isControlled = openProp !== undefined;
   const open = isControlled ? openProp : internalOpen;
@@ -67,18 +55,24 @@ export function WorkspaceSettingsDialog({
     if (open) setSection(defaultSection);
   }, [open, defaultSection]);
 
+  useEffect(() => {
+    if (open) {
+      setName(activeProject?.name ?? "");
+    }
+  }, [activeProject?.name, open]);
+
   const handleSave = async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeProjectId) return;
     const trimmedName = name.trim();
     try {
-      await updateWorkspace({
-        id: activeWorkspaceId,
+      await updateProject({
+        id: activeProjectId,
         name: trimmedName || null,
       });
       setOpen(false);
     } catch (error) {
       const message = normalizeAppError(error);
-      // Workspace-level errors don't have a documentId; surface via the first
+      // Project-level errors don't have a documentId; surface via the first
       // visible document if there is one, otherwise fall back to a toast.
       const firstDocumentId = useAppStore.getState().documents[0]?.id ?? null;
       if (firstDocumentId) {
@@ -91,7 +85,7 @@ export function WorkspaceSettingsDialog({
   const onOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (nextOpen) {
-      setName(activeWorkspace?.name ?? "");
+      setName(activeProject?.name ?? "");
     }
   };
 
@@ -104,8 +98,8 @@ export function WorkspaceSettingsDialog({
           <Dialog.Trigger asChild>
             <button
               type="button"
-              disabled={!activeWorkspaceId}
-              data-testid="workspace-settings-open"
+              disabled={!activeProjectId}
+              data-testid="project-settings-open"
               style={{
                 textAlign: "left",
                 justifyContent: "flex-start",
@@ -115,7 +109,7 @@ export function WorkspaceSettingsDialog({
                 background: "hsl(var(--card))",
               }}
             >
-              {t("workspace_settings")}
+              {t("project_settings")}
             </button>
           </Dialog.Trigger>
         ))}
@@ -152,18 +146,16 @@ export function WorkspaceSettingsDialog({
               borderBottom: "1px solid hsl(var(--border))",
             }}
           >
-            <Dialog.Title style={{ margin: 0, fontSize: 18 }}>
-              {t("workspace_settings")}
-            </Dialog.Title>
+            <Dialog.Title style={{ margin: 0, fontSize: 18 }}>{t("project_settings")}</Dialog.Title>
             <Dialog.Description
               style={{ color: "hsl(var(--muted-foreground))", fontSize: 12, marginTop: 4 }}
             >
-              {t("workspace_settings_desc")}
+              {t("project_settings_desc")}
             </Dialog.Description>
           </div>
           <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
             <nav
-              aria-label={t("workspace_settings")}
+              aria-label={t("project_settings")}
               style={{
                 width: 200,
                 flexShrink: 0,
@@ -218,16 +210,16 @@ export function WorkspaceSettingsDialog({
                     descKey="settings_section_general_desc"
                   />
                   <label style={labeledFieldStyle}>
-                    <span style={labelTextStyle}>{t("workspace_name")}</span>
+                    <span style={labelTextStyle}>{t("project_name")}</span>
                     <input
-                      data-testid="workspace-settings-name"
+                      data-testid="project-settings-name"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                       style={inputStyle}
                     />
                   </label>
                   <p style={{ margin: 0, fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                    {tMaybe(t, "workspace_target_per_document_hint")}
+                    {tMaybe(t, "project_target_per_document_hint")}
                   </p>
                 </>
               ) : null}
@@ -256,90 +248,6 @@ export function WorkspaceSettingsDialog({
                       ]}
                     />
                   </Group>
-                  <Group legend={t("auto_sync_on_edit")} horizontal>
-                    <Switch.Root
-                      checked={autoSyncOnEdit}
-                      onCheckedChange={setAutoSyncOnEdit}
-                      data-testid="workspace-settings-auto-sync"
-                      style={{
-                        width: 36,
-                        height: 20,
-                        background: autoSyncOnEdit ? "hsl(var(--primary))" : "hsl(var(--muted))",
-                        borderRadius: 999,
-                        position: "relative",
-                        border: 0,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Switch.Thumb
-                        style={{
-                          display: "block",
-                          width: 16,
-                          height: 16,
-                          background: "hsl(var(--card))",
-                          borderRadius: 999,
-                          boxShadow: "var(--elevation-1)",
-                          transform: autoSyncOnEdit ? "translateX(18px)" : "translateX(2px)",
-                          transition: "transform 120ms ease",
-                        }}
-                      />
-                    </Switch.Root>
-                  </Group>
-                  <label style={labeledFieldStyle}>
-                    <span style={labelTextStyle}>{t("sync_debounce_ms")}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={50}
-                      data-testid="workspace-settings-sync-debounce"
-                      value={syncDebounceMs}
-                      onChange={(event) => {
-                        const next = Number.parseInt(event.target.value, 10);
-                        setSyncDebounceMs(Number.isFinite(next) && next >= 0 ? next : 0);
-                      }}
-                      style={inputStyle}
-                    />
-                  </label>
-                  <p style={{ margin: 0, fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                    {t("settings_unsaved_hint")}
-                  </p>
-                </>
-              ) : null}
-              {section === "import-export" ? (
-                <>
-                  <SectionHeader
-                    titleKey="settings_section_import_export"
-                    descKey="settings_section_import_export_desc"
-                  />
-                  <Group legend={t("import_strategy")}>
-                    <RadioGroup
-                      name="import-strategy"
-                      value={importStrategy}
-                      onChange={(value) => setImportStrategy(value as ImportStrategy)}
-                      options={[
-                        {
-                          value: "import_as_fragment",
-                          label: t("import_strategy_import_as_fragment"),
-                        },
-                        {
-                          value: "keep_as_single_chunk",
-                          label: t("import_strategy_keep_as_single_chunk"),
-                        },
-                      ]}
-                    />
-                  </Group>
-                  <Group legend={t("markdown_split_rule")}>
-                    <RadioGroup
-                      name="markdown-split-rule"
-                      value={markdownSplitRule}
-                      onChange={(value) => setMarkdownSplitRule(value as MarkdownSplitRule)}
-                      options={[
-                        { value: "h2", label: t("split_by_h2") },
-                        { value: "h1", label: t("split_by_h1") },
-                        { value: "none", label: t("no_split") },
-                      ]}
-                    />
-                  </Group>
                   <p style={{ margin: 0, fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
                     {t("settings_unsaved_hint")}
                   </p>
@@ -358,19 +266,19 @@ export function WorkspaceSettingsDialog({
             }}
           >
             <span style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-              {t(section === "general" ? "workspace_settings_desc" : "settings_unsaved_hint")}
+              {t(section === "general" ? "project_settings_desc" : "settings_unsaved_hint")}
             </span>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <Dialog.Close asChild>
-                <button type="button" data-testid="workspace-settings-cancel">
+                <button type="button" data-testid="project-settings-cancel">
                   {t("cancel")}
                 </button>
               </Dialog.Close>
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!activeWorkspaceId}
-                data-testid="workspace-settings-save"
+                disabled={!activeProjectId}
+                data-testid="project-settings-save"
               >
                 {t("save_changes")}
               </button>

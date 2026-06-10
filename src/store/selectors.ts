@@ -1,8 +1,8 @@
 import { isDocumentVisible } from "./activation";
 import type { AppState, DocumentSummary, SnapshotSummary } from "./types";
 
-export function selectActiveWorkspace(state: AppState) {
-  return state.workspaces.find((w) => w.id === state.activeWorkspaceId) ?? null;
+export function selectActiveProject(state: AppState) {
+  return state.projects.find((w) => w.id === state.activeProjectId) ?? null;
 }
 
 export function selectActiveDocument(state: AppState): DocumentSummary | null {

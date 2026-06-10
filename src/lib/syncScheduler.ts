@@ -1,9 +1,9 @@
 /**
  * Phase 1 sync scheduler (document-first).
  *
- * The old workspace-level auto-sync is no longer the default flow. In document
+ * The old project-level auto-sync is no longer the default flow. In document
  * mode, writes are driven manually by `DocumentTargetBar`. This module still
- * exports the legacy `scheduleWorkspaceSync` and `forceWorkspaceSync` symbols
+ * exports the legacy `scheduleProjectSync` and `forceProjectSync` symbols
  * so that the in-flight consumers (Sidebar, FragmentEditor, CommandPalette,
  * AssemblyBoard) keep their import sites valid. The functions now act as
  * no-ops; the actual write path is `writeDocumentToFile` in
@@ -36,31 +36,31 @@ function clearRuntime(runtime: LegacySyncRuntime) {
 }
 
 /**
- * Legacy: schedule a debounced workspace-level write. Phase 1 no longer
- * auto-syncs workspaces; this is a no-op that logs and returns.
+ * Legacy: schedule a debounced project-level write. Phase 1 no longer
+ * auto-syncs projects; this is a no-op that logs and returns.
  */
-export function scheduleWorkspaceSync(_args: {
-  workspaceId: string;
+export function scheduleProjectSync(_args: {
+  projectId: string;
   debounceMs?: number;
-  setWorkspaceStatusMessage?: (message: string | null) => void;
+  setProjectStatusMessage?: (message: string | null) => void;
   setCompileStatus?: (status: string) => void;
 }) {
-  const runtime = getRuntime(_args.workspaceId);
+  const runtime = getRuntime(_args.projectId);
   clearRuntime(runtime);
-  debugLog("sync:schedule:noop", { workspaceId: _args.workspaceId });
+  debugLog("sync:schedule:noop", { projectId: _args.projectId });
 }
 
 /**
- * Legacy: force a workspace-level write. Phase 1 no longer auto-syncs
- * workspaces; this is a no-op that logs and returns.
+ * Legacy: force a project-level write. Phase 1 no longer auto-syncs
+ * projects; this is a no-op that logs and returns.
  */
-export async function forceWorkspaceSync(_args: {
-  workspaceId: string;
+export async function forceProjectSync(_args: {
+  projectId: string;
   policy?: string;
-  setWorkspaceStatusMessage?: (message: string | null) => void;
+  setProjectStatusMessage?: (message: string | null) => void;
   setCompileStatus?: (status: string) => void;
 }) {
-  const runtime = getRuntime(_args.workspaceId);
+  const runtime = getRuntime(_args.projectId);
   clearRuntime(runtime);
-  debugLog("sync:force:noop", { workspaceId: _args.workspaceId });
+  debugLog("sync:force:noop", { projectId: _args.projectId });
 }

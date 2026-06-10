@@ -1,13 +1,13 @@
 import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject } from "../support/project";
 import { dismissDocumentStatus } from "../support/ui";
-import { createAndOpenWorkspace } from "../support/workspace";
 
 describe("Keyboard cheatsheet", () => {
   it("opens via ? and closes via Escape", async () => {
-    // 1. Create a workspace so the app shell (and the cheatsheet shortcut
+    // 1. Create a project so the app shell (and the cheatsheet shortcut
     //    hook) is fully mounted.
-    const workspaceName = `E2E Cheatsheet ${Date.now()}`;
-    await createAndOpenWorkspace(workspaceName);
+    const projectName = `E2E Cheatsheet ${Date.now()}`;
+    await createAndOpenProject(projectName);
     await dismissDocumentStatus();
 
     // 2. The cheatsheet should not be open initially.

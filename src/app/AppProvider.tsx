@@ -31,7 +31,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useSaveShortcut(() => {
     if (isScreenshotMode()) return;
-    void saveActiveDocument();
+    void saveActiveDocument().catch(() => undefined);
   });
 
   return children;

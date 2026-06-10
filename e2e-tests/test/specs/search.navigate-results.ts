@@ -1,28 +1,30 @@
 import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject, loadProject } from "../support/project";
 import { tauriInvoke } from "../support/tauri";
 import { safeClick, safeSetValue } from "../support/ui";
-import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
 
 /**
- * Global search now has 5 result kinds: workspace, document, fragment,
+ * Global search now has 5 result kinds: project, document, fragment,
  * recipe, snapshot. The new "document" kind activates a document via
  * `setActiveDocument` and flips the center mode to "edit". This spec
- * exercises all 4 non-workspace kinds: document, fragment, recipe, snapshot.
+ * exercises all 4 non-project kinds: document, fragment, recipe, snapshot.
  */
 describe("Global search", () => {
   it("navigates to document, fragment, recipe, and snapshot results", async () => {
     const keyword = `nav-key-${Date.now()}`;
-    const workspaceName = `E2E Search Nav ${keyword}`;
-    const { workspaceId, documentId } = await createAndOpenWorkspace(workspaceName);
+    const projectName = `E2E Search Nav ${keyword}`;
+    const { projectId, documentId } = await createAndOpenProject(projectName);
 
-    // 1. Create a second document inside the workspace so we can exercise
+    // 1. Create a second document inside the project so we can exercise
     //    the new "document" search result kind. The new document gets its
     //    own id and is searchable by name.
     const extraDocName = `Doc ${keyword}`;
-    const extraDoc = await tauriInvoke<{ id: string; workspace_id: string }>("create_document", {
-      workspaceId,
-      name: extraDocName,
-      content: `body for search ${keyword}`,
+    const extraDoc = await tauriInvoke<{ id: string; project_id: string }>("create_document", {
+      request: {
+        projectId,
+        name: extraDocName,
+        content: `body for search ${keyword}`,
+      },
     });
     expect(extraDoc.id).toBeTruthy();
 
@@ -30,7 +32,7 @@ describe("Global search", () => {
     //    by their name/label.
     const fragmentName = `Fragment ${keyword}`;
     const fragment = await tauriInvoke<{ id: string }>("create_fragment", {
-      workspaceId,
+      projectId,
       name: fragmentName,
       content: `content ${keyword}`,
     });
@@ -38,7 +40,7 @@ describe("Global search", () => {
 
     const recipeName = `Recipe ${keyword}`;
     const recipe = await tauriInvoke<{ id: string }>("create_recipe", {
-      workspaceId,
+      projectId,
       name: recipeName,
       description: "",
     });
@@ -122,9 +124,9 @@ describe("Global search", () => {
     );
     await expect($(`[data-testid='history-snapshot-select-${snapshot.id}']`)).toBeDisplayed();
 
-    // 8. Sanity: the original auto-created Main.md is still present and
+    // 8. Sanity: the original auto-created Untitled.md is still present and
     //    the bundle is consistent.
-    const finalBundle = await loadWorkspace(workspaceId);
+    const finalBundle = await loadProject(projectId);
     const initialDoc = finalBundle.documents.find((entry) => entry.id === documentId);
     expect(initialDoc).toBeTruthy();
   });

@@ -25,7 +25,7 @@ describe("StatusBar", () => {
 
   it("computes word count from the active document", () => {
     useAppStore.setState({
-      workspaces: [
+      projects: [
         {
           id: "ws-1",
           name: "Test",
@@ -33,16 +33,16 @@ describe("StatusBar", () => {
           updatedAt: new Date().toISOString(),
         },
       ],
-      activeWorkspaceId: "ws-1",
+      activeProjectId: "ws-1",
       documents: [
         {
           id: "doc-1",
-          workspaceId: "ws-1",
+          projectId: "ws-1",
           name: "Main",
           content: "one two three four five six",
           contentHash: "hash-1",
           targetPath: null,
-          fileStatus: "ready",
+          saveState: "saved",
           lastWrittenAt: null,
           lastWrittenHash: null,
           sortOrder: 0,
@@ -56,7 +56,7 @@ describe("StatusBar", () => {
       fragments: [
         {
           id: "f-1",
-          workspaceId: "ws-1",
+          projectId: "ws-1",
           name: "F1",
           content: "one two three four",
           contentHash: "",
@@ -69,7 +69,7 @@ describe("StatusBar", () => {
         },
         {
           id: "f-2",
-          workspaceId: "ws-1",
+          projectId: "ws-1",
           name: "F2",
           content: "five six",
           contentHash: "",
@@ -82,7 +82,7 @@ describe("StatusBar", () => {
         },
         {
           id: "f-3",
-          workspaceId: "other",
+          projectId: "other",
           name: "F3",
           content: "should not count",
           contentHash: "",
@@ -121,7 +121,7 @@ describe("StatusBar", () => {
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("disables the snapshot button when no workspace is active", () => {
+  it("disables the snapshot button when no project is active", () => {
     render(
       <AppTestProviders>
         <StatusBar />
@@ -131,7 +131,7 @@ describe("StatusBar", () => {
     expect(snapshot.disabled).toBe(true);
   });
 
-  it("formats last-written time across second/minute/hour/day buckets", () => {
+  it("formats saved-to-file time across second/minute/hour/day buckets", () => {
     const cases: Array<{
       offsetMs: number;
       bucket: "just now" | "s ago" | "m ago" | "h ago" | "d ago";
@@ -145,7 +145,7 @@ describe("StatusBar", () => {
     for (const { offsetMs, bucket } of cases) {
       resetAppStore();
       useAppStore.setState({
-        workspaces: [
+        projects: [
           {
             id: "ws-1",
             name: "Test",
@@ -153,16 +153,16 @@ describe("StatusBar", () => {
             updatedAt: new Date().toISOString(),
           },
         ],
-        activeWorkspaceId: "ws-1",
+        activeProjectId: "ws-1",
         documents: [
           {
             id: "doc-1",
-            workspaceId: "ws-1",
+            projectId: "ws-1",
             name: "Main",
             content: "body",
             contentHash: "hash",
             targetPath: "/tmp/main.md",
-            fileStatus: "ready",
+            saveState: "saved",
             lastWrittenAt: new Date(Date.now() - offsetMs).toISOString(),
             lastWrittenHash: null,
             sortOrder: 0,
@@ -180,7 +180,7 @@ describe("StatusBar", () => {
         </AppTestProviders>,
       );
       const text = document.body.textContent ?? "";
-      expect(text).toContain("Last written ");
+      expect(text).toContain("Saved to file ");
       expect(text).toContain(bucket);
       unmount();
     }

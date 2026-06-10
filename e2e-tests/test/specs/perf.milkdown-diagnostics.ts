@@ -7,7 +7,7 @@
 // `npm run e2e:perf`; only the measurement target changed.
 //
 // The markdown seed / warmup scaffolding (buildMarkdownDocument, the
-// PerfAnalysis workspace with small/medium/large fragments) is preserved
+// PerfAnalysis project with small/medium/large fragments) is preserved
 // so the surrounding workflow and the perf fixtures remain identical
 // across the editor migration.
 
@@ -26,21 +26,23 @@ import {
   waitForPerfEvent,
   writePerfReport,
 } from "../support/perf";
-import { tauriInvoke, waitForTauriBridge } from "../support/tauri";
-import { safeClick, safeSetValue, selectWorkspaceById } from "../support/ui";
 import {
-  createAndOpenWorkspace,
-  loadWorkspace,
-  type WorkspaceLoadResult,
-} from "../support/workspace";
+  createAndOpenProject,
+  loadProject,
+  openProjectSwitcher,
+  type ProjectLoadResult,
+  selectProjectById,
+} from "../support/project";
+import { tauriInvoke, waitForTauriBridge } from "../support/tauri";
+import { safeClick, safeSetValue } from "../support/ui";
 
-type WorkspaceSummary = WorkspaceLoadResult["workspace"];
-type DocumentSummary = WorkspaceLoadResult["documents"][number];
+type ProjectSummary = Pick<ProjectLoadResult["project"], "id" | "name">;
+type DocumentSummary = ProjectLoadResult["documents"][number];
 
-type PerfWorkspaceContext = {
-  startupWorkspace: WorkspaceSummary;
-  workflowWorkspaceId: string;
-  analysisWorkspace: WorkspaceSummary;
+type PerfProjectContext = {
+  startupProject: ProjectSummary;
+  workflowProjectId: string;
+  analysisProject: ProjectSummary;
   documents: {
     smallA: DocumentSummary;
     smallB: DocumentSummary;
@@ -114,35 +116,49 @@ async function waitForEditorTextareaReady(timeoutMs = 20000) {
 }
 
 async function waitForEditorDocument(documentId: string, timeoutMs = 20000) {
+  const editMode = await $("[data-testid='document-header-mode-edit']");
+  if ((await editMode.isExisting()) && (await editMode.getAttribute("data-active")) !== "true") {
+    await safeClick("[data-testid='document-header-mode-edit']", timeoutMs);
+  }
   await waitForEditorTextareaReady(timeoutMs);
-  // The new editor binds synchronously to the active document from the
-  // store; we still wait for the perf event so callers get a stable hook.
   await browser.waitUntil(
     async () => {
-      const events = await snapshotPerfEvents();
-      return Boolean(
-        findLastEvent(events, "document editor: document bound", (event) =>
-          hasDocumentId(event, documentId),
-        ),
-      );
+      const textarea = await $("[data-testid='editor-pane-textarea']");
+      return (await textarea.getAttribute("data-document-id")) === documentId;
     },
     { timeout: timeoutMs, interval: 100, timeoutMsg: `editor not bound: ${documentId}` },
   );
+  await browser
+    .waitUntil(
+      async () => {
+        const events = await snapshotPerfEvents();
+        return Boolean(
+          findLastEvent(events, "document editor: document bound", (event) =>
+            hasDocumentId(event, documentId),
+          ),
+        );
+      },
+      { timeout: Math.min(timeoutMs, 1000), interval: 100 },
+    )
+    .catch(() => undefined);
 }
 
-async function createAnalysisWorkspaceContext(): Promise<PerfWorkspaceContext> {
-  // 1. Startup workspace: used purely to capture the cold-start-to-first-
+async function createAnalysisProjectContext(): Promise<PerfProjectContext> {
+  // 1. Startup project: used purely to capture the cold-start-to-first-
   //    editor-ready timing. The session is not reloaded; the perf markers
   //    we read cover the initial bootstrap path.
-  const startupWorkspace = await createAndOpenWorkspace(uniqueName("Perf Startup"));
+  const startupOpen = await createAndOpenProject(uniqueName("Perf Startup"));
+  const startupProject = { id: startupOpen.projectId, name: startupOpen.name };
 
-  // 2. Workflow workspace: a small clean workspace used to measure the
-  //    create-workspace / create-document flow.
-  const workflowWorkspace = await createAndOpenWorkspace(uniqueName("Perf Workflow"));
+  // 2. Workflow project: a small clean project used to measure the
+  //    create-project / create-document flow.
+  const workflowOpen = await createAndOpenProject(uniqueName("Perf Workflow"));
+  const workflowProject = { id: workflowOpen.projectId, name: workflowOpen.name };
 
-  // 3. Analysis workspace: hosts the typed document fixtures (small /
+  // 3. Analysis project: hosts the typed document fixtures (small /
   //    medium / large / autosave).
-  const analysisWorkspace = await createAndOpenWorkspace(uniqueName("Perf Analysis"));
+  const analysisOpen = await createAndOpenProject(uniqueName("Perf Analysis"));
+  const analysisProject = { id: analysisOpen.projectId, name: analysisOpen.name };
 
   const documentSpecs = [
     { key: "smallA", name: "Perf Small A", bytes: 2048 },
@@ -155,9 +171,11 @@ async function createAnalysisWorkspaceContext(): Promise<PerfWorkspaceContext> {
 
   for (const spec of documentSpecs) {
     const created = await tauriInvoke<{ id: string }>("create_document", {
-      workspaceId: analysisWorkspace.id,
-      name: spec.name,
-      content: buildMarkdownDocument(spec.name, spec.bytes),
+      request: {
+        projectId: analysisProject.id,
+        name: spec.name,
+        content: buildMarkdownDocument(spec.name, spec.bytes),
+      },
     });
     if (!created.id) {
       throw new Error(`create_document returned no id for ${spec.name}`);
@@ -167,20 +185,20 @@ async function createAnalysisWorkspaceContext(): Promise<PerfWorkspaceContext> {
 
   await browser.waitUntil(
     async () => {
-      const bundle = await loadWorkspace(analysisWorkspace.id);
+      const bundle = await loadProject(analysisProject.id);
       return bundle.documents.length >= documentSpecs.length;
     },
     { timeout: 30000, interval: 200 },
   );
 
   await tauriInvoke("create_snapshot", {
-    documentId: (await loadWorkspace(analysisWorkspace.id)).documents.find(
+    documentId: (await loadProject(analysisProject.id)).documents.find(
       (entry) => entry.name === "Perf Small A",
     )?.id,
     label: "perf-baseline",
   });
 
-  const bundle = await loadWorkspace(analysisWorkspace.id);
+  const bundle = await loadProject(analysisProject.id);
   const documentByName = new Map(bundle.documents.map((doc) => [doc.name, doc]));
   const documents = {
     smallA: documentByName.get("Perf Small A"),
@@ -194,15 +212,15 @@ async function createAnalysisWorkspaceContext(): Promise<PerfWorkspaceContext> {
     throw new Error("analysis documents missing");
   }
 
-  await selectWorkspaceById(analysisWorkspace.id);
+  await selectProjectById(analysisProject.id);
   await selectDocumentInSidebar(documents.smallA?.id ?? "");
   await waitForEditorTextareaReady();
 
   return {
-    startupWorkspace,
-    workflowWorkspaceId: workflowWorkspace.id,
-    analysisWorkspace,
-    documents: documents as PerfWorkspaceContext["documents"],
+    startupProject,
+    workflowProjectId: workflowProject.id,
+    analysisProject,
+    documents: documents as PerfProjectContext["documents"],
   };
 }
 
@@ -241,7 +259,7 @@ describe("Document editor performance diagnostics", () => {
     await waitForTauriBridge();
     await waitForPerfCollectorReady();
 
-    const context = await createAnalysisWorkspaceContext();
+    const context = await createAnalysisProjectContext();
     const startupEvents = await snapshotPerfEvents();
     const appVersion = await readAppVersion();
 
@@ -263,13 +281,13 @@ describe("Document editor performance diagnostics", () => {
           {
             totalMs: durationBetween(startupStart, startupReady),
             markerBreakdown: {
-              workspaceListMs: durationBetween(
+              projectListMs: durationBetween(
                 startupStart,
-                findFirstEvent(startupEvents, "workspace bootstrap: list done") ?? startupReady,
+                findFirstEvent(startupEvents, "project bootstrap: list done") ?? startupReady,
               ),
               initialBundleMs: durationBetween(
                 startupStart,
-                findFirstEvent(startupEvents, "workspace bootstrap: initial bundle done") ??
+                findFirstEvent(startupEvents, "project bootstrap: initial bundle done") ??
                   startupReady,
               ),
               editorReadyMs: durationBetween(startupStart, startupReady),
@@ -286,30 +304,30 @@ describe("Document editor performance diagnostics", () => {
         },
       },
       await measureScenario({
-        name: "create_workspace_via_ui",
+        name: "create_project_via_ui",
         kind: "workflow",
         iterations,
         warmupIterations,
         action: async (iteration) => {
-          const workspaceName = uniqueName(`Perf Created Workspace ${iteration}`);
-          await markPerf("wdio:workspace-name", { workspaceName });
-          await safeClick("[data-testid='sidebar-more-trigger']");
-          await safeClick("[data-testid='sidebar-new-workspace']");
-          await safeSetValue("[data-testid='app-prompt-input']", workspaceName);
+          const projectName = uniqueName(`Perf Created Project ${iteration}`);
+          await markPerf("wdio:project-name", { projectName });
+          await openProjectSwitcher();
+          await safeClick("[data-testid='sidebar-new-project']");
+          await safeSetValue("[data-testid='app-prompt-input']", projectName);
           await safeClick("[data-testid='app-dialog-confirm']");
         },
         settle: async () => {
           const events = await snapshotPerfEvents();
-          const workspaceName = eventPayloadRecord(
-            findLastEvent(events, "wdio:workspace-name"),
-          )?.workspaceName;
-          if (typeof workspaceName !== "string") {
-            throw new Error("missing workspace name");
+          const projectName = eventPayloadRecord(
+            findLastEvent(events, "wdio:project-name"),
+          )?.projectName;
+          if (typeof projectName !== "string") {
+            throw new Error("missing project name");
           }
           await browser.waitUntil(
             async () => {
-              const workspaces = await tauriInvoke<WorkspaceSummary[]>("list_workspaces");
-              return workspaces.some((entry) => entry.name === workspaceName);
+              const projects = await tauriInvoke<ProjectSummary[]>("list_projects");
+              return projects.some((entry) => entry.name === projectName);
             },
             { timeout: 30000, interval: 200 },
           );
@@ -321,7 +339,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.workflowWorkspaceId);
+          await selectProjectById(context.workflowProjectId);
         },
         action: async (iteration) => {
           const documentName = uniqueName(`Perf Document ${iteration}`);
@@ -340,7 +358,7 @@ describe("Document editor performance diagnostics", () => {
           }
           await browser.waitUntil(
             async () => {
-              const bundle = await loadWorkspace(context.workflowWorkspaceId);
+              const bundle = await loadProject(context.workflowProjectId);
               return bundle.documents.some((entry) => entry.name === documentName);
             },
             { timeout: 30000, interval: 200 },
@@ -353,7 +371,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.smallA.id);
           await waitForEditorDocument(context.documents.smallA.id);
         },
@@ -371,7 +389,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.smallA.id);
           await waitForEditorDocument(context.documents.smallA.id);
         },
@@ -389,7 +407,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.largeA.id);
           await waitForEditorDocument(context.documents.largeA.id);
         },
@@ -407,7 +425,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.smallA.id);
           await waitForEditorDocument(context.documents.smallA.id);
         },
@@ -440,7 +458,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.largeA.id);
           await waitForEditorDocument(context.documents.largeA.id);
         },
@@ -473,10 +491,10 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async (iteration) => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.autosave.id);
           await waitForEditorDocument(context.documents.autosave.id);
-          const bundle = await loadWorkspace(context.analysisWorkspace.id);
+          const bundle = await loadProject(context.analysisProject.id);
           const doc = bundle.documents.find((entry) => entry.id === context.documents.autosave.id);
           if (!doc) {
             throw new Error("autosave document missing");
@@ -505,7 +523,7 @@ describe("Document editor performance diagnostics", () => {
           const suffix = suffixMatch[0];
           await browser.waitUntil(
             async () => {
-              const bundle = await loadWorkspace(context.analysisWorkspace.id);
+              const bundle = await loadProject(context.analysisProject.id);
               const doc = bundle.documents.find(
                 (entry) => entry.id === context.documents.autosave.id,
               );
@@ -521,7 +539,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.smallA.id);
           await waitForEditorDocument(context.documents.smallA.id);
         },
@@ -554,7 +572,7 @@ describe("Document editor performance diagnostics", () => {
         iterations,
         warmupIterations,
         prepare: async () => {
-          await selectWorkspaceById(context.analysisWorkspace.id);
+          await selectProjectById(context.analysisProject.id);
           await selectDocumentInSidebar(context.documents.smallA.id);
           await waitForEditorDocument(context.documents.smallA.id);
         },
@@ -587,9 +605,9 @@ describe("Document editor performance diagnostics", () => {
       timestamp: new Date().toISOString(),
       iterations,
       warmupIterations,
-      startupWorkspaceId: context.startupWorkspace.id,
-      workflowWorkspaceId: context.workflowWorkspaceId,
-      analysisWorkspaceId: context.analysisWorkspace.id,
+      startupProjectId: context.startupProject.id,
+      workflowProjectId: context.workflowProjectId,
+      analysisProjectId: context.analysisProject.id,
       scenarios: reports,
     };
 

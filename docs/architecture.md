@@ -5,7 +5,7 @@ document-first refactor: where each concept lives, how the layers talk,
 and which pipeline moves data between them.
 
 The primary object is **Document** (a Markdown buffer edited in-app, with
-an optional `target_path` bound to a real on-disk file). The workspace
+an optional `target_path` bound to a real on-disk file). The project
 is a pure container, fragments are a content-copy material library,
 recipes are an advanced entry that one-shot-generates a document, and
 snapshots are scoped per document.
@@ -16,11 +16,11 @@ ModuDoc is a Tauri v2 desktop app. The frontend is a React + Vite
 single-page UI; the backend is a Rust process embedded in the same
 binary and exposed to the UI through Tauri commands and events.
 Persistence spans two surfaces: a single SQLite file (the source of
-truth for workspaces, documents, fragments, recipes, recipe items,
+truth for projects, documents, fragments, recipes, recipe items,
 snapshots, and settings) and the user's filesystem (the optional
 `target_path` that each document may be bound to).
 
-The app's lifecycle is document-shaped. The user picks a workspace from
+The app's lifecycle is document-shaped. The user picks a project from
 the sidebar, picks a document inside it, edits Markdown in a center
 pane, and optionally writes the buffer to a real file on disk. Fragments
 live in a side panel and are pasted into documents as content copies;
@@ -36,7 +36,7 @@ edit on the file. Both flows converge on a single Tauri event
 (`document-status-updated`) that the frontend listens to and turns into
 store updates.
 
-The UI is laid out as a default three-column shell: sidebar (workspaces
+The UI is laid out as a default three-column shell: sidebar (projects
 + document list), document editor (header + target bar + editor /
 preview / split / history center), and a right panel (fragments /
 recipes / snapshots tabs). The shell, panels, and split ratios are
@@ -50,7 +50,7 @@ frontend `ui` slice and persist to `localStorage`.
 |                         Frontend (React)                        |
 |  +-----------+  +---------------------+  +--------------------+ |
 |  | Sidebar   |  | Document editor     |  | Right panel        | |
-|  | workspaces|  | header / target bar |  | fragments recipes  | |
+|  | projects|  | header / target bar |  | fragments recipes  | |
 |  | documents |  | editor / preview    |  | snapshots          | |
 |  +-----------+  +---------------------+  +--------------------+ |
 |        |                 |                       |              |
@@ -65,11 +65,11 @@ frontend `ui` slice and persist to `localStorage`.
 |                       Backend (Rust / Tauri)                    |
 |  +-----------------+   +--------------------+   +-------------+ |
 |  | commands/*      |   | services/*         |   | watcher     | |
-|  | workspace       |   | document_path      |   | (per doc,   | |
+|  | project       |   | document_path      |   | (per doc,   | |
 |  | document        |   | file_writer        |   | parent dir) | |
 |  | fragment        |   | snapshot / recipe  |   +-------------+ |
 |  | recipe          |   | search / fragment  |                   |
-|  | snapshot        |   | workspace          |                   |
+|  | snapshot        |   | project          |                   |
 |  | misc / settings |   +--------------------+                   |
 |  +-----------------+         |                                  |
 |        |                    v                                   |
@@ -81,7 +81,7 @@ frontend `ui` slice and persist to `localStorage`.
 |                          Storage                                |
 |  +----------------------------+  +---------------------------+  |
 |  | SQLite (app data dir)      |  | Filesystem                |  |
-|  | workspaces / documents /   |  | documents.target_path     |  |
+|  | projects / documents /   |  | documents.target_path     |  |
 |  | fragments / recipes /      |  | (canonical absolute path) |  |
 |  | recipe_items / snapshots / |  +---------------------------+  |
 |  | settings / app_meta        |                                 |
@@ -91,7 +91,7 @@ frontend `ui` slice and persist to `localStorage`.
 
 The frontend never touches SQLite directly. All reads and writes go
 through Tauri commands; all change notifications come back as Tauri
-events (`document-status-updated` and `workspace-status-updated`).
+events (`document-status-updated` and `project-status-updated`).
 
 ## Document model and write pipeline
 
@@ -103,10 +103,10 @@ to a real on-disk file; when set, it has already been normalized by
 absolute string (symlinks resolved, separators folded, on Windows also
 lowercased).
 
-`file_status` is the backend's view of the on-disk contract. It is
+`save_state` is the backend's view of the on-disk contract. It is
 constrained at the database level to five values:
-`missing_target | dirty | ready | conflicted | error`. The frontend
-mirrors it as `DocumentFileStatus`. A separate `processStatus` lives
+`draft | unsaved | saved | conflict | error`. The frontend
+mirrors it as `DocumentSaveState`. A separate `processStatus` lives
 only in the Zustand store and tracks the live edit / write / conflict
 flow; it is never persisted.
 
@@ -131,7 +131,7 @@ runs in this order:
         | hash target on disk; |
         | if differs from last |
         | written_hash -> mark |
-        | 'conflicted' + emit  |
+        | 'conflict' + emit  |
         | external_conflict    |
         +----------+-----------+
                    |
@@ -153,15 +153,15 @@ runs in this order:
                    v
         +----------------------+
         | best-effort 'Before  |
-        | write' snapshot if   |
-        | content_hash changed |
+        | write' snapshot      |
+        | (hash de-duplicated) |
         +----------+-----------+
                    |
                    v
         +----------------------+
         | UPDATE documents     |
         | SET last_written_*,  |
-        | file_status='ready'  |
+        | save_state='saved'  |
         | + emit document_     |
         |   written            |
         +----------------------+
@@ -190,15 +190,15 @@ document's `target_path`, `handle_document_event`:
    (a self-induced write we just performed, within a 2-second TTL).
 3. Skips the event if the file's hash matches the document's
    `last_written_hash` (a no-op touch from our own atomic rename).
-4. Otherwise updates the row to `file_status = 'conflicted'` and
+4. Otherwise updates the row to `save_state = 'conflict'` and
    emits `document-status-updated` with
-   `kind = "document_conflicted"`.
+   `kind = "document_conflict"`.
 
 A conflict can also be detected synchronously by
 `write_document_to_file` if the hash on disk differs from
 `last_written_hash` at write time; in that case the command returns
 the sentinel error `"external_conflict"` and the row is left in
-`file_status = 'conflicted'`.
+`save_state = 'conflict'`.
 
 Resolution is a single command (`resolve_document_conflict`) with a
 `policy` argument selected by the user from the `DocumentTargetBar`:
@@ -206,7 +206,7 @@ Resolution is a single command (`resolve_document_conflict`) with a
 | Policy                 | Effect                                                    |
 | ---------------------- | --------------------------------------------------------- |
 | `import_external`      | Read the file, replace the document's `content` + hash,   |
-|                        | leave `file_status = 'dirty'` (still needs a write).      |
+|                        | leave `save_state = 'unsaved'` (still needs a write).      |
 | `overwrite_external`   | Run the standard write pipeline on top of the file.      |
 | `backup_and_overwrite` | Copy the file to `<name>.bak.<YYYYMMDDHHMMSS>`, then run  |
 |                        | the standard write pipeline.                              |
@@ -223,12 +223,12 @@ clean baseline; the legacy `.agentpack` import/export tables are gone.
 
 | Table         | Description                                                                 |
 | ------------- | --------------------------------------------------------------------------- |
-| `app_meta`    | Singleton key/value (schema version, last-opened workspace id, etc.).        |
-| `workspaces`  | Pure container: `id`, `name`, `created_at`, `updated_at`.                   |
+| `app_meta`    | Singleton key/value (schema version, last-opened project id, etc.).        |
+| `projects`  | Pure container: `id`, `name`, `created_at`, `updated_at`.                   |
 | `documents`   | Primary object: `content`, `content_hash`, optional `target_path`,           |
-|               | `file_status`, `last_written_at` / `last_written_hash`, `sort_order`,        |
+|               | `save_state`, `last_written_at` / `last_written_hash`, `sort_order`,        |
 |               | `deleted_at`, `description`.                                                |
-| `fragments`   | Workspace-scoped material library: `name`, `content`, `tags` (JSON string), |
+| `fragments`   | Project-scoped material library: `name`, `content`, `tags` (JSON string), |
 |               | `category`, `sort_order`, `deleted_at`.                                     |
 | `recipes`     | Advanced entry: `name`, `description`, `deleted_at`.                        |
 | `recipe_items`| Ordered list of fragment references per recipe: `enabled` flag,             |
@@ -236,13 +236,13 @@ clean baseline; the legacy `.agentpack` import/export tables are gone.
 | `snapshots`   | Per-document point-in-time capture: `label`, `content`, `content_hash`.     |
 | `settings`    | Generic key/value settings.                                                 |
 
-`documents.file_status` is constrained by a `CHECK` clause to the
-five-value enum (`missing_target`, `dirty`, `ready`, `conflicted`,
+`documents.save_state` is constrained by a `CHECK` clause to the
+five-value enum (`draft`, `unsaved`, `saved`, `conflict`,
 `error`); any other value is rejected at the database layer.
 
 ```sql
 CHECK (
-  file_status IN ('missing_target', 'dirty', 'ready', 'conflicted', 'error')
+  save_state IN ('draft', 'unsaved', 'saved', 'conflict', 'error')
 )
 ```
 
@@ -259,9 +259,9 @@ Soft delete releases the slot by setting `target_path = NULL`, which
 exits the partial index; the next claim on the same path succeeds.
 
 Supporting indexes cover the read patterns the UI uses:
-`documents(workspace_id, deleted_at, sort_order, created_at)`,
-`fragments(workspace_id, deleted_at, sort_order, created_at)`,
-`recipes(workspace_id, deleted_at, created_at)`,
+`documents(project_id, deleted_at, sort_order, created_at)`,
+`fragments(project_id, deleted_at, sort_order, created_at)`,
+`recipes(project_id, deleted_at, created_at)`,
 `recipe_items(recipe_id, sort_order)`, and
 `snapshots(document_id, created_at DESC)`.
 
@@ -274,18 +274,18 @@ string codes (`external_conflict`, `target_missing`,
 
 | Domain      | Command                              | Purpose                                                  |
 | ----------- | ------------------------------------ | -------------------------------------------------------- |
-| Workspace   | `list_workspaces`                    | All workspaces, ordered by created_at.                   |
-| Workspace   | `create_workspace`                   | New workspace + first `Main.md` document.                |
-| Workspace   | `update_workspace`                   | Rename a workspace.                                      |
-| Workspace   | `delete_workspace`                   | Delete a workspace (cascades).                           |
-| Workspace   | `load_workspace`                     | Hydration bundle (workspace + documents + fragments +    |
+| Project   | `list_projects`                    | All projects, ordered by created_at.                   |
+| Project   | `create_project`                   | New project + first `Untitled.md` document.            |
+| Project   | `update_project`                   | Rename a project.                                      |
+| Project   | `delete_project`                   | Delete a project (cascades).                           |
+| Project   | `load_project`                     | Hydration bundle (project + documents + fragments +    |
 |             |                                      | recipes + recipe_items + snapshots-by-document).          |
 | Document    | `create_document`                    | New document; normalizes `target_path` if provided.      |
 | Document    | `update_document`                    | Mutate name / content / target_path / description.       |
 | Document    | `soft_delete_document`               | Set `deleted_at`, release `target_path` slot.            |
 | Document    | `restore_document`                   | Clear `deleted_at`.                                      |
 | Document    | `delete_document_permanently`        | Hard delete; optionally removes the file on disk.        |
-| Document    | `reorder_documents`                  | Rewrite `sort_order` for the workspace.                  |
+| Document    | `reorder_documents`                  | Rewrite `sort_order` for the project.                  |
 | Document    | `write_document_to_file`             | The write pipeline (see above).                          |
 | Document    | `check_document_conflict`            | Hash the on-disk file; return has_conflict + hash.       |
 | Document    | `resolve_document_conflict`          | Apply one of the four resolution policies.               |
@@ -301,7 +301,7 @@ string codes (`external_conflict`, `target_missing`,
 | Snapshot    | `create_snapshot`                    | Capture current content (no-op if hash unchanged).       |
 | Snapshot    | `list_document_snapshots`            | All snapshots for a document.                            |
 | Snapshot    | `restore_snapshot`                   | Overwrite in place OR create `name (Restored)` sibling.  |
-| Misc        | `search_workspace_content`           | Cross-entity substring search (workspaces / documents /  |
+| Misc        | `search_project_content`           | Cross-entity substring search (projects / documents /  |
 |             |                                      | fragments / recipes / snapshots).                        |
 | Misc        | `open_target_in_file_manager`        | Reveal a document's `target_path` in the OS file manager.|
 | Misc        | `debug_log_frontend`                 | Mirror a frontend log line into the Rust debug log.      |
@@ -311,15 +311,15 @@ string codes (`external_conflict`, `target_missing`,
 ## Frontend store shape
 
 The store is a single Zustand slice with a `persist` middleware that
-writes only `ui`, `activeWorkspaceId`, and `activeDocumentId` to
+writes only `ui`, `activeProjectId`, and `activeDocumentId` to
 `localStorage` under the key `modudoc-app-store`. The full shape lives
 in `src/store/types.ts`; the runtime is `src/store/appStore.ts`.
 
 | Field                       | Persisted? | Notes                                                  |
 | --------------------------- | ---------- | ------------------------------------------------------ |
-| `workspaces`                | no         | Re-hydrated from `load_workspace`.                     |
-| `activeWorkspaceId`         | yes        |                                                        |
-| `documents`                 | no         | Re-hydrated from `load_workspace`.                     |
+| `projects`                | no         | Re-hydrated from `load_project`.                     |
+| `activeProjectId`         | yes        |                                                        |
+| `documents`                 | no         | Re-hydrated from `load_project`.                     |
 | `activeDocumentId`          | yes        |                                                        |
 | `fragments`                 | no         | Re-hydrated.                                           |
 | `recipes` / `recipeItems`   | no         | Re-hydrated.                                           |
@@ -332,7 +332,7 @@ in `src/store/types.ts`; the runtime is `src/store/appStore.ts`.
 
 `documentDrafts`, `documentProcessStatus`, and `documentStatusMessage`
 are explicitly reset to their initial values by both `hydrate(...)`
-and `loadWorkspaceBundle(...)`. They exist only to bridge in-flight
+and `loadProjectBundle(...)`. They exist only to bridge in-flight
 edits and the live write flow; on reload the bundle is re-fetched and
 the runtime map starts clean.
 
@@ -345,26 +345,26 @@ Two Tauri events drive the frontend.
 The single source of truth for document state changes. Payload:
 
 ```
-{ kind: string, workspace_id?: string, document_id?: string }
+{ kind: string, project_id?: string, document_id?: string }
 ```
 
 `kind` values seen in the codebase include `document_created`,
 `document_updated`, `document_target_updated`, `document_deleted`,
 `document_restored`, `document_reordered`, `document_written`,
-`document_writing_failed`, `document_conflicted`,
+`document_writing_failed`, `document_conflict`,
 `document_conflict_resolved`, `snapshot_created`, `snapshot_restored`,
 `fragment_created`, `fragment_updated`, `fragment_deleted`,
 `fragment_restored`, `recipe_created`, `recipe_updated`. The frontend
-event hook (in `src/app/hooks/useWorkspaceStatusEvents.ts`) treats a
+event hook (in `src/app/hooks/useProjectStatusEvents.ts`) treats a
 fixed allowlist of these as "refresh the bundle" triggers; the rest
 are advisory.
 
-### `workspace-status-updated` (workspace lifecycle)
+### `project-status-updated` (project lifecycle)
 
-Used only for workspace-level lifecycle (`workspace_created`,
-`workspace_updated`, `workspace_deleted`) so the sidebar and workspace
+Used only for project-level lifecycle (`project_created`,
+`project_updated`, `project_deleted`) so the sidebar and project
 switcher can refresh. The `document-status-updated` event already
-carries a `workspace_id`, so per-document flows do not also emit this.
+carries a `project_id`, so per-document flows do not also emit this.
 
 ## Folder layout
 
@@ -378,7 +378,7 @@ modu-doc/
                               RightPanel, useSaveDocument
       fragments/              Fragment library UI (right panel)
       recipes/                Recipe editor + advanced entry
-      workspaces/             Workspace switcher, settings dialog
+      projects/             Project switcher, settings dialog
       search/                 Cross-entity search UI
       help/                   Keyboard cheatsheet
       history/                Per-document snapshot timeline + diff
@@ -386,11 +386,11 @@ modu-doc/
     components/               Shared UI primitives
     lib/
       api/                    Typed Tauri command wrappers (documents,
-                              workspaces, fragments, recipes, snapshots,
+                              projects, fragments, recipes, snapshots,
                               sync, search, tauri, errors, types)
       markdownPreview.ts      Markdown -> HTML
       syncScheduler.ts        Debounce + flush for drafts
-      workspaceWrite.ts       Helper for the write flow
+      projectWrite.ts       Helper for the write flow
     i18n/                     en.json / zh.json (key sets kept identical)
     store/                    Zustand store (types, appStore, selectors,
                               activation, defaults, loadState)
@@ -401,10 +401,10 @@ modu-doc/
       main.rs                 Process entry
       db.rs                   SQLite pool, migrations, content_hash, now_iso
       error.rs                AppErrorCode + normalize_error
-      types.rs                Wire types (Workspace, Document, Fragment, ...)
+      types.rs                Wire types (Project, Document, Fragment, ...)
       commands/               Tauri command implementations
         mod.rs                Event payload types, emit helpers
-        workspaces.rs
+        projects.rs
         documents.rs
         fragments.rs
         recipes.rs
@@ -414,7 +414,7 @@ modu-doc/
         settings.rs
         debug.rs
       services/               Domain logic used by commands
-        workspace.rs          validate_target_path, probe_writable
+        project.rs          validate_target_path, probe_writable
         document_path.rs      normalize_target_path (canonicalize)
         file_writer.rs        atomic write + WatcherState coordination
         watcher.rs            Per-document RecommendedWatcher
@@ -456,7 +456,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 Vitest + Testing Library, deterministic (no timing-based flake).
 Lives next to source as `*.test.ts` / `*.test.tsx`. Common targets:
-store hydration and `loadWorkspaceBundle` round-trip, selector
+store hydration and `loadProjectBundle` round-trip, selector
 behavior, markdown preview rendering, i18n key parity between
 `en.json` and `zh.json`.
 
@@ -467,7 +467,7 @@ npm test
 ### End-to-end tests (`npm run e2e`)
 
 WebdriverIO suite under `e2e-tests/`. Drives the real desktop app
-through the document-first flows: workspace creation, document CRUD,
+through the document-first flows: project creation, document CRUD,
 the three-column shell, the write flow, and conflict resolution.
 Setup is one-time per machine (`npm run e2e:setup`); on Linux without
 a display use `npm run e2e:xvfb`. Set `MODUDOC_E2E_MODE=dev` to run

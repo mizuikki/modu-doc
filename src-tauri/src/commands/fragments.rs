@@ -14,7 +14,7 @@ fn tags_to_string(tags: Option<&Vec<String>>) -> String {
 pub async fn create_fragment(
     app: AppHandle<impl Runtime>,
     state: State<'_, db::DbState>,
-    workspace_id: String,
+    project_id: String,
     name: String,
     content: Option<String>,
     tags: Option<Vec<String>>,
@@ -26,20 +26,20 @@ pub async fn create_fragment(
     let content_hash_value = hash(&content_value);
     let tags_value = tags_to_string(tags.as_ref());
     let sort_order =
-        crate::services::fragment::FragmentService::next_sort_order(pool(&state), &workspace_id)
+        crate::services::fragment::FragmentService::next_sort_order(pool(&state), &project_id)
             .await?;
 
     sqlx::query(
         r#"
         INSERT INTO fragments (
-            id, workspace_id, name, content, content_hash, tags, category,
+            id, project_id, name, content, content_hash, tags, category,
             sort_order, deleted_at, created_at, updated_at
         )
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?9)
         "#,
     )
     .bind(&id)
-    .bind(&workspace_id)
+    .bind(&project_id)
     .bind(&name)
     .bind(&content_value)
     .bind(&content_hash_value)
@@ -53,7 +53,7 @@ pub async fn create_fragment(
 
     let fragment = Fragment {
         id,
-        workspace_id,
+        project_id,
         name,
         content: content_value,
         content_hash: content_hash_value,
@@ -65,7 +65,7 @@ pub async fn create_fragment(
         updated_at: timestamp,
     };
 
-    emit_document_status(&app, "fragment_created", Some(&fragment.workspace_id), None);
+    emit_document_status(&app, "fragment_created", Some(&fragment.project_id), None);
     Ok(fragment)
 }
 
@@ -81,7 +81,7 @@ pub async fn update_fragment(
 ) -> Result<Fragment, String> {
     let current = sqlx::query_as::<_, FragmentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, tags, category,
+        SELECT id, project_id, name, content, content_hash, tags, category,
                sort_order, deleted_at, created_at, updated_at
         FROM fragments WHERE id = ?1
         "#,
@@ -134,7 +134,7 @@ pub async fn update_fragment(
 
     let updated = Fragment {
         id,
-        workspace_id: current.workspace_id.clone(),
+        project_id: current.project_id.clone(),
         name: updated_name,
         content: updated_content,
         content_hash: updated_hash,
@@ -146,7 +146,7 @@ pub async fn update_fragment(
         updated_at: timestamp,
     };
 
-    emit_document_status(&app, "fragment_updated", Some(&current.workspace_id), None);
+    emit_document_status(&app, "fragment_updated", Some(&current.project_id), None);
     Ok(updated)
 }
 
@@ -156,8 +156,8 @@ pub async fn soft_delete_fragment(
     state: State<'_, db::DbState>,
     id: String,
 ) -> Result<(), String> {
-    let workspace_id: String =
-        sqlx::query_scalar("SELECT workspace_id FROM fragments WHERE id = ?1")
+    let project_id: String =
+        sqlx::query_scalar("SELECT project_id FROM fragments WHERE id = ?1")
             .bind(&id)
             .fetch_one(pool(&state))
             .await
@@ -169,7 +169,7 @@ pub async fn soft_delete_fragment(
         .execute(pool(&state))
         .await
         .map_err(crate::error::normalize_error)?;
-    emit_document_status(&app, "fragment_deleted", Some(&workspace_id), None);
+    emit_document_status(&app, "fragment_deleted", Some(&project_id), None);
     Ok(())
 }
 
@@ -181,7 +181,7 @@ pub async fn restore_fragment(
 ) -> Result<Fragment, String> {
     let current = sqlx::query_as::<_, FragmentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, tags, category,
+        SELECT id, project_id, name, content, content_hash, tags, category,
                sort_order, deleted_at, created_at, updated_at
         FROM fragments WHERE id = ?1
         "#,
@@ -202,7 +202,7 @@ pub async fn restore_fragment(
         updated_at: timestamp.clone(),
         ..current.into()
     };
-    emit_document_status(&app, "fragment_restored", Some(&restored.workspace_id), None);
+    emit_document_status(&app, "fragment_restored", Some(&restored.project_id), None);
     Ok(restored)
 }
 
@@ -229,23 +229,23 @@ mod tests {
         pool
     }
 
-    async fn seed_workspace(pool: &SqlitePool, id: &str) {
+    async fn seed_project(pool: &SqlitePool, id: &str) {
         let timestamp = "2026-05-23T10:00:00Z".to_string();
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         )
         .bind(id)
-        .bind("Workspace")
+        .bind("Project")
         .bind(&timestamp)
         .execute(pool)
         .await
-        .expect("workspace");
+        .expect("project");
     }
 
     #[tokio::test]
     async fn create_fragment_persists_tags_as_json_array() {
         let pool = test_pool().await;
-        seed_workspace(&pool, "ws-1").await;
+        seed_project(&pool, "ws-1").await;
         let tags = vec!["intro".to_string(), "guide".to_string()];
         let tags_value = tags_to_string(Some(&tags));
         let timestamp = "2026-05-23T10:00:00Z".to_string();
@@ -256,7 +256,7 @@ mod tests {
         sqlx::query(
             r#"
             INSERT INTO fragments (
-                id, workspace_id, name, content, content_hash, tags, category,
+                id, project_id, name, content, content_hash, tags, category,
                 sort_order, deleted_at, created_at, updated_at
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?9)
@@ -288,12 +288,12 @@ mod tests {
     #[tokio::test]
     async fn soft_delete_fragment_uses_deleted_at() {
         let pool = test_pool().await;
-        seed_workspace(&pool, "ws-1").await;
+        seed_project(&pool, "ws-1").await;
         let timestamp = "2026-05-23T10:00:00Z".to_string();
         sqlx::query(
             r#"
             INSERT INTO fragments (
-                id, workspace_id, name, content, content_hash, tags, category,
+                id, project_id, name, content, content_hash, tags, category,
                 sort_order, deleted_at, created_at, updated_at
             )
             VALUES (?1, ?2, ?3, ?4, ?5, '[]', NULL, 0, NULL, ?6, ?6)

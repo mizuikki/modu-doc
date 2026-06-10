@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import {
-  createWorkspaceWithFirstDocument,
-  fetchWorkspaceBundle,
-  fetchWorkspaces,
-} from "@/app/data/workspaceData";
+  createProjectWithFirstDocument,
+  fetchProjectBundle,
+  fetchProjects,
+} from "@/app/data/projectData";
 import { applyScreenshotScenario, isScreenshotMode } from "@/app/screenshotMode";
 import { useAppStore } from "@/store/appStore";
 
 export type BootstrapStatus = "idle" | "loading" | "ready" | "error";
 
-export function useWorkspaceBootstrap() {
+export function useProjectBootstrap() {
   const [status, setStatus] = useState<BootstrapStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -28,17 +28,17 @@ export function useWorkspaceBootstrap() {
       setStatus("loading");
       setError(null);
       try {
-        const list = await fetchWorkspaces();
+        const list = await fetchProjects();
         if (cancelled) return;
         const state = useAppStore.getState();
-        const activeId = state.activeWorkspaceId ?? list[0]?.id ?? null;
+        const activeId = state.activeProjectId ?? list[0]?.id ?? null;
         if (!activeId) {
           if (!cancelled) {
             setStatus("ready");
           }
           return;
         }
-        await fetchWorkspaceBundle(activeId);
+        await fetchProjectBundle(activeId);
         if (cancelled) return;
         setStatus("ready");
       } catch (err) {
@@ -53,7 +53,7 @@ export function useWorkspaceBootstrap() {
   }, []);
 
   const createAndOpen = async (name: string) => {
-    await createWorkspaceWithFirstDocument(name);
+    await createProjectWithFirstDocument(name);
   };
 
   return { status, error, createAndOpen };

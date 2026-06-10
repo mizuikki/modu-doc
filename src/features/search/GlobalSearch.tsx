@@ -1,33 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchShortcut } from "@/app/hooks/useSearchShortcut";
-import { searchWorkspaceContent } from "@/lib/api/search";
+import { searchProjectContent } from "@/lib/api/search";
 import type { SearchResult } from "@/lib/api/types";
 import { useAppStore } from "@/store/appStore";
 
-type ResultKind = "workspace" | "fragment" | "recipe" | "snapshot" | "document";
+type ResultKind = "project" | "fragment" | "recipe" | "snapshot" | "document";
 
 type UiSearchResult = {
   kind: ResultKind;
   id: string;
-  workspaceId: string | null;
+  projectId: string | null;
+  documentId: string | null;
   title: string;
   subtitle: string;
 };
 
-const GROUP_ORDER: ResultKind[] = ["document", "fragment", "recipe", "snapshot", "workspace"];
+const GROUP_ORDER: ResultKind[] = ["document", "fragment", "recipe", "snapshot", "project"];
 
 const GROUP_LABEL_KEYS: Record<ResultKind, string> = {
   document: "documents",
   fragment: "search_group_fragments",
   recipe: "search_group_recipes",
   snapshot: "search_group_snapshots",
-  workspace: "search_group_workspaces",
+  project: "search_group_projects",
 };
 
 function isResultKind(value: string): value is ResultKind {
   return (
-    value === "workspace" ||
+    value === "project" ||
     value === "fragment" ||
     value === "recipe" ||
     value === "snapshot" ||
@@ -42,7 +43,7 @@ export function GlobalSearch() {
   const [remoteResults, setRemoteResults] = useState<UiSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
-  const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace);
+  const setActiveProject = useAppStore((state) => state.setActiveProject);
   const setActiveDocument = useAppStore((state) => state.setActiveDocument);
   const setRightPanelTab = useAppStore((state) => state.setRightPanelTab);
   const setSelectedSnapshot = useAppStore((state) => state.setSelectedSnapshot);
@@ -51,31 +52,34 @@ export function GlobalSearch() {
   const results = useMemo(() => remoteResults, [remoteResults]);
 
   const applyResult = (result: UiSearchResult) => {
-    if (result.kind === "workspace") {
-      setActiveWorkspace(result.id);
+    if (result.kind === "project") {
+      setActiveProject(result.id);
     } else if (result.kind === "document") {
-      if (result.workspaceId) {
-        setActiveWorkspace(result.workspaceId);
+      if (result.projectId) {
+        setActiveProject(result.projectId);
       }
       setActiveDocument(result.id);
       setCenterMode("edit");
     } else if (result.kind === "fragment") {
-      if (result.workspaceId) {
-        setActiveWorkspace(result.workspaceId);
+      if (result.projectId) {
+        setActiveProject(result.projectId);
       }
       // Fragments are now opened inside the right panel's Fragments tab.
       // The panel owns the per-fragment view state; we just ensure the tab
       // is the active one so the user can see it.
       setRightPanelTab("fragments");
     } else if (result.kind === "recipe") {
-      if (result.workspaceId) {
-        setActiveWorkspace(result.workspaceId);
+      if (result.projectId) {
+        setActiveProject(result.projectId);
       }
       setRightPanelTab("recipes");
     } else {
       // snapshot
-      if (result.workspaceId) {
-        setActiveWorkspace(result.workspaceId);
+      if (result.projectId) {
+        setActiveProject(result.projectId);
+      }
+      if (result.documentId) {
+        setActiveDocument(result.documentId);
       }
       setSelectedSnapshot(result.id);
       setCenterMode("history");
@@ -97,7 +101,7 @@ export function GlobalSearch() {
     const handle = window.setTimeout(() => {
       void (async () => {
         try {
-          const raw = await searchWorkspaceContent(normalized, 8);
+          const raw = await searchProjectContent(normalized, 8);
           if (cancelled) return;
           const mapped: UiSearchResult[] = raw
             .map((result: SearchResult) => {
@@ -105,7 +109,8 @@ export function GlobalSearch() {
               return {
                 kind: result.kind,
                 id: result.id,
-                workspaceId: result.workspace_id,
+                projectId: result.project_id,
+                documentId: result.document_id,
                 title: result.title,
                 subtitle: result.subtitle || t("empty_fragment"),
               };

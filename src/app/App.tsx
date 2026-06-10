@@ -1,14 +1,19 @@
-import { type CSSProperties, useEffect } from "react";
-import { useWorkspaceBootstrap } from "@/app/hooks/useWorkspaceBootstrap";
-import { useWorkspaceStatusEvents } from "@/app/hooks/useWorkspaceStatusEvents";
+import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
+import { useProjectBootstrap } from "@/app/hooks/useProjectBootstrap";
+import { useProjectStatusEvents } from "@/app/hooks/useProjectStatusEvents";
 import { useZenModeShortcut } from "@/app/hooks/useZenModeShortcut";
+import { useAppDialog } from "@/components/dialog/DialogProvider";
+import { ColumnSplitter } from "@/components/layout/ColumnSplitter";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { StatusBar } from "@/components/layout/StatusBar";
+import { useToast } from "@/components/toast/ToastProvider";
 import { DocumentEditor } from "@/features/documents/DocumentEditor";
 import { RightPanel } from "@/features/documents/RightPanel";
 import { KeyboardCheatsheet } from "@/features/help/KeyboardCheatsheet";
-import { WorkspaceSettingsDialog } from "@/features/workspaces/WorkspaceSettingsDialog";
+import { ProjectSettingsDialog } from "@/features/projects/ProjectSettingsDialog";
+import { normalizeAppError } from "@/lib/appError";
 import {
   initialUI,
   RIGHT_PANEL_WIDTH_MAX,
@@ -26,11 +31,12 @@ function resolvePanelWidth(value: number, fallback: number, min: number, max: nu
 }
 
 export function App() {
-  const { status, error, createAndOpen } = useWorkspaceBootstrap();
-  useWorkspaceStatusEvents();
+  const { t } = useTranslation();
+  const { status, error, createAndOpen } = useProjectBootstrap();
+  useProjectStatusEvents();
   useZenModeShortcut();
 
-  const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
+  const activeProjectId = useAppStore((s) => s.activeProjectId);
   const sidebarWidth = resolvePanelWidth(
     useAppStore((s) => s.ui.sidebarWidth),
     initialUI.sidebarWidth,
@@ -45,6 +51,7 @@ export function App() {
   );
   const rightPanelCollapsed = useAppStore((s) => s.ui.rightPanelCollapsed);
   const zenMode = useAppStore((s) => s.ui.zenMode);
+  const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
   const settingsDialogOpen = useAppStore((s) => s.ui.settingsDialogOpen);
   const setSettingsDialogOpen = useAppStore((s) => s.setSettingsDialogOpen);
   const rightPanelColumnWidth = rightPanelCollapsed ? 48 : rightPanelWidth;
@@ -54,7 +61,7 @@ export function App() {
     display: "grid",
     gridTemplateColumns: zenMode
       ? "minmax(0, 1fr)"
-      : `${sidebarWidth}px minmax(0, 1fr) ${rightPanelColumnWidth}px`,
+      : `${sidebarWidth}px 10px minmax(0, 1fr) ${rightPanelColumnWidth}px`,
   } as CSSProperties;
 
   if (status === "loading") {
@@ -63,7 +70,7 @@ export function App() {
   if (status === "error") {
     return <div className="app-error">Error: {error}</div>;
   }
-  if (status === "ready" && !activeWorkspaceId) {
+  if (status === "ready" && !activeProjectId) {
     return <WelcomeScreen onCreate={createAndOpen} />;
   }
 
@@ -74,6 +81,17 @@ export function App() {
         <aside className="app-sidebar">
           <Sidebar />
         </aside>
+        {!zenMode ? (
+          <ColumnSplitter
+            ariaLabel={t("resize_sidebar")}
+            currentPx={sidebarWidth}
+            minPx={SIDEBAR_WIDTH_MIN}
+            maxPx={SIDEBAR_WIDTH_MAX}
+            onResize={setSidebarWidth}
+            className="sidebar-resizer"
+            testId="sidebar-resizer"
+          />
+        ) : null}
         <section className="app-center">
           <DocumentEditor />
         </section>
@@ -83,15 +101,31 @@ export function App() {
         <StatusBar />
       </footer>
       <KeyboardCheatsheet />
-      <WorkspaceSettingsDialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen} />
+      <ProjectSettingsDialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen} />
     </div>
   );
 }
 
 function WelcomeScreen({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
-  useEffect(() => {
-    // No-op effect placeholder; keeps the import surface stable.
-  }, []);
+  const { t } = useTranslation();
+  const dialog = useAppDialog();
+  const toast = useToast();
+
+  const handleCreate = async () => {
+    const result = await dialog.prompt({
+      title: t("project_name_prompt"),
+      defaultValue: "Untitled Project",
+    });
+    if (!result.ok) return;
+    const name = result.value.trim();
+    if (!name) return;
+    try {
+      await onCreate(name);
+    } catch (error) {
+      toast.error(normalizeAppError(error), t("action_failed"));
+    }
+  };
+
   return (
     <div
       className="welcome-screen"
@@ -130,8 +164,8 @@ function WelcomeScreen({ onCreate }: { onCreate: (name: string) => Promise<void>
       </p>
       <button
         type="button"
-        onClick={() => void onCreate("Untitled")}
-        data-testid="welcome-create-workspace"
+        onClick={() => void handleCreate()}
+        data-testid="welcome-create-project"
         style={{
           marginTop: "var(--space-4)",
           padding: "10px 18px",
@@ -152,7 +186,7 @@ function WelcomeScreen({ onCreate }: { onCreate: (name: string) => Promise<void>
           e.currentTarget.style.background = "hsl(var(--primary))";
         }}
       >
-        Create your first workspace
+        Create your first project
       </button>
     </div>
   );

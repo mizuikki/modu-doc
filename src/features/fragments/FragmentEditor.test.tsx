@@ -25,7 +25,7 @@ vi.mock("./MilkdownEditor", () => ({
 const { updateFragment } = vi.hoisted(() => ({
   updateFragment: vi.fn(async () => ({
     id: "fragment-a",
-    workspace_id: "workspace-a",
+    project_id: "project-a",
     name: "Intro",
     content: "Updated body",
     content_hash: "",
@@ -44,7 +44,7 @@ vi.mock("@/lib/api/fragments", () => ({
 
 const fragmentA = {
   id: "fragment-a",
-  workspaceId: "workspace-a",
+  projectId: "project-a",
   name: "Intro",
   content: "Initial body",
   contentHash: "",

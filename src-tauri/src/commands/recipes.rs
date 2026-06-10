@@ -6,7 +6,7 @@ use uuid::Uuid;
 pub async fn create_recipe(
     app: AppHandle<impl Runtime>,
     state: State<'_, db::DbState>,
-    workspace_id: String,
+    project_id: String,
     name: String,
     description: Option<String>,
 ) -> Result<Recipe, String> {
@@ -15,12 +15,12 @@ pub async fn create_recipe(
     let description = description.unwrap_or_default();
     sqlx::query(
         r#"
-        INSERT INTO recipes (id, workspace_id, name, description, deleted_at, created_at, updated_at)
+        INSERT INTO recipes (id, project_id, name, description, deleted_at, created_at, updated_at)
         VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?5)
         "#,
     )
     .bind(&id)
-    .bind(&workspace_id)
+    .bind(&project_id)
     .bind(&name)
     .bind(&description)
     .bind(&timestamp)
@@ -30,7 +30,7 @@ pub async fn create_recipe(
 
     let recipe = Recipe {
         id,
-        workspace_id: workspace_id.clone(),
+        project_id: project_id.clone(),
         name,
         description,
         deleted_at: None,
@@ -38,7 +38,7 @@ pub async fn create_recipe(
         updated_at: timestamp,
     };
 
-    emit_document_status(&app, "recipe_created", Some(&workspace_id), None);
+    emit_document_status(&app, "recipe_created", Some(&project_id), None);
     Ok(recipe)
 }
 
@@ -49,8 +49,8 @@ pub async fn update_recipe_items(
     recipe_id: String,
     items: Vec<RecipeItem>,
 ) -> Result<(), String> {
-    let workspace_id: String =
-        sqlx::query_scalar("SELECT workspace_id FROM recipes WHERE id = ?1")
+    let project_id: String =
+        sqlx::query_scalar("SELECT project_id FROM recipes WHERE id = ?1")
             .bind(&recipe_id)
             .fetch_one(pool(&state))
             .await
@@ -92,7 +92,7 @@ pub async fn update_recipe_items(
         .await
         .map_err(crate::error::normalize_error)?;
 
-    emit_document_status(&app, "recipe_updated", Some(&workspace_id), None);
+    emit_document_status(&app, "recipe_updated", Some(&project_id), None);
     Ok(())
 }
 
@@ -105,7 +105,7 @@ pub async fn generate_document_from_recipe(
 ) -> Result<Document, String> {
     let recipe = sqlx::query_as::<_, RecipeRow>(
         r#"
-        SELECT id, workspace_id, name, description, deleted_at, created_at, updated_at
+        SELECT id, project_id, name, description, deleted_at, created_at, updated_at
         FROM recipes WHERE id = ?1
         "#,
     )
@@ -146,9 +146,9 @@ pub async fn generate_document_from_recipe(
     let new_id = Uuid::new_v4().to_string();
     let timestamp = now();
     let sort_order: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM documents WHERE workspace_id = ?1",
+        "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM documents WHERE project_id = ?1",
     )
-    .bind(&recipe.workspace_id)
+    .bind(&recipe.project_id)
     .fetch_one(pool(&state))
     .await
     .map_err(crate::error::normalize_error)?;
@@ -156,15 +156,15 @@ pub async fn generate_document_from_recipe(
     sqlx::query(
         r#"
         INSERT INTO documents (
-            id, workspace_id, name, content, content_hash, target_path, file_status,
+            id, project_id, name, content, content_hash, target_path, save_state,
             last_written_at, last_written_hash, sort_order, deleted_at, description,
             created_at, updated_at
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, NULL, 'missing_target', NULL, NULL, ?6, NULL, NULL, ?7, ?7)
+        VALUES (?1, ?2, ?3, ?4, ?5, NULL, 'draft', NULL, NULL, ?6, NULL, NULL, ?7, ?7)
         "#,
     )
     .bind(&new_id)
-    .bind(&recipe.workspace_id)
+    .bind(&recipe.project_id)
     .bind(&name)
     .bind(&concatenated)
     .bind(&content_hash_value)
@@ -176,7 +176,7 @@ pub async fn generate_document_from_recipe(
 
     let document = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+        SELECT id, project_id, name, content, content_hash, target_path, save_state,
                last_written_at, last_written_hash, sort_order, deleted_at, description,
                created_at, updated_at
         FROM documents WHERE id = ?1
@@ -188,7 +188,7 @@ pub async fn generate_document_from_recipe(
     .map_err(crate::error::normalize_error)?
     .into();
 
-    emit_document_status(&app, "document_created", Some(&recipe.workspace_id), Some(&new_id));
+    emit_document_status(&app, "document_created", Some(&recipe.project_id), Some(&new_id));
     Ok(document)
 }
 
@@ -203,7 +203,7 @@ pub async fn insert_recipe_into_document(
     let _ = recipe_exists(pool(&state), &recipe_id).await?;
     let document = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+        SELECT id, project_id, name, content, content_hash, target_path, save_state,
                last_written_at, last_written_hash, sort_order, deleted_at, description,
                created_at, updated_at
         FROM documents WHERE id = ?1
@@ -218,16 +218,16 @@ pub async fn insert_recipe_into_document(
     let new_content = splice_at(&document.content, &concatenated, cursor_offset);
     let new_hash = hash(&new_content);
     let new_status = if document.target_path.is_some() {
-        "dirty"
+        "unsaved"
     } else {
-        "missing_target"
+        "draft"
     };
     let timestamp = now();
 
     sqlx::query(
         r#"
         UPDATE documents
-        SET content = ?2, content_hash = ?3, file_status = ?4, updated_at = ?5
+        SET content = ?2, content_hash = ?3, save_state = ?4, updated_at = ?5
         WHERE id = ?1
         "#,
     )
@@ -242,7 +242,7 @@ pub async fn insert_recipe_into_document(
 
     let updated: Document = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+        SELECT id, project_id, name, content, content_hash, target_path, save_state,
                last_written_at, last_written_hash, sort_order, deleted_at, description,
                created_at, updated_at
         FROM documents WHERE id = ?1
@@ -257,7 +257,7 @@ pub async fn insert_recipe_into_document(
     emit_document_status(
         &app,
         "document_updated",
-        Some(&updated.workspace_id),
+        Some(&updated.project_id),
         Some(&updated.id),
     );
     Ok(updated)
@@ -273,7 +273,7 @@ pub async fn replace_document_with_recipe(
     let _ = recipe_exists(pool(&state), &recipe_id).await?;
     let document = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+        SELECT id, project_id, name, content, content_hash, target_path, save_state,
                last_written_at, last_written_hash, sort_order, deleted_at, description,
                created_at, updated_at
         FROM documents WHERE id = ?1
@@ -292,16 +292,16 @@ pub async fn replace_document_with_recipe(
     new_content.push_str(&document.content);
     let new_hash = hash(&new_content);
     let new_status = if document.target_path.is_some() {
-        "dirty"
+        "unsaved"
     } else {
-        "missing_target"
+        "draft"
     };
     let timestamp = now();
 
     sqlx::query(
         r#"
         UPDATE documents
-        SET content = ?2, content_hash = ?3, file_status = ?4, updated_at = ?5
+        SET content = ?2, content_hash = ?3, save_state = ?4, updated_at = ?5
         WHERE id = ?1
         "#,
     )
@@ -316,7 +316,7 @@ pub async fn replace_document_with_recipe(
 
     let updated: Document = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+        SELECT id, project_id, name, content, content_hash, target_path, save_state,
                last_written_at, last_written_hash, sort_order, deleted_at, description,
                created_at, updated_at
         FROM documents WHERE id = ?1
@@ -331,7 +331,7 @@ pub async fn replace_document_with_recipe(
     emit_document_status(
         &app,
         "document_updated",
-        Some(&updated.workspace_id),
+        Some(&updated.project_id),
         Some(&updated.id),
     );
     Ok(updated)
@@ -419,21 +419,21 @@ mod tests {
         pool
     }
 
-    async fn seed_full_workspace(pool: &SqlitePool) -> (String, String, String, String) {
+    async fn seed_full_project(pool: &SqlitePool) -> (String, String, String, String) {
         let timestamp = "2026-05-23T10:00:00Z".to_string();
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         )
         .bind("ws-1")
-        .bind("Workspace 1")
+        .bind("Project 1")
         .bind(&timestamp)
         .execute(pool)
         .await
-        .expect("workspace");
+        .expect("project");
         sqlx::query(
             r#"
             INSERT INTO fragments (
-                id, workspace_id, name, content, content_hash, tags, category,
+                id, project_id, name, content, content_hash, tags, category,
                 sort_order, deleted_at, created_at, updated_at
             )
             VALUES (?1, ?2, ?3, ?4, ?5, '[]', NULL, 0, NULL, ?6, ?6)
@@ -451,7 +451,7 @@ mod tests {
         sqlx::query(
             r#"
             INSERT INTO fragments (
-                id, workspace_id, name, content, content_hash, tags, category,
+                id, project_id, name, content, content_hash, tags, category,
                 sort_order, deleted_at, created_at, updated_at
             )
             VALUES (?1, ?2, ?3, ?4, ?5, '[]', NULL, 1, NULL, ?6, ?6)
@@ -468,7 +468,7 @@ mod tests {
         .expect("fragment 2");
         sqlx::query(
             r#"
-            INSERT INTO recipes (id, workspace_id, name, description, deleted_at, created_at, updated_at)
+            INSERT INTO recipes (id, project_id, name, description, deleted_at, created_at, updated_at)
             VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?5)
             "#,
         )
@@ -491,7 +491,7 @@ mod tests {
     #[tokio::test]
     async fn update_recipe_items_replaces_all_items_in_one_tx() {
         let pool = test_pool().await;
-        let (_ws, frag1, frag2, recipe) = seed_full_workspace(&pool).await;
+        let (_ws, frag1, frag2, recipe) = seed_full_project(&pool).await;
         let timestamp = "2026-05-23T10:00:00Z".to_string();
 
         // Seed an initial item to prove it gets replaced.
@@ -568,7 +568,7 @@ mod tests {
     #[tokio::test]
     async fn generate_document_from_recipe_concatenates_enabled_items() {
         let pool = test_pool().await;
-        let (_ws, frag1, frag2, recipe) = seed_full_workspace(&pool).await;
+        let (_ws, frag1, frag2, recipe) = seed_full_project(&pool).await;
         for (id, fragment_id, enabled, sort_order) in [
             ("ri-1", frag1.as_str(), 1_i64, 0_i64),
             ("ri-2", frag2.as_str(), 0_i64, 1_i64), // disabled

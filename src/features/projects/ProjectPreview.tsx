@@ -4,25 +4,25 @@ import remarkGfm from "remark-gfm";
 import { tMaybe } from "@/i18n/tMaybe";
 import { openTargetInFileManager } from "@/lib/api/misc";
 import { useAppStore } from "@/store/appStore";
-import { selectActiveDocument, selectActiveWorkspace } from "@/store/selectors";
-import type { DocumentFileStatus } from "@/store/types";
+import { selectActiveDocument, selectActiveProject } from "@/store/selectors";
+import type { DocumentSaveState } from "@/store/types";
 
-const STATUS_LABEL_KEYS: Record<DocumentFileStatus, string> = {
-  missing_target: "missing_target",
-  dirty: "dirty",
-  ready: "ready",
-  conflicted: "conflicted",
+const STATUS_LABEL_KEYS: Record<DocumentSaveState, string> = {
+  draft: "draft",
+  unsaved: "unsaved",
+  saved: "saved",
+  conflict: "conflict",
   error: "error",
 };
 
-export function WorkspacePreview() {
+export function ProjectPreview() {
   const { t } = useTranslation();
   const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
-  const activeWorkspace = useAppStore(selectActiveWorkspace);
+  const activeProject = useAppStore(selectActiveProject);
   const activeDocument = useAppStore(selectActiveDocument);
 
-  const status = activeDocument?.fileStatus ?? "missing_target";
-  const statusLabel = tMaybe(t, STATUS_LABEL_KEYS[status] ?? "missing_target");
+  const status = activeDocument?.saveState ?? "draft";
+  const statusLabel = tMaybe(t, STATUS_LABEL_KEYS[status] ?? "draft");
 
   return (
     <div style={{ padding: 20, display: "grid", gap: 16 }}>
@@ -60,15 +60,15 @@ export function WorkspacePreview() {
               </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>
-                  {activeWorkspace?.name ?? t("no_workspace")}
+                  {activeProject?.name ?? t("no_project")}
                 </div>
                 <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
                   {tMaybe(t, "created_at")}:{" "}
-                  {activeWorkspace ? new Date(activeWorkspace.createdAt).toLocaleString() : "—"}
+                  {activeProject ? new Date(activeProject.createdAt).toLocaleString() : "—"}
                 </div>
                 <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
                   {tMaybe(t, "updated_at")}:{" "}
-                  {activeWorkspace ? new Date(activeWorkspace.updatedAt).toLocaleString() : "—"}
+                  {activeProject ? new Date(activeProject.updatedAt).toLocaleString() : "—"}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

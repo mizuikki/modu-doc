@@ -1,6 +1,6 @@
 import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject, loadProject } from "../support/project";
 import { tauriInvoke } from "../support/tauri";
-import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
 
 /**
  * The old `preview-open-target-folder` testid and the preview tab are
@@ -10,21 +10,23 @@ import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
  * `MODUDOC_E2E_SKIP_REVEAL=1` is set, so we don't actually pop a file
  * manager window during e2e.
  */
-describe("Workspace preview", () => {
+describe("Project preview", () => {
   it("open target folder action does not error", async () => {
-    const workspaceName = `E2E Open target ${Date.now()}`;
-    const { workspaceId, documentId } = await createAndOpenWorkspace(workspaceName);
+    const projectName = `E2E Open target ${Date.now()}`;
+    const { projectId, documentId } = await createAndOpenProject(projectName);
 
     // Bind a target path on the active document so the backend has
     // something to look up. (Without a target_path the command returns
     // `invalid_target_path`.)
     const targetPath = `/tmp/modudoc-e2e-open-target-${Date.now()}.md`;
     await tauriInvoke("update_document", {
-      id: documentId,
-      target_path: targetPath,
+      request: {
+        id: documentId,
+        targetPath,
+      },
     });
     await browser.waitUntil(async () => {
-      const bundle = await loadWorkspace(workspaceId);
+      const bundle = await loadProject(projectId);
       const doc = bundle.documents.find((entry) => entry.id === documentId);
       return doc?.target_path === targetPath;
     });

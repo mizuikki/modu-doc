@@ -27,12 +27,12 @@ export function Header() {
   const theme = useAppStore((state) => state.ui.theme);
   const setTheme = useAppStore((state) => state.setTheme);
   const setSettingsDialogOpen = useAppStore((state) => state.setSettingsDialogOpen);
-  const activeWorkspace = useAppStore(
-    (s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId) ?? null,
+  const activeProject = useAppStore(
+    (s) => s.projects.find((w) => w.id === s.activeProjectId) ?? null,
   );
   const activeDocument = useAppStore(selectActiveDocument);
   const activeDocumentId = useAppStore((state) => state.activeDocumentId);
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
   const language = i18n.resolvedLanguage ?? i18n.language;
 
   const activeOption = THEME_OPTIONS.find((option) => option.value === theme) ?? THEME_OPTIONS[0];
@@ -76,7 +76,7 @@ export function Header() {
         </div>
         <strong>{t("app_name")}</strong>
         <span style={{ color: "hsl(var(--muted-foreground))", fontSize: 12 }}>
-          {activeDocument?.name ?? activeWorkspace?.name ?? t("no_workspace")}
+          {activeDocument?.name ?? activeProject?.name ?? t("no_project")}
         </span>
       </div>
       <GlobalSearch />
@@ -195,7 +195,7 @@ export function Header() {
         </DropdownMenu.Root>
         <button
           type="button"
-          disabled={!activeWorkspaceId}
+          disabled={!activeProjectId}
           data-testid="header-settings"
           onClick={() => setSettingsDialogOpen(true)}
           style={{
@@ -229,7 +229,7 @@ export function Header() {
       <CommandPalette openRef={undefined} />
       {message && activeDocumentId ? (
         <div
-          data-testid="workspace-status-popover"
+          data-testid="project-status-popover"
           style={{
             position: "absolute",
             top: 48,
@@ -255,7 +255,7 @@ export function Header() {
               color: "hsl(var(--muted-foreground))",
             }}
             aria-label={t("close")}
-            data-testid="workspace-status-close"
+            data-testid="project-status-close"
           >
             ×
           </button>

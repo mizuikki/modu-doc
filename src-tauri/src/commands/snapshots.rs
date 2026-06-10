@@ -11,7 +11,7 @@ pub async fn create_snapshot(
 ) -> Result<Snapshot, String> {
     let document = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+        SELECT id, project_id, name, content, content_hash, target_path, save_state,
                last_written_at, last_written_hash, sort_order, deleted_at, description,
                created_at, updated_at
         FROM documents WHERE id = ?1
@@ -41,7 +41,7 @@ pub async fn create_snapshot(
             emit_document_status(
                 &app,
                 "snapshot_created",
-                Some(&document.workspace_id),
+                Some(&document.project_id),
                 Some(&document_id),
             );
             return Ok(latest.into());
@@ -77,7 +77,7 @@ pub async fn create_snapshot(
     emit_document_status(
         &app,
         "snapshot_created",
-        Some(&document.workspace_id),
+        Some(&document.project_id),
         Some(&document_id),
     );
     Ok(new_snapshot)
@@ -125,7 +125,7 @@ pub async fn restore_snapshot(
 
     let source = sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+        SELECT id, project_id, name, content, content_hash, target_path, save_state,
                last_written_at, last_written_hash, sort_order, deleted_at, description,
                created_at, updated_at
         FROM documents WHERE id = ?1
@@ -139,16 +139,16 @@ pub async fn restore_snapshot(
     let new_id = Uuid::new_v4().to_string();
     let timestamp = now();
     let new_status = if source.target_path.is_some() {
-        "dirty"
+        "unsaved"
     } else {
-        "missing_target"
+        "draft"
     };
 
     let result_document: Document = if mode == "new_doc" {
         let sort_order: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM documents WHERE workspace_id = ?1",
+            "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM documents WHERE project_id = ?1",
         )
-        .bind(&source.workspace_id)
+        .bind(&source.project_id)
         .fetch_one(pool(&state))
         .await
         .map_err(crate::error::normalize_error)?;
@@ -156,7 +156,7 @@ pub async fn restore_snapshot(
         sqlx::query(
             r#"
             INSERT INTO documents (
-                id, workspace_id, name, content, content_hash, target_path, file_status,
+                id, project_id, name, content, content_hash, target_path, save_state,
                 last_written_at, last_written_hash, sort_order, deleted_at, description,
                 created_at, updated_at
             )
@@ -164,7 +164,7 @@ pub async fn restore_snapshot(
             "#,
         )
         .bind(&new_id)
-        .bind(&source.workspace_id)
+        .bind(&source.project_id)
         .bind(&new_name)
         .bind(&snapshot.content)
         .bind(&snapshot.content_hash)
@@ -177,7 +177,7 @@ pub async fn restore_snapshot(
         .map_err(crate::error::normalize_error)?;
         sqlx::query_as::<_, DocumentRow>(
             r#"
-            SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+            SELECT id, project_id, name, content, content_hash, target_path, save_state,
                    last_written_at, last_written_hash, sort_order, deleted_at, description,
                    created_at, updated_at
             FROM documents WHERE id = ?1
@@ -192,7 +192,7 @@ pub async fn restore_snapshot(
         sqlx::query(
             r#"
             UPDATE documents
-            SET content = ?2, content_hash = ?3, file_status = ?4, updated_at = ?5
+            SET content = ?2, content_hash = ?3, save_state = ?4, updated_at = ?5
             WHERE id = ?1
             "#,
         )
@@ -206,7 +206,7 @@ pub async fn restore_snapshot(
         .map_err(crate::error::normalize_error)?;
         sqlx::query_as::<_, DocumentRow>(
             r#"
-            SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+            SELECT id, project_id, name, content, content_hash, target_path, save_state,
                    last_written_at, last_written_hash, sort_order, deleted_at, description,
                    created_at, updated_at
             FROM documents WHERE id = ?1
@@ -222,7 +222,7 @@ pub async fn restore_snapshot(
     emit_document_status(
         &app,
         "snapshot_restored",
-        Some(&result_document.workspace_id),
+        Some(&result_document.project_id),
         Some(&result_document.id),
     );
     Ok(result_document)
@@ -251,25 +251,25 @@ mod tests {
         pool
     }
 
-    async fn seed_workspace_and_document(pool: &SqlitePool) -> (String, String) {
+    async fn seed_project_and_document(pool: &SqlitePool) -> (String, String) {
         let timestamp = "2026-05-23T10:00:00Z".to_string();
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         )
         .bind("ws-1")
-        .bind("Workspace 1")
+        .bind("Project 1")
         .bind(&timestamp)
         .execute(pool)
         .await
-        .expect("workspace");
+        .expect("project");
         sqlx::query(
             r#"
             INSERT INTO documents (
-                id, workspace_id, name, content, content_hash, target_path, file_status,
+                id, project_id, name, content, content_hash, target_path, save_state,
                 last_written_at, last_written_hash, sort_order, deleted_at, description,
                 created_at, updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, NULL, 'missing_target', NULL, NULL, 0, NULL, NULL, ?6, ?6)
+            VALUES (?1, ?2, ?3, ?4, ?5, NULL, 'draft', NULL, NULL, 0, NULL, NULL, ?6, ?6)
             "#,
         )
         .bind("doc-1")
@@ -287,7 +287,7 @@ mod tests {
     #[tokio::test]
     async fn create_snapshot_skips_when_content_hash_unchanged() {
         let pool = test_pool().await;
-        let (_ws_id, doc_id) = seed_workspace_and_document(&pool).await;
+        let (_ws_id, doc_id) = seed_project_and_document(&pool).await;
 
         let snapshot = Snapshot {
             id: "snap-1".to_string(),
@@ -320,7 +320,7 @@ mod tests {
         .await
         .expect("latest");
         let doc: DocumentRow = sqlx::query_as::<_, DocumentRow>(
-            "SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+            "SELECT id, project_id, name, content, content_hash, target_path, save_state,
                     last_written_at, last_written_hash, sort_order, deleted_at, description,
                     created_at, updated_at
              FROM documents WHERE id = ?1",
@@ -335,7 +335,7 @@ mod tests {
     #[tokio::test]
     async fn restore_snapshot_in_new_doc_mode_copies_content() {
         let pool = test_pool().await;
-        let (_ws_id, doc_id) = seed_workspace_and_document(&pool).await;
+        let (_ws_id, doc_id) = seed_project_and_document(&pool).await;
 
         let snapshot = Snapshot {
             id: "snap-1".to_string(),
@@ -361,12 +361,12 @@ mod tests {
 
         let new_id = "doc-restored-1".to_string();
         let new_name = format!("{} (Restored)", "Doc 1");
-        let new_status = "missing_target";
+        let new_status = "draft";
         let timestamp = "2026-05-23T11:00:00Z".to_string();
         sqlx::query(
             r#"
             INSERT INTO documents (
-                id, workspace_id, name, content, content_hash, target_path, file_status,
+                id, project_id, name, content, content_hash, target_path, save_state,
                 last_written_at, last_written_hash, sort_order, deleted_at, description,
                 created_at, updated_at
             )
@@ -385,7 +385,7 @@ mod tests {
         .expect("new doc");
 
         let restored: DocumentRow = sqlx::query_as::<_, DocumentRow>(
-            "SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+            "SELECT id, project_id, name, content, content_hash, target_path, save_state,
                     last_written_at, last_written_hash, sort_order, deleted_at, description,
                     created_at, updated_at
              FROM documents WHERE id = ?1",
@@ -395,7 +395,7 @@ mod tests {
         .await
         .expect("restored");
         assert_eq!(restored.content, "restored content");
-        assert_eq!(restored.workspace_id, "ws-1");
-        assert_eq!(restored.file_status, "missing_target");
+        assert_eq!(restored.project_id, "ws-1");
+        assert_eq!(restored.save_state, "draft");
     }
 }

@@ -15,12 +15,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            // workspace
-            commands::list_workspaces,
-            commands::create_workspace,
-            commands::update_workspace,
-            commands::delete_workspace,
-            commands::load_workspace,
+            // project
+            commands::list_projects,
+            commands::create_project,
+            commands::update_project,
+            commands::delete_project,
+            commands::load_project,
             // documents (the new primary surface)
             commands::create_document,
             commands::update_document,
@@ -47,7 +47,7 @@ pub fn run() {
             commands::list_document_snapshots,
             commands::restore_snapshot,
             // misc
-            commands::search_workspace_content,
+            commands::search_project_content,
             commands::open_target_in_file_manager,
             commands::debug_log_frontend,
             // settings

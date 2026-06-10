@@ -1,8 +1,8 @@
 use crate::db;
 
-pub struct WorkspaceService;
+pub struct ProjectService;
 
-impl WorkspaceService {
+impl ProjectService {
     pub fn now() -> String {
         db::now_iso()
     }

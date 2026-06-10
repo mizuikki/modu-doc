@@ -1,5 +1,5 @@
 import { useShallow } from "zustand/react/shallow";
-import { mapDocument } from "@/app/workspaceMappers";
+import { mapDocument } from "@/app/projectMappers";
 import { createDocument, softDeleteDocument, updateDocument } from "@/lib/api/documents";
 import { useAppStore } from "@/store/appStore";
 import { selectVisibleDocuments } from "@/store/selectors";
@@ -9,13 +9,13 @@ export function DocumentList() {
   const activeId = useAppStore((s) => s.activeDocumentId);
   const setActive = useAppStore((s) => s.setActiveDocument);
   const patch = useAppStore((s) => s.patchDocument);
-  const workspaceId = useAppStore((s) => s.activeWorkspaceId);
+  const projectId = useAppStore((s) => s.activeProjectId);
 
   const newDocument = async () => {
-    if (!workspaceId) return;
+    if (!projectId) return;
     const name = window.prompt("Document name", "Untitled.md") ?? "Untitled.md";
     try {
-      const created = await createDocument({ workspaceId, name });
+      const created = await createDocument({ projectId, name });
       patch(created.id, mapDocument(created));
       setActive(created.id);
     } catch (err) {
@@ -66,9 +66,9 @@ export function DocumentList() {
             </button>
             <span
               data-testid={`document-list-item-status-${d.id}`}
-              className={`status-pill status-${d.fileStatus}`}
+              className={`status-pill status-${d.saveState}`}
             >
-              {d.fileStatus}
+              {d.saveState}
             </span>
             <div className="row-actions">
               <button

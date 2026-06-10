@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { mapDocument } from "@/app/workspaceMappers";
+import { mapDocument } from "@/app/projectMappers";
 import { updateDocument } from "@/lib/api/documents";
 import { useAppStore } from "@/store/appStore";
 import { selectActiveDocument } from "@/store/selectors";

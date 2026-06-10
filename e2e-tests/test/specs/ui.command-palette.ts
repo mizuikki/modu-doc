@@ -1,6 +1,6 @@
 import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject } from "../support/project";
 import { safeClick, safeSetValue } from "../support/ui";
-import { createAndOpenWorkspace } from "../support/workspace";
 
 async function readZenAttribute(): Promise<string | null> {
   return (await browser.execute(() => {
@@ -11,11 +11,11 @@ async function readZenAttribute(): Promise<string | null> {
 
 describe("Command palette", () => {
   it("filters commands by query and toggles zen mode via the palette", async () => {
-    // 1. Create a fresh workspace so the palette has the standard document
+    // 1. Create a fresh project so the palette has the standard document
     //    commands (new-document, focus-document, create-snapshot, toggle-zen)
     //    registered.
-    const workspaceName = `E2E Palette ${Date.now()}`;
-    await createAndOpenWorkspace(workspaceName);
+    const projectName = `E2E Palette ${Date.now()}`;
+    await createAndOpenProject(projectName);
 
     // 2. Sanity: the app starts with zen mode off.
     const beforeZen = await readZenAttribute();

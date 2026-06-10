@@ -1839,10 +1839,10 @@
           "markdownDescription": "Enables the set_title_bar_style command without any pre-configured scope."
         },
         {
-          "description": "Enables the set_visible_on_all_workspaces command without any pre-configured scope.",
+          "description": "Enables the set_visible_on_all_projects command without any pre-configured scope.",
           "type": "string",
-          "const": "core:window:allow-set-visible-on-all-workspaces",
-          "markdownDescription": "Enables the set_visible_on_all_workspaces command without any pre-configured scope."
+          "const": "core:window:allow-set-visible-on-all-projects",
+          "markdownDescription": "Enables the set_visible_on_all_projects command without any pre-configured scope."
         },
         {
           "description": "Enables the show command without any pre-configured scope.",
@@ -2307,10 +2307,10 @@
           "markdownDescription": "Denies the set_title_bar_style command without any pre-configured scope."
         },
         {
-          "description": "Denies the set_visible_on_all_workspaces command without any pre-configured scope.",
+          "description": "Denies the set_visible_on_all_projects command without any pre-configured scope.",
           "type": "string",
-          "const": "core:window:deny-set-visible-on-all-workspaces",
-          "markdownDescription": "Denies the set_visible_on_all_workspaces command without any pre-configured scope."
+          "const": "core:window:deny-set-visible-on-all-projects",
+          "markdownDescription": "Denies the set_visible_on_all_projects command without any pre-configured scope."
         },
         {
           "description": "Denies the show command without any pre-configured scope.",

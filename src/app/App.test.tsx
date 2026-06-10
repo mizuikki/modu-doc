@@ -4,16 +4,16 @@ import { App } from "@/app/App";
 import { initialUI, useAppStore } from "@/store/appStore";
 import { AppTestProviders, resetAppStore } from "@/test/testUtils";
 
-vi.mock("@/app/hooks/useWorkspaceBootstrap", () => ({
-  useWorkspaceBootstrap: () => ({
+vi.mock("@/app/hooks/useProjectBootstrap", () => ({
+  useProjectBootstrap: () => ({
     status: "ready",
     error: null,
     createAndOpen: vi.fn(),
   }),
 }));
 
-vi.mock("@/app/hooks/useWorkspaceStatusEvents", () => ({
-  useWorkspaceStatusEvents: vi.fn(),
+vi.mock("@/app/hooks/useProjectStatusEvents", () => ({
+  useProjectStatusEvents: vi.fn(),
 }));
 
 vi.mock("@/app/hooks/useZenModeShortcut", () => ({
@@ -44,32 +44,32 @@ vi.mock("@/features/help/KeyboardCheatsheet", () => ({
   KeyboardCheatsheet: () => null,
 }));
 
-vi.mock("@/features/workspaces/WorkspaceSettingsDialog", () => ({
-  WorkspaceSettingsDialog: () => null,
+vi.mock("@/features/projects/ProjectSettingsDialog", () => ({
+  ProjectSettingsDialog: () => null,
 }));
 
 describe("App layout", () => {
-  it("renders the document-first shell as an explicit three-column grid", () => {
+  it("renders the document-first shell as an explicit grid with a sidebar resizer", () => {
     resetAppStore();
     useAppStore.setState({
-      workspaces: [
+      projects: [
         {
-          id: "workspace-1",
-          name: "Workspace 1",
+          id: "project-1",
+          name: "Project 1",
           createdAt: "2026-06-09T00:00:00Z",
           updatedAt: "2026-06-09T00:00:00Z",
         },
       ],
-      activeWorkspaceId: "workspace-1",
+      activeProjectId: "project-1",
       documents: [
         {
           id: "document-1",
-          workspaceId: "workspace-1",
-          name: "Main.md",
+          projectId: "project-1",
+          name: "Untitled.md",
           content: "",
           contentHash: "",
           targetPath: null,
-          fileStatus: "missing_target",
+          saveState: "draft",
           lastWrittenAt: null,
           lastWrittenHash: null,
           sortOrder: 0,
@@ -82,7 +82,7 @@ describe("App layout", () => {
       activeDocumentId: "document-1",
       ui: {
         ...initialUI,
-        sidebarWidth: 220,
+        sidebarWidth: 280,
         rightPanelWidth: 320,
         rightPanelCollapsed: false,
       },
@@ -96,30 +96,31 @@ describe("App layout", () => {
 
     const main = screen.getByRole("main");
     expect(main).toHaveStyle({ display: "grid" });
-    expect(main.style.gridTemplateColumns).toBe("220px minmax(0, 1fr) 320px");
+    expect(main.style.gridTemplateColumns).toBe("280px 10px minmax(0, 1fr) 320px");
+    expect(screen.getByTestId("sidebar-resizer")).toBeInTheDocument();
   });
 
   it("falls back to default panel widths when persisted ui values are invalid", () => {
     resetAppStore();
     useAppStore.setState({
-      workspaces: [
+      projects: [
         {
-          id: "workspace-1",
-          name: "Workspace 1",
+          id: "project-1",
+          name: "Project 1",
           createdAt: "2026-06-09T00:00:00Z",
           updatedAt: "2026-06-09T00:00:00Z",
         },
       ],
-      activeWorkspaceId: "workspace-1",
+      activeProjectId: "project-1",
       documents: [
         {
           id: "document-1",
-          workspaceId: "workspace-1",
-          name: "Main.md",
+          projectId: "project-1",
+          name: "Untitled.md",
           content: "",
           contentHash: "",
           targetPath: null,
-          fileStatus: "missing_target",
+          saveState: "draft",
           lastWrittenAt: null,
           lastWrittenHash: null,
           sortOrder: 0,
@@ -145,6 +146,6 @@ describe("App layout", () => {
     );
 
     const mains = screen.getAllByRole("main");
-    expect(mains.at(-1)?.style.gridTemplateColumns).toBe("220px minmax(0, 1fr) 320px");
+    expect(mains.at(-1)?.style.gridTemplateColumns).toBe("280px 10px minmax(0, 1fr) 320px");
   });
 });

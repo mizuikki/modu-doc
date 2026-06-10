@@ -4,4 +4,4 @@ pub mod fragment;
 pub mod search;
 pub mod snapshot;
 pub mod watcher;
-pub mod workspace;
+pub mod project;

@@ -11,8 +11,9 @@ pub struct DocumentConflictStatus {
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateDocumentRequest {
-    pub workspace_id: String,
+    pub project_id: String,
     pub name: String,
     pub content: Option<String>,
     pub target_path: Option<String>,
@@ -20,6 +21,7 @@ pub struct CreateDocumentRequest {
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateDocumentRequest {
     pub id: String,
     pub name: Option<String>,
@@ -30,38 +32,45 @@ pub struct UpdateDocumentRequest {
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SoftDeleteDocumentRequest {
     pub id: String,
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RestoreDocumentRequest {
     pub id: String,
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteDocumentPermanentlyRequest {
     pub id: String,
     pub delete_target_file: Option<bool>,
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReorderDocumentsRequest {
-    pub workspace_id: String,
+    pub project_id: String,
     pub ordered_document_ids: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteDocumentToFileRequest {
     pub id: String,
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CheckDocumentConflictRequest {
     pub id: String,
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveDocumentConflictRequest {
     pub id: String,
     pub policy: String,
@@ -74,7 +83,7 @@ pub async fn create_document(
     request: CreateDocumentRequest,
 ) -> Result<Document, String> {
     let CreateDocumentRequest {
-        workspace_id,
+        project_id,
         name,
         content,
         target_path,
@@ -89,29 +98,29 @@ pub async fn create_document(
     let content = content.unwrap_or_default();
     let content_hash = hash(&content);
     let timestamp = now();
-    let file_status = if normalized_target.is_some() {
-        "dirty"
+    let save_state = if normalized_target.is_some() {
+        "unsaved"
     } else {
-        "missing_target"
+        "draft"
     };
-    let sort_order = next_document_sort_order(pool(&state), &workspace_id).await?;
+    let sort_order = next_document_sort_order(pool(&state), &project_id).await?;
 
     let id = Uuid::new_v4().to_string();
     sqlx::query(
         r#"
         INSERT INTO documents (
-          id, workspace_id, name, content, content_hash, target_path,
-          file_status, sort_order, description, created_at, updated_at
+          id, project_id, name, content, content_hash, target_path,
+          save_state, sort_order, description, created_at, updated_at
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
         "#,
     )
     .bind(&id)
-    .bind(&workspace_id)
+    .bind(&project_id)
     .bind(&name)
     .bind(&content)
     .bind(&content_hash)
     .bind(&normalized_target)
-    .bind(file_status)
+    .bind(save_state)
     .bind(sort_order)
     .bind(&description)
     .bind(&timestamp)
@@ -121,12 +130,12 @@ pub async fn create_document(
 
     let document = Document {
         id,
-        workspace_id,
+        project_id,
         name,
         content,
         content_hash,
         target_path: normalized_target,
-        file_status: file_status.to_string(),
+        save_state: save_state.to_string(),
         last_written_at: None,
         last_written_hash: None,
         sort_order,
@@ -138,7 +147,7 @@ pub async fn create_document(
     emit_document_status(
         &app,
         "document_created",
-        Some(&document.workspace_id),
+        Some(&document.project_id),
         Some(&document.id),
     );
     Ok(document)
@@ -162,20 +171,20 @@ pub async fn update_document(
 
     let current = load_document_row(pool(&state), &id).await?;
     let mut next_target = current.target_path.clone();
-    let mut file_status = current.file_status.clone();
+    let mut save_state = current.save_state.clone();
     let mut explicit_target_supplied = false;
     let mut explicit_content = false;
 
     if clear_target_path {
         explicit_target_supplied = true;
         next_target = None;
-        file_status = "missing_target".to_string();
+        save_state = "draft".to_string();
     } else if let Some(value) = target_path.as_deref() {
         explicit_target_supplied = true;
         let trimmed = value.trim();
         if trimmed.is_empty() {
             next_target = None;
-            file_status = "missing_target".to_string();
+            save_state = "draft".to_string();
         } else {
             let normalized = document_path::normalize_target_path(trimmed)?;
             if Some(&normalized) != current.target_path.as_ref() {
@@ -199,7 +208,7 @@ pub async fn update_document(
         && (current.last_written_hash.is_none()
             || current.last_written_hash.as_deref() != Some(updated_hash.as_str()))
     {
-        file_status = "dirty".to_string();
+        save_state = "unsaved".to_string();
     }
 
     let updated_description = match description {
@@ -215,7 +224,7 @@ pub async fn update_document(
             content = ?3,
             content_hash = ?4,
             target_path = ?5,
-            file_status = ?6,
+            save_state = ?6,
             description = ?7,
             updated_at = ?8
         WHERE id = ?1
@@ -226,7 +235,7 @@ pub async fn update_document(
     .bind(&updated_content)
     .bind(&updated_hash)
     .bind(&next_target)
-    .bind(&file_status)
+    .bind(&save_state)
     .bind(&updated_description)
     .bind(&timestamp)
     .execute(pool(&state))
@@ -235,12 +244,12 @@ pub async fn update_document(
 
     let document = Document {
         id,
-        workspace_id: current.workspace_id,
+        project_id: current.project_id,
         name: updated_name,
         content: updated_content,
         content_hash: updated_hash,
         target_path: next_target,
-        file_status,
+        save_state,
         last_written_at: current.last_written_at,
         last_written_hash: current.last_written_hash,
         sort_order: current.sort_order,
@@ -264,7 +273,7 @@ pub async fn update_document(
         emit_document_status(
             &app,
             kind,
-            Some(&document.workspace_id),
+            Some(&document.project_id),
             Some(&document.id),
         );
     }
@@ -277,21 +286,21 @@ pub async fn soft_delete_document(
     state: State<'_, db::DbState>,
     request: SoftDeleteDocumentRequest,
 ) -> Result<(), String> {
-    let workspace_id: Option<String> = sqlx::query_scalar(
-        "SELECT workspace_id FROM documents WHERE id = ?1 AND deleted_at IS NULL",
+    let project_id: Option<String> = sqlx::query_scalar(
+        "SELECT project_id FROM documents WHERE id = ?1 AND deleted_at IS NULL",
     )
     .bind(&request.id)
     .fetch_optional(pool(&state))
     .await
     .map_err(crate::error::normalize_error)?;
-    let Some(workspace_id) = workspace_id else {
+    let Some(project_id) = project_id else {
         return Ok(());
     };
     let timestamp = now();
     sqlx::query(
         r#"
         UPDATE documents
-        SET deleted_at = ?2, target_path = NULL, file_status = 'missing_target', updated_at = ?2
+        SET deleted_at = ?2, target_path = NULL, save_state = 'draft', updated_at = ?2
         WHERE id = ?1 AND deleted_at IS NULL
         "#,
     )
@@ -300,7 +309,7 @@ pub async fn soft_delete_document(
     .execute(pool(&state))
     .await
     .map_err(crate::error::normalize_error)?;
-    emit_document_status(&app, "document_deleted", Some(&workspace_id), Some(&request.id));
+    emit_document_status(&app, "document_deleted", Some(&project_id), Some(&request.id));
     Ok(())
 }
 
@@ -324,7 +333,7 @@ pub async fn restore_document(
     emit_document_status(
         &app,
         "document_restored",
-        Some(&document.workspace_id),
+        Some(&document.project_id),
         Some(&document.id),
     );
     Ok(document)
@@ -346,8 +355,8 @@ pub async fn delete_document_permanently(
     .map_err(crate::error::normalize_error)?
     .flatten();
 
-    let workspace_id: Option<String> = sqlx::query_scalar(
-        "SELECT workspace_id FROM documents WHERE id = ?1",
+    let project_id: Option<String> = sqlx::query_scalar(
+        "SELECT project_id FROM documents WHERE id = ?1",
     )
     .bind(&request.id)
     .fetch_optional(pool(&state))
@@ -372,8 +381,8 @@ pub async fn delete_document_permanently(
         }
     }
 
-    if let Some(workspace_id) = workspace_id.as_deref() {
-        emit_document_status(&app, "document_deleted", Some(workspace_id), Some(&request.id));
+    if let Some(project_id) = project_id.as_deref() {
+        emit_document_status(&app, "document_deleted", Some(project_id), Some(&request.id));
     }
     Ok(())
 }
@@ -385,7 +394,7 @@ pub async fn reorder_documents(
     request: ReorderDocumentsRequest,
 ) -> Result<(), String> {
     let ReorderDocumentsRequest {
-        workspace_id,
+        project_id,
         ordered_document_ids,
     } = request;
 
@@ -403,11 +412,11 @@ pub async fn reorder_documents(
             r#"
             UPDATE documents
             SET sort_order = ?3, updated_at = ?4
-            WHERE id = ?1 AND workspace_id = ?2 AND deleted_at IS NULL
+            WHERE id = ?1 AND project_id = ?2 AND deleted_at IS NULL
             "#,
         )
         .bind(doc_id)
-        .bind(&workspace_id)
+        .bind(&project_id)
         .bind(index as i64)
         .bind(&timestamp)
         .execute(&mut *tx)
@@ -416,7 +425,7 @@ pub async fn reorder_documents(
     }
     tx.commit().await.map_err(crate::error::normalize_error)?;
 
-    emit_document_status(&app, "document_reordered", Some(&workspace_id), None);
+    emit_document_status(&app, "document_reordered", Some(&project_id), None);
     Ok(())
 }
 
@@ -441,7 +450,7 @@ pub async fn write_document_to_file(
             if external_hash != last_written_hash {
                 let timestamp = now();
                 sqlx::query(
-                    "UPDATE documents SET file_status = 'conflicted', updated_at = ?2 WHERE id = ?1",
+                    "UPDATE documents SET save_state = 'conflict', updated_at = ?2 WHERE id = ?1",
                 )
                 .bind(&document.id)
                 .bind(&timestamp)
@@ -450,8 +459,8 @@ pub async fn write_document_to_file(
                 .map_err(crate::error::normalize_error)?;
                 emit_document_status(
                     &app,
-                    "document_conflicted",
-                    Some(&document.workspace_id),
+                    "document_conflict",
+                    Some(&document.project_id),
                     Some(&document.id),
                 );
                 return Err("external_conflict".into());
@@ -468,7 +477,7 @@ pub async fn write_document_to_file(
                 };
                 let timestamp = now();
                 sqlx::query(
-                    "UPDATE documents SET file_status = 'error', updated_at = ?2 WHERE id = ?1",
+                    "UPDATE documents SET save_state = 'error', updated_at = ?2 WHERE id = ?1",
                 )
                 .bind(&document.id)
                 .bind(&timestamp)
@@ -478,7 +487,7 @@ pub async fn write_document_to_file(
                 emit_document_status(
                     &app,
                     "document_writing_failed",
-                    Some(&document.workspace_id),
+                    Some(&document.project_id),
                     Some(&document.id),
                 );
                 return Err(code.to_string());
@@ -496,7 +505,7 @@ pub async fn write_document_to_file(
     emit_document_status(
         &app,
         "document_written",
-        Some(&updated.workspace_id),
+        Some(&updated.project_id),
         Some(&updated.id),
     );
     Ok(updated)
@@ -563,7 +572,12 @@ pub async fn resolve_document_conflict(
             sqlx::query(
                 r#"
                 UPDATE documents
-                SET content = ?2, content_hash = ?3, file_status = 'dirty', updated_at = ?4
+                SET content = ?2,
+                    content_hash = ?3,
+                    save_state = 'saved',
+                    last_written_at = ?4,
+                    last_written_hash = ?3,
+                    updated_at = ?4
                 WHERE id = ?1
                 "#,
             )
@@ -579,13 +593,13 @@ pub async fn resolve_document_conflict(
             emit_document_status(
                 &app,
                 "document_conflict_resolved",
-                Some(&document.workspace_id),
+                Some(&document.project_id),
                 Some(&document.id),
             );
             Ok(document)
         }
         "overwrite_external" => {
-            let updated = FileWriterService::write_document_to_file(
+            let updated = FileWriterService::overwrite_document_to_file(
                 app.clone(),
                 state.clone(),
                 document.into(),
@@ -594,7 +608,7 @@ pub async fn resolve_document_conflict(
             emit_document_status(
                 &app,
                 "document_conflict_resolved",
-                Some(&updated.workspace_id),
+                Some(&updated.project_id),
                 Some(&updated.id),
             );
             Ok(updated)
@@ -611,7 +625,7 @@ pub async fn resolve_document_conflict(
                     err
                 );
             }
-            let updated = FileWriterService::write_document_to_file(
+            let updated = FileWriterService::overwrite_document_to_file(
                 app.clone(),
                 state.clone(),
                 document.into(),
@@ -620,19 +634,28 @@ pub async fn resolve_document_conflict(
             emit_document_status(
                 &app,
                 "document_conflict_resolved",
-                Some(&updated.workspace_id),
+                Some(&updated.project_id),
                 Some(&updated.id),
             );
             Ok(updated)
         }
         "cancel" => {
+            let timestamp = now();
+            sqlx::query("UPDATE documents SET save_state = 'unsaved', updated_at = ?2 WHERE id = ?1")
+                .bind(&document.id)
+                .bind(&timestamp)
+                .execute(pool(&state))
+                .await
+                .map_err(crate::error::normalize_error)?;
+            let updated = load_document_row(pool(&state), &document.id).await?;
+            let document: Document = updated.into();
             emit_document_status(
                 &app,
                 "document_conflict_resolved",
-                Some(&document.workspace_id),
+                Some(&document.project_id),
                 Some(&document.id),
             );
-            Ok(document.into())
+            Ok(document)
         }
         other => Err(format!("invalid_conflict_policy: {other}")),
     }
@@ -644,8 +667,8 @@ pub(crate) async fn load_document_row(
 ) -> Result<DocumentRow, String> {
     sqlx::query_as::<_, DocumentRow>(
         r#"
-        SELECT id, workspace_id, name, content, content_hash, target_path,
-               file_status, last_written_at, last_written_hash, sort_order,
+        SELECT id, project_id, name, content, content_hash, target_path,
+               save_state, last_written_at, last_written_hash, sort_order,
                deleted_at, description, created_at, updated_at
         FROM documents WHERE id = ?1
         "#,
@@ -658,12 +681,12 @@ pub(crate) async fn load_document_row(
 
 pub(crate) async fn next_document_sort_order(
     pool: &SqlitePool,
-    workspace_id: &str,
+    project_id: &str,
 ) -> Result<i64, String> {
     let next: Option<i64> = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM documents WHERE workspace_id = ?1",
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM documents WHERE project_id = ?1",
     )
-    .bind(workspace_id)
+    .bind(project_id)
     .fetch_one(pool)
     .await
     .map_err(crate::error::normalize_error)?;
@@ -694,23 +717,23 @@ mod tests {
         pool
     }
 
-    async fn insert_workspace(pool: &SqlitePool, id: &str, timestamp: &str) {
+    async fn insert_project(pool: &SqlitePool, id: &str, timestamp: &str) {
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         )
         .bind(id)
-        .bind("Workspace")
+        .bind("Project")
         .bind(timestamp)
         .execute(pool)
         .await
-        .expect("workspace");
+        .expect("project");
     }
 
     #[tokio::test]
     async fn normalize_target_path_called_for_create() {
         let pool = test_pool().await;
         let ts = "2026-06-09T00:00:00Z";
-        insert_workspace(&pool, "ws-create", ts).await;
+        insert_project(&pool, "ws-create", ts).await;
 
         let dir = tempdir().expect("tempdir");
         let target = dir.path().join("note.md");
@@ -720,7 +743,7 @@ mod tests {
 
         // Build a request and exercise the insert path used by the command.
         // We don't construct an AppHandle here; the assertion is that the
-        // document row is inserted with file_status = 'dirty' when a target
+        // document row is inserted with save_state = 'unsaved' when a target
         // is provided and points to an existing file on disk.
         let normalized = document_path::normalize_target_path(
             target.to_str().expect("utf8 path"),
@@ -732,8 +755,8 @@ mod tests {
         let content_hash = hash(content);
         sqlx::query(
             r#"INSERT INTO documents
-               (id, workspace_id, name, content, content_hash, target_path, file_status, created_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'dirty', ?7, ?7)"#,
+               (id, project_id, name, content, content_hash, target_path, save_state, created_at, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'unsaved', ?7, ?7)"#,
         )
         .bind(&id)
         .bind("ws-create")
@@ -747,19 +770,19 @@ mod tests {
         .expect("insert document");
 
         let status: String =
-            sqlx::query_scalar("SELECT file_status FROM documents WHERE id = ?1")
+            sqlx::query_scalar("SELECT save_state FROM documents WHERE id = ?1")
                 .bind(&id)
                 .fetch_one(&pool)
                 .await
-                .expect("file_status");
-        assert_eq!(status, "dirty");
+                .expect("save_state");
+        assert_eq!(status, "unsaved");
     }
 
     #[tokio::test]
     async fn soft_delete_releases_target_path() {
         let pool = test_pool().await;
         let ts = "2026-06-09T00:00:00Z";
-        insert_workspace(&pool, "ws-soft", ts).await;
+        insert_project(&pool, "ws-soft", ts).await;
 
         let dir = tempdir().expect("tempdir");
         let target = dir.path().join("shared.md");
@@ -773,8 +796,8 @@ mod tests {
         let first_id = Uuid::new_v4().to_string();
         sqlx::query(
             r#"INSERT INTO documents
-               (id, workspace_id, name, content, content_hash, target_path, file_status, created_at, updated_at)
-               VALUES (?1, ?2, 'first', '', '', ?3, 'dirty', ?4, ?4)"#,
+               (id, project_id, name, content, content_hash, target_path, save_state, created_at, updated_at)
+               VALUES (?1, ?2, 'first', '', '', ?3, 'unsaved', ?4, ?4)"#,
         )
         .bind(&first_id)
         .bind("ws-soft")
@@ -786,7 +809,7 @@ mod tests {
 
         // Soft delete the first document via the same SQL the command runs.
         sqlx::query(
-            "UPDATE documents SET deleted_at = ?2, target_path = NULL, file_status = 'missing_target', updated_at = ?2 WHERE id = ?1",
+            "UPDATE documents SET deleted_at = ?2, target_path = NULL, save_state = 'draft', updated_at = ?2 WHERE id = ?1",
         )
         .bind(&first_id)
         .bind(ts)
@@ -799,8 +822,8 @@ mod tests {
         let second_id = Uuid::new_v4().to_string();
         let res = sqlx::query(
             r#"INSERT INTO documents
-               (id, workspace_id, name, content, content_hash, target_path, file_status, created_at, updated_at)
-               VALUES (?1, ?2, 'second', '', '', ?3, 'dirty', ?4, ?4)"#,
+               (id, project_id, name, content, content_hash, target_path, save_state, created_at, updated_at)
+               VALUES (?1, ?2, 'second', '', '', ?3, 'unsaved', ?4, ?4)"#,
         )
         .bind(&second_id)
         .bind("ws-soft")

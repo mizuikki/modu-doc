@@ -7,12 +7,12 @@ import { ConflictBanner } from "./ConflictBanner";
 const { resolveDocumentConflict, writeDocumentToFile } = vi.hoisted(() => ({
   resolveDocumentConflict: vi.fn(async () => ({
     id: "doc-a",
-    workspace_id: "workspace-a",
+    project_id: "project-a",
     name: "Main",
     content: "Updated body",
     content_hash: "",
     target_path: "/tmp/example.md",
-    file_status: "ready",
+    save_state: "saved",
     last_written_at: "t",
     last_written_hash: "h",
     sort_order: 0,
@@ -42,24 +42,24 @@ describe("ConflictBanner", () => {
     writeDocumentToFile.mockClear();
     resetAppStore();
     useAppStore.setState({
-      workspaces: [
+      projects: [
         {
-          id: "workspace-a",
-          name: "Workspace A",
+          id: "project-a",
+          name: "Project A",
           createdAt: "t",
           updatedAt: "t",
         },
       ],
-      activeWorkspaceId: "workspace-a",
+      activeProjectId: "project-a",
       documents: [
         {
           id: "doc-a",
-          workspaceId: "workspace-a",
+          projectId: "project-a",
           name: "Main",
           content: "Body",
           contentHash: "",
           targetPath: "/tmp/example.md",
-          fileStatus: "conflicted",
+          saveState: "conflict",
           lastWrittenAt: null,
           lastWrittenHash: null,
           sortOrder: 0,
@@ -77,10 +77,10 @@ describe("ConflictBanner", () => {
     cleanup();
   });
 
-  it("renders nothing when the active document is not conflicted", () => {
+  it("renders nothing when the active document is not conflict", () => {
     useAppStore.setState((state) => ({
       documents: state.documents.map((doc) =>
-        doc.id === "doc-a" ? { ...doc, fileStatus: "ready" } : doc,
+        doc.id === "doc-a" ? { ...doc, saveState: "saved" } : doc,
       ),
     }));
 

@@ -8,7 +8,7 @@ import {
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
 } from "./defaults";
-import { applyLoadedWorkspaceState } from "./loadState";
+import { applyLoadedProjectState } from "./loadState";
 import type { AppState, CenterMode, HydrateInput, RightPanelTab, UiState } from "./types";
 
 export {
@@ -47,14 +47,14 @@ type PersistedUiState = Partial<UiState> & {
 
 type PersistedAppStateForMigration = {
   ui?: PersistedUiState;
-  activeWorkspaceId?: string | null;
+  activeProjectId?: string | null;
   activeDocumentId?: string | null;
   // Legacy fields that are no longer persisted but may exist in old storage.
   activeRecipeId?: string | null;
   activeFragmentId?: string | null;
   editorDrafts?: unknown;
   compileStatus?: string;
-  workspaceStatusMessage?: string | null;
+  projectStatusMessage?: string | null;
   snapshots?: unknown;
 };
 
@@ -110,7 +110,7 @@ export function migratePersistedAppState(persistedState: unknown, version: numbe
     delete persisted.activeRecipeId;
     delete persisted.activeFragmentId;
     delete persisted.compileStatus;
-    delete persisted.workspaceStatusMessage;
+    delete persisted.projectStatusMessage;
     delete persisted.snapshots;
   }
 
@@ -147,8 +147,8 @@ export const appStoreStorage: StateStorage = {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      workspaces: [],
-      activeWorkspaceId: null,
+      projects: [],
+      activeProjectId: null,
 
       documents: [],
       activeDocumentId: null,
@@ -173,8 +173,8 @@ export const useAppStore = create<AppState>()(
             input.activeDocumentId ?? state.activeDocumentId,
           );
           return {
-            workspaces: input.workspaces,
-            activeWorkspaceId: input.activeWorkspaceId ?? state.activeWorkspaceId,
+            projects: input.projects,
+            activeProjectId: input.activeProjectId ?? state.activeProjectId,
             documents: input.documents,
             fragments: input.fragments,
             recipes: input.recipes,
@@ -191,38 +191,38 @@ export const useAppStore = create<AppState>()(
           };
         }),
 
-      loadWorkspaceBundle: (input) =>
+      loadProjectBundle: (input) =>
         set((state) => ({
-          ...applyLoadedWorkspaceState(state, input),
+          ...applyLoadedProjectState(state, input),
           documentDrafts: {},
           documentProcessStatus: {},
           documentStatusMessage: {},
         })),
 
-      setWorkspaceList: (workspaces) =>
+      setProjectList: (projects) =>
         set((state) => {
-          const currentActive = state.activeWorkspaceId;
+          const currentActive = state.activeProjectId;
           const stillActive =
-            currentActive && workspaces.some((w) => w.id === currentActive)
+            currentActive && projects.some((w) => w.id === currentActive)
               ? currentActive
-              : (workspaces[0]?.id ?? null);
-          const activeWorkspaceId = stillActive;
-          // When the active workspace is being removed (or the list becomes
+              : (projects[0]?.id ?? null);
+          const activeProjectId = stillActive;
+          // When the active project is being removed (or the list becomes
           // empty), also clear the document and snapshot selection so the
           // store does not point at orphaned ids.
-          const activeDocumentId = activeWorkspaceId ? state.activeDocumentId : null;
-          const selectedSnapshotId = activeWorkspaceId ? state.selectedSnapshotId : null;
+          const activeDocumentId = activeProjectId ? state.activeDocumentId : null;
+          const selectedSnapshotId = activeProjectId ? state.selectedSnapshotId : null;
           return {
-            workspaces,
-            activeWorkspaceId,
+            projects,
+            activeProjectId,
             activeDocumentId,
             selectedSnapshotId,
           };
         }),
 
-      setActiveWorkspace: (workspaceId) =>
+      setActiveProject: (projectId) =>
         set(() => ({
-          activeWorkspaceId: workspaceId,
+          activeProjectId: projectId,
         })),
 
       setActiveDocument: (documentId) =>
@@ -410,7 +410,7 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => appStoreStorage),
       partialize: (state) => ({
         ui: state.ui,
-        activeWorkspaceId: state.activeWorkspaceId,
+        activeProjectId: state.activeProjectId,
         activeDocumentId: state.activeDocumentId,
       }),
     },

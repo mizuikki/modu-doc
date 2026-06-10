@@ -1,27 +1,27 @@
 import { browser, expect } from "@wdio/globals";
 import { setDocumentEditorContent } from "../support/editor";
+import { createAndOpenProject, loadProject } from "../support/project";
 import { tauriInvoke } from "../support/tauri";
 import { clickCenterMode, safeClick } from "../support/ui";
-import { createAndOpenWorkspace, loadWorkspace } from "../support/workspace";
 
 describe("History (per-document snapshots)", () => {
   it("snapshots the document, edits to v2, shows a diff, and restores v1", async () => {
-    // 1. Fresh workspace with the default Main.md document already
+    // 1. Fresh project with the default Untitled.md document already
     //    activated by the support helper.
-    const workspaceName = `E2E Doc snapshot ${Date.now()}`;
-    const { workspaceId, documentId } = await createAndOpenWorkspace(workspaceName);
+    const projectName = `E2E Doc snapshot ${Date.now()}`;
+    const { projectId, documentId } = await createAndOpenProject(projectName);
 
     // 2. Type v1 into the document editor and snapshot it. The snapshot
     //    binds to a single Document in the new schema (not to the
-    //    workspace), so we pass documentId.
+    //    project), so we pass documentId.
     await setDocumentEditorContent("v1");
     await browser.waitUntil(async () => {
-      const bundle = await loadWorkspace(workspaceId);
+      const bundle = await loadProject(projectId);
       const doc = bundle.documents.find((entry) => entry.id === documentId);
       return doc?.content === "v1";
     });
     await tauriInvoke("create_snapshot", {
-      document_id: documentId,
+      documentId,
       label: "v1",
     });
 
@@ -30,7 +30,7 @@ describe("History (per-document snapshots)", () => {
     let snapshotId: string | undefined;
     await browser.waitUntil(
       async () => {
-        const bundle = await loadWorkspace(workspaceId);
+        const bundle = await loadProject(projectId);
         const list = bundle.snapshots?.[documentId] ?? [];
         const match = list.find((entry) => entry.label === "v1");
         if (match) {
@@ -43,7 +43,7 @@ describe("History (per-document snapshots)", () => {
     );
     expect(snapshotId).toBeTruthy();
     {
-      const bundle = await loadWorkspace(workspaceId);
+      const bundle = await loadProject(projectId);
       const list = bundle.snapshots?.[documentId] ?? [];
       const match = list.find((entry) => entry.id === snapshotId);
       expect(match?.content).toBe("v1");
@@ -53,7 +53,7 @@ describe("History (per-document snapshots)", () => {
     //    actually changed before we switch to the history view.
     await setDocumentEditorContent("v2");
     await browser.waitUntil(async () => {
-      const bundle = await loadWorkspace(workspaceId);
+      const bundle = await loadProject(projectId);
       const doc = bundle.documents.find((entry) => entry.id === documentId);
       return doc?.content === "v2";
     });
@@ -80,7 +80,7 @@ describe("History (per-document snapshots)", () => {
     await safeClick(`[data-testid='history-snapshot-restore-${snapshotId}']`, 20000);
     await browser.waitUntil(
       async () => {
-        const bundle = await loadWorkspace(workspaceId);
+        const bundle = await loadProject(projectId);
         const doc = bundle.documents.find((entry) => entry.id === documentId);
         return doc?.content === "v1";
       },

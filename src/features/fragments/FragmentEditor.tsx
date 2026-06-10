@@ -19,7 +19,7 @@ type FragmentEditorProps = {
  * (that role is owned by `DocumentEditor`).
  *
  * Edits are persisted via `updateFragment` on a debounce. There is no longer a
- * workspace-level sync or recipe target to flush to; conflicts are tracked on
+ * project-level sync or recipe target to flush to; conflicts are tracked on
  * the bound document instead, and `DocumentTargetBar` writes the file.
  */
 export function FragmentEditor({ fragment, onClose }: FragmentEditorProps) {

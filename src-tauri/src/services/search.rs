@@ -2,7 +2,7 @@ use sqlx::SqlitePool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchResultKind {
-    Workspace,
+    Project,
     Document,
     Fragment,
     Recipe,
@@ -12,7 +12,7 @@ pub enum SearchResultKind {
 impl SearchResultKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Workspace => "workspace",
+            Self::Project => "project",
             Self::Document => "document",
             Self::Fragment => "fragment",
             Self::Recipe => "recipe",
@@ -46,11 +46,11 @@ impl SearchService {
 
         let mut results: Vec<crate::types::SearchResult> = Vec::new();
 
-        // 1. Workspaces (top of list, by name).
-        let workspace_rows = sqlx::query_as::<_, crate::types::WorkspaceRow>(
+        // 1. Projects (top of list, by name).
+        let project_rows = sqlx::query_as::<_, crate::types::ProjectRow>(
             r#"
             SELECT id, name, created_at, updated_at
-            FROM workspaces
+            FROM projects
             WHERE lower(name) LIKE ?1 ESCAPE '\'
             ORDER BY name ASC
             LIMIT ?2
@@ -61,14 +61,15 @@ impl SearchService {
         .fetch_all(pool)
         .await
         .map_err(crate::error::normalize_error)?;
-        for row in workspace_rows {
-            let workspace = crate::types::Workspace::from(row);
+        for row in project_rows {
+            let project = crate::types::Project::from(row);
             results.push(crate::types::SearchResult {
-                kind: SearchResultKind::Workspace.as_str().to_string(),
-                id: workspace.id,
-                workspace_id: None,
-                title: workspace.name,
-                subtitle: workspace.created_at,
+                kind: SearchResultKind::Project.as_str().to_string(),
+                id: project.id,
+                project_id: None,
+                document_id: None,
+                title: project.name,
+                subtitle: project.created_at,
             });
         }
 
@@ -77,7 +78,7 @@ impl SearchService {
             let remain = limit - results.len() as i64;
             let document_rows = sqlx::query_as::<_, crate::types::DocumentRow>(
                 r#"
-                SELECT id, workspace_id, name, content, content_hash, target_path, file_status,
+                SELECT id, project_id, name, content, content_hash, target_path, save_state,
                        last_written_at, last_written_hash, sort_order, deleted_at, description,
                        created_at, updated_at
                 FROM documents
@@ -97,7 +98,8 @@ impl SearchService {
                 results.push(crate::types::SearchResult {
                     kind: SearchResultKind::Document.as_str().to_string(),
                     id: document.id,
-                    workspace_id: Some(document.workspace_id),
+                    project_id: Some(document.project_id),
+                    document_id: None,
                     title: document.name,
                     subtitle: document
                         .content
@@ -115,7 +117,7 @@ impl SearchService {
             let remain = limit - results.len() as i64;
             let fragment_rows = sqlx::query_as::<_, crate::types::FragmentRow>(
                 r#"
-                SELECT id, workspace_id, name, content, content_hash, tags, category, sort_order,
+                SELECT id, project_id, name, content, content_hash, tags, category, sort_order,
                        deleted_at, created_at, updated_at
                 FROM fragments
                 WHERE deleted_at IS NULL
@@ -134,7 +136,8 @@ impl SearchService {
                 results.push(crate::types::SearchResult {
                     kind: SearchResultKind::Fragment.as_str().to_string(),
                     id: fragment.id,
-                    workspace_id: Some(fragment.workspace_id),
+                    project_id: Some(fragment.project_id),
+                    document_id: None,
                     title: fragment.name,
                     subtitle: fragment
                         .content
@@ -152,7 +155,7 @@ impl SearchService {
             let remain = limit - results.len() as i64;
             let recipe_rows = sqlx::query_as::<_, crate::types::RecipeRow>(
                 r#"
-                SELECT id, workspace_id, name, description, deleted_at, created_at, updated_at
+                SELECT id, project_id, name, description, deleted_at, created_at, updated_at
                 FROM recipes
                 WHERE lower(name) LIKE ?1 ESCAPE '\' OR lower(description) LIKE ?1 ESCAPE '\'
                 ORDER BY updated_at DESC
@@ -169,7 +172,8 @@ impl SearchService {
                 results.push(crate::types::SearchResult {
                     kind: SearchResultKind::Recipe.as_str().to_string(),
                     id: recipe.id,
-                    workspace_id: Some(recipe.workspace_id),
+                    project_id: Some(recipe.project_id),
+                    document_id: None,
                     title: recipe.name,
                     subtitle: recipe.description,
                 });
@@ -179,13 +183,29 @@ impl SearchService {
         // 5. Snapshots (by created_at DESC, bound to a document).
         if (results.len() as i64) < limit {
             let remain = limit - results.len() as i64;
-            let snapshot_rows = sqlx::query_as::<_, crate::types::SnapshotRow>(
+            let snapshot_rows = sqlx::query_as::<
+                _,
+                (
+                    String,
+                    String,
+                    Option<String>,
+                    String,
+                    String,
+                    String,
+                    String,
+                ),
+            >(
                 r#"
-                SELECT id, document_id, label, content, content_hash, created_at
-                FROM snapshots
-                WHERE lower(COALESCE(label, '')) LIKE ?1 ESCAPE '\'
-                   OR lower(content) LIKE ?1 ESCAPE '\'
-                ORDER BY created_at DESC
+                SELECT s.id, s.document_id, s.label, s.content, s.content_hash, s.created_at,
+                       d.project_id
+                FROM snapshots s
+                JOIN documents d ON d.id = s.document_id
+                WHERE d.deleted_at IS NULL
+                  AND (
+                    lower(COALESCE(s.label, '')) LIKE ?1 ESCAPE '\'
+                    OR lower(s.content) LIKE ?1 ESCAPE '\'
+                  )
+                ORDER BY s.created_at DESC
                 LIMIT ?2
                 "#,
             )
@@ -194,11 +214,11 @@ impl SearchService {
             .fetch_all(pool)
             .await
             .map_err(crate::error::normalize_error)?;
-            for row in snapshot_rows {
-                let snapshot = crate::types::Snapshot::from(row);
-                let label = snapshot.label.clone().unwrap_or_default();
-                let subtitle = snapshot
-                    .content
+            for (id, document_id, label, content, _content_hash, created_at, project_id) in
+                snapshot_rows
+            {
+                let label = label.unwrap_or_default();
+                let subtitle = content
                     .chars()
                     .take(80)
                     .collect::<String>()
@@ -206,12 +226,11 @@ impl SearchService {
                     .to_string();
                 results.push(crate::types::SearchResult {
                     kind: SearchResultKind::Snapshot.as_str().to_string(),
-                    id: snapshot.id,
-                    // Snapshots are document-scoped; expose document_id through this field
-                    // so the frontend can route to the right document timeline.
-                    workspace_id: Some(snapshot.document_id),
+                    id,
+                    project_id: Some(project_id),
+                    document_id: Some(document_id),
                     title: if label.is_empty() {
-                        snapshot.created_at.clone()
+                        created_at.clone()
                     } else {
                         label
                     },
@@ -271,59 +290,59 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn search_finds_items_across_workspaces() {
+    async fn search_finds_items_across_projects() {
         let db = setup().await;
         let pool = &db.pool;
         let w1 = uuid::Uuid::new_v4().to_string();
         let w2 = uuid::Uuid::new_v4().to_string();
         let now = db::now_iso();
 
-        // Workspaces (pure container — no target_path / status / default_recipe_id).
+        // Projects (pure container — no target_path / status / default_recipe_id).
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
         )
         .bind(&w1)
-        .bind("Alpha Workspace")
+        .bind("Alpha Project")
         .bind(&now)
         .bind(&now)
         .execute(pool)
         .await
-        .expect("workspace 1");
+        .expect("project 1");
         sqlx::query(
-            "INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
         )
         .bind(&w2)
-        .bind("Beta Workspace")
+        .bind("Beta Project")
         .bind(&now)
         .bind(&now)
         .execute(pool)
         .await
-        .expect("workspace 2");
+        .expect("project 2");
 
         // Documents (need a document for the snapshot to bind to).
         let d1 = uuid::Uuid::new_v4().to_string();
         let d2 = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO documents (id, workspace_id, name, content, content_hash, file_status, sort_order, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, '', 'missing_target', 0, ?5, ?6)",
+            "INSERT INTO documents (id, project_id, name, content, content_hash, save_state, sort_order, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, '', 'draft', 0, ?5, ?6)",
         )
         .bind(&d1)
         .bind(&w1)
         .bind("Alpha Notes")
-        .bind("Notes from Alpha workspace")
+        .bind("Notes from Alpha project")
         .bind(&now)
         .bind(&now)
         .execute(pool)
         .await
         .expect("document 1");
         sqlx::query(
-            "INSERT INTO documents (id, workspace_id, name, content, content_hash, file_status, sort_order, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, '', 'missing_target', 0, ?5, ?6)",
+            "INSERT INTO documents (id, project_id, name, content, content_hash, save_state, sort_order, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, '', 'draft', 0, ?5, ?6)",
         )
         .bind(&d2)
         .bind(&w2)
         .bind("Beta Notes")
-        .bind("Notes from Beta workspace")
+        .bind("Notes from Beta project")
         .bind(&now)
         .bind(&now)
         .execute(pool)
@@ -334,7 +353,7 @@ mod tests {
         let f1 = uuid::Uuid::new_v4().to_string();
         let f2 = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO fragments (id, workspace_id, name, content, content_hash, tags, sort_order, created_at, updated_at) \
+            "INSERT INTO fragments (id, project_id, name, content, content_hash, tags, sort_order, created_at, updated_at) \
              VALUES (?1, ?2, ?3, ?4, '', '[]', 0, ?5, ?6)",
         )
         .bind(&f1)
@@ -347,7 +366,7 @@ mod tests {
         .await
         .expect("fragment 1");
         sqlx::query(
-            "INSERT INTO fragments (id, workspace_id, name, content, content_hash, tags, sort_order, created_at, updated_at) \
+            "INSERT INTO fragments (id, project_id, name, content, content_hash, tags, sort_order, created_at, updated_at) \
              VALUES (?1, ?2, ?3, ?4, '', '[]', 0, ?5, ?6)",
         )
         .bind(&f2)
@@ -363,20 +382,20 @@ mod tests {
         // Recipe (no is_active).
         let r1 = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO recipes (id, workspace_id, name, description, created_at, updated_at) \
+            "INSERT INTO recipes (id, project_id, name, description, created_at, updated_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )
         .bind(&r1)
         .bind(&w2)
         .bind("Beta Recipe")
-        .bind("A recipe in Beta workspace")
+        .bind("A recipe in Beta project")
         .bind(&now)
         .bind(&now)
         .execute(pool)
         .await
         .expect("recipe");
 
-        // Snapshot (no workspace_id, no recipe_id, no snapshot_json / compiled_text / compiled_hash).
+        // Snapshot (no project_id, no recipe_id, no snapshot_json / compiled_text / compiled_hash).
         let s1 = uuid::Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO snapshots (id, document_id, label, content, content_hash, created_at) \
@@ -398,8 +417,8 @@ mod tests {
         assert!(
             results
                 .iter()
-                .any(|r| r.kind == "workspace" && r.title.contains("Beta")),
-            "expected a workspace result for 'beta', got kinds={:?}",
+                .any(|r| r.kind == "project" && r.title.contains("Beta")),
+            "expected a project result for 'beta', got kinds={:?}",
             kinds
         );
         assert!(
@@ -410,7 +429,7 @@ mod tests {
         assert!(
             results
                 .iter()
-                .any(|r| r.kind == "fragment" && r.workspace_id.as_deref() == Some(&w2)),
+                .any(|r| r.kind == "fragment" && r.project_id.as_deref() == Some(&w2)),
             "expected a fragment result in w2, got kinds={:?}",
             kinds
         );

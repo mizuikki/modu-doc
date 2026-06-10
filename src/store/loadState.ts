@@ -1,9 +1,9 @@
 import { pickFirstVisibleDocument } from "./activation";
-import type { AppState, LoadWorkspaceBundleInput, SnapshotSummary } from "./types";
+import type { AppState, LoadProjectBundleInput, SnapshotSummary } from "./types";
 
-export function applyLoadedWorkspaceState(
+export function applyLoadedProjectState(
   state: AppState,
-  payload: LoadWorkspaceBundleInput,
+  payload: LoadProjectBundleInput,
 ): Pick<
   AppState,
   | "documents"
