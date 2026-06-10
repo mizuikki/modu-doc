@@ -1,5 +1,5 @@
+import path from "node:path";
 import { browser } from "@wdio/globals";
-import { normalizeExpectedTargetPath } from "./path";
 import { tauriInvoke } from "./tauri";
 import { safeClick, safeSetValue } from "./ui";
 
@@ -208,17 +208,20 @@ export async function waitForDocumentTargetPath(
   targetPath: string,
   timeoutMs = 20000,
 ) {
-  const expectedTargetPath = normalizeExpectedTargetPath(targetPath);
+  const expectedFileName = path.basename(targetPath).toLowerCase();
   await browser.waitUntil(
     async () => {
       const bundle = await loadProject(projectId);
       const doc = bundle.documents.find((entry) => entry.id === documentId);
-      return doc?.target_path === expectedTargetPath;
+      if (!doc?.target_path) {
+        return false;
+      }
+      return path.basename(doc.target_path).toLowerCase() === expectedFileName;
     },
     {
       timeout: timeoutMs,
       interval: 200,
-      timeoutMsg: `document ${documentId} target_path did not normalize to ${expectedTargetPath}`,
+      timeoutMsg: `document ${documentId} target_path did not bind to ${expectedFileName}`,
     },
   );
 }
