@@ -1,4 +1,5 @@
 import { browser, expect } from "@wdio/globals";
+import { createAndOpenProject } from "../support/project";
 import { dismissDocumentStatus, safeClick } from "../support/ui";
 
 const languageToggleSelector = "[data-testid='header-language-toggle']";
@@ -48,6 +49,10 @@ describe("i18n", () => {
         await waitForLanguageButton("EN");
       }
     } else {
+      const welcomeCreate = await $("[data-testid='welcome-create-project']");
+      if ((await welcomeCreate.isExisting()) && (await welcomeCreate.isDisplayed())) {
+        await createAndOpenProject(`E2E i18n ${Date.now()}`);
+      }
       await waitForLanguageButton("EN");
     }
 

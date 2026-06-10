@@ -1,4 +1,5 @@
 import { browser } from "@wdio/globals";
+import { normalizeExpectedTargetPath } from "./path";
 import { tauriInvoke } from "./tauri";
 import { safeClick, safeSetValue } from "./ui";
 
@@ -199,6 +200,27 @@ export async function selectProjectById(projectId: string, timeoutMs = 20000) {
 
 export async function loadProject(projectId: string) {
   return await tauriInvoke<ProjectLoadResult>("load_project", { id: projectId });
+}
+
+export async function waitForDocumentTargetPath(
+  projectId: string,
+  documentId: string,
+  targetPath: string,
+  timeoutMs = 20000,
+) {
+  const expectedTargetPath = normalizeExpectedTargetPath(targetPath);
+  await browser.waitUntil(
+    async () => {
+      const bundle = await loadProject(projectId);
+      const doc = bundle.documents.find((entry) => entry.id === documentId);
+      return doc?.target_path === expectedTargetPath;
+    },
+    {
+      timeout: timeoutMs,
+      interval: 200,
+      timeoutMsg: `document ${documentId} target_path did not normalize to ${expectedTargetPath}`,
+    },
+  );
 }
 
 export async function deleteProject(projectId: string) {

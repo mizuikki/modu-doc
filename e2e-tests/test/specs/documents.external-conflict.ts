@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { setDocumentEditorContent } from "../support/editor";
-import { createAndOpenProject, loadProject } from "../support/project";
+import { createAndOpenProject, loadProject, waitForDocumentTargetPath } from "../support/project";
 import { tauriInvoke } from "../support/tauri";
 import {
   assertDocumentSaveState,
@@ -26,11 +26,7 @@ async function bindSeedAndWrite(
   initialContent: string,
 ) {
   await tauriInvoke("update_document", { request: { id: documentId, targetPath } });
-  await browser.waitUntil(async () => {
-    const bundle = await loadProject(projectId);
-    const doc = bundle.documents.find((entry) => entry.id === documentId);
-    return doc?.target_path === targetPath;
-  });
+  await waitForDocumentTargetPath(projectId, documentId, targetPath);
   await assertDocumentSaveState(documentId, "draft");
 
   await setDocumentEditorContent(initialContent);

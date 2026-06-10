@@ -38,9 +38,13 @@ describe("Projects", () => {
       { timeout: 20000, interval: 200, timeoutMsg: "list_projects did not shrink" },
     );
 
-    // 6. Ensure the app is still responsive after the destructive op:
-    //    the header is still rendered and the language toggle is
-    //    clickable.
+    // 6. Ensure the app is still responsive after the destructive op.
+    //    Deleting the final project returns to the welcome screen; otherwise
+    //    the shell stays mounted on the next active project.
+    if (before - 1 === 0) {
+      await expect($("[data-testid='welcome-create-project']")).toBeDisplayed();
+      return;
+    }
     await expect($("header")).toBeDisplayed();
     await expect($("[data-testid='header-language-toggle']")).toBeDisplayed();
   });
