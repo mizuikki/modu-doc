@@ -51,6 +51,9 @@ npm ci
 npm run tauri:dev
 ```
 
+This repository includes a project-level `.npmrc` that prevents npm from rewriting
+`package-lock.json` registry hosts when dependencies are installed or updated.
+
 ## Requirements
 
 For development, install:
