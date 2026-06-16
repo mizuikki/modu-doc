@@ -140,28 +140,13 @@ async function findFreePort(host) {
 }
 
 function configurePlaywrightBrowserEnv() {
-  const archSuffix = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : "";
-  if (!archSuffix) {
+  const isSupportedArch = process.arch === "arm64" || process.arch === "x64";
+  if (!isSupportedArch) {
     return;
   }
 
   process.env.PLAYWRIGHT_BROWSERS_PATH =
     process.env.PLAYWRIGHT_BROWSERS_PATH || path.resolve(repoRoot, ".cache/ms-playwright");
-
-  try {
-    const raw = readFileSync("/etc/os-release", "utf8");
-    const idMatch = raw.match(/^ID=(.+)$/m);
-    const versionMatch = raw.match(/^VERSION_ID=(.+)$/m);
-    const osId = idMatch ? idMatch[1].replace(/^"|"$/g, "") : "";
-    const versionId = versionMatch ? versionMatch[1].replace(/^"|"$/g, "") : "";
-    const major = Number.parseInt(versionId.split(".")[0] || "", 10);
-
-    if (osId === "ubuntu" && Number.isFinite(major) && major >= 26) {
-      process.env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = `ubuntu24.04-${archSuffix}`;
-    }
-  } catch {
-    // Keep defaults when host OS metadata is unavailable.
-  }
 }
 
 async function installChromium() {
