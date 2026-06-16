@@ -51,8 +51,11 @@ npm ci
 npm run tauri:dev
 ```
 
-This repository includes a project-level `.npmrc` that prevents npm from rewriting
-`package-lock.json` registry hosts when dependencies are installed or updated.
+This repository includes a project-level `.npmrc` that sets
+`omit-lockfile-registry-resolved=true`, so npm will omit registry-specific
+`resolved` URLs from `package-lock.json` when dependencies are installed or
+updated. This keeps the lockfile portable across contributors using different
+registries or mirrors.
 
 ## Requirements
 
