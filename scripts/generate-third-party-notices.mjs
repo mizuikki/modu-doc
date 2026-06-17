@@ -129,7 +129,7 @@ function buildNotice() {
     "# Third-Party Notices",
     "",
     "This file is generated from `package.json` and `src-tauri/Cargo.toml`.",
-    "Run `npm run notice:write` after dependency changes.",
+    "Run `pnpm run notice:write` after dependency changes.",
     "",
     formatSection("Frontend runtime dependencies", nodeDeps.runtime),
     formatSection("Frontend development dependencies", nodeDeps.dev),
@@ -145,7 +145,7 @@ if (mode === "write") {
 } else {
   const current = existsSync(outputPath) ? await readFile(outputPath, "utf8") : "";
   if (current !== nextContent) {
-    process.stderr.write(`THIRD_PARTY_NOTICES.txt is stale. Run \`npm run notice:write\`.\n`);
+    process.stderr.write(`THIRD_PARTY_NOTICES.txt is stale. Run \`pnpm run notice:write\`.\n`);
     process.exit(1);
   }
 }

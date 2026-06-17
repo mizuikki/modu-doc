@@ -159,6 +159,6 @@ This project has two separate debug switches (frontend + backend).
 Set `MODUDOC_DEBUG` before launching the app.
 
 - macOS/Linux:
-  - `MODUDOC_DEBUG=1 npm run tauri:dev`
+  - `MODUDOC_DEBUG=1 pnpm run tauri:dev`
 - Windows (PowerShell):
-  - `$env:MODUDOC_DEBUG="1"; npm run tauri:dev`
+  - `$env:MODUDOC_DEBUG="1"; pnpm run tauri:dev`

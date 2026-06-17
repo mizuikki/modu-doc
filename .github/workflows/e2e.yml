@@ -26,18 +26,19 @@ jobs:
             exit 1
           fi
 
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Install tauri-driver
         run: cargo install --path tools/tauri-driver --locked
 
       - name: Run e2e
-        run: npm run e2e
+        run: pnpm run e2e

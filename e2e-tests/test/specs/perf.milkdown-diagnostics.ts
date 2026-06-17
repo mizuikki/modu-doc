@@ -4,7 +4,7 @@
 // with a plain `<textarea data-testid="editor-pane-textarea">`, so the
 // scenarios now measure type latency on that textarea. The spec keeps its
 // filename (`perf.milkdown-diagnostics.ts`) because it is referenced by
-// `npm run e2e:perf`; only the measurement target changed.
+// `pnpm run e2e:perf`; only the measurement target changed.
 //
 // The markdown seed / warmup scaffolding (buildMarkdownDocument, the
 // PerfAnalysis project with small/medium/large fragments) is preserved

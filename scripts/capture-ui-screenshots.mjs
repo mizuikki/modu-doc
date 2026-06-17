@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
@@ -150,7 +150,7 @@ function configurePlaywrightBrowserEnv() {
 }
 
 async function installChromium() {
-  await spawnCommand("npm", ["exec", "--", "playwright", "install", "chromium"]);
+  await spawnCommand("pnpm", ["exec", "playwright", "install", "chromium"]);
 }
 
 function resolveSystemChromiumExecutable() {
@@ -220,15 +220,14 @@ async function main() {
   await rm(runDir, { recursive: true, force: true });
   await mkdir(path.join(runDir, "shots"), { recursive: true });
 
-  await spawnCommand("npm", ["run", "build"]);
+  await spawnCommand("pnpm", ["run", "build"]);
 
   const previewPort = await findFreePort(previewHost);
   const previewBaseUrl = `http://${previewHost}:${previewPort}`;
   const preview = spawn(
-    "npm",
+    "pnpm",
     [
       "exec",
-      "--",
       "vite",
       "preview",
       "--host",

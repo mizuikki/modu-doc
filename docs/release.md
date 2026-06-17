@@ -15,7 +15,7 @@ This repo uses Tauri v2 and a tag-based release workflow.
 ## Manual verification (recommended before first public release)
 
 1. Run a release build locally:
-   - `npm run tauri:build:release`
+   - `pnpm run tauri:build:release`
 2. Confirm updater artifacts exist under `src-tauri/target/release/bundle/` (exact structure varies per OS).
 3. Install the release build and verify an update succeeds using the published `update.json` endpoint configured in `src-tauri/tauri.conf.json`.
 
@@ -24,5 +24,5 @@ This repo uses Tauri v2 and a tag-based release workflow.
 - Frontend debug logs:
   - DevTools console: `localStorage.setItem("modudoc.debug", "1")` then reload
 - Backend debug logs:
-  - macOS/Linux: `MODUDOC_DEBUG=1 npm run tauri:dev`
-  - Windows (PowerShell): `$env:MODUDOC_DEBUG="1"; npm run tauri:dev`
+  - macOS/Linux: `MODUDOC_DEBUG=1 pnpm run tauri:dev`
+  - Windows (PowerShell): `$env:MODUDOC_DEBUG="1"; pnpm run tauri:dev`

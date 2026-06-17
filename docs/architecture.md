@@ -452,7 +452,7 @@ honors the `enabled` flag.
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-### Frontend unit tests (`npm test`)
+### Frontend unit tests (`pnpm test`)
 
 Vitest + Testing Library, deterministic (no timing-based flake).
 Lives next to source as `*.test.ts` / `*.test.tsx`. Common targets:
@@ -461,28 +461,28 @@ behavior, markdown preview rendering, i18n key parity between
 `en.json` and `zh.json`.
 
 ```bash
-npm test
+pnpm test
 ```
 
-### End-to-end tests (`npm run e2e`)
+### End-to-end tests (`pnpm run e2e`)
 
 WebdriverIO suite under `e2e-tests/`. Drives the real desktop app
 through the document-first flows: project creation, document CRUD,
 the three-column shell, the write flow, and conflict resolution.
-Setup is one-time per machine (`npm run e2e:setup`); on Linux without
-a display use `npm run e2e:xvfb`. Set `MODUDOC_E2E_MODE=dev` to run
+Setup is one-time per machine (`pnpm run e2e:setup`); on Linux without
+a display use `pnpm run e2e:xvfb`. Set `MODUDOC_E2E_MODE=dev` to run
 against the Vite dev server; the default runs against the built
-frontend. The dedicated perf spec is `npm run e2e:perf`.
+frontend. The dedicated perf spec is `pnpm run e2e:perf`.
 
 ### Pre-PR gate
 
 Run all of the following before opening a PR:
 
 ```bash
-npm run check         # Biome lint + format check
-npm run typecheck     # tsc --noEmit
-npm test              # Vitest
-npm run build         # typecheck + Vite
+pnpm run check        # Biome lint + format check
+pnpm run typecheck    # tsc --noEmit
+pnpm test             # Vitest
+pnpm run build        # typecheck + Vite
 cargo test --manifest-path src-tauri/Cargo.toml
-npm run notice:check  # third-party notices are in sync
+pnpm run notice:check # third-party notices are in sync
 ```

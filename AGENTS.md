@@ -13,17 +13,17 @@ This file provides shared repository guidance for AI coding assistants and autom
 
 ## Build, Test, and Development Commands
 
-- Install deps: `npm ci` (Node.js 24+ recommended; CI uses Node.js 24).
-- Frontend dev server: `npm run dev`.
-- Desktop app (frontend + backend): `npm run tauri:dev` (Rust 1.95+ and Tauri OS prerequisites required).
-- Production builds: `npm run build` (typecheck + Vite) and `npm run tauri:build` (desktop bundles).
-- Checks to run before PRs: `npm run check`, `npm run typecheck`, `npm test`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`, `npm run notice:check`.
-- E2E: `npm run e2e:setup` then `npm run e2e` (Linux headless: `npm run e2e:xvfb`). By default e2e uses built frontend assets; set `MODUDOC_E2E_MODE=dev` to run against the Vite dev server.
-- Perf e2e: `npm run e2e:perf` runs the dedicated Milkdown/UI diagnostics spec and writes JSON output under `tmp/modudoc-e2e/run-*/perf/` by default. Sampling is controlled by `MODUDOC_E2E_PERF_ITERATIONS` and `MODUDOC_E2E_PERF_WARMUP`.
+- Install deps: `corepack enable pnpm` once, then `pnpm install` (Node.js 24+ recommended; CI uses Node.js 24).
+- Frontend dev server: `pnpm run dev`.
+- Desktop app (frontend + backend): `pnpm run tauri:dev` (Rust 1.95+ and Tauri OS prerequisites required).
+- Production builds: `pnpm run build` (typecheck + Vite) and `pnpm run tauri:build` (desktop bundles).
+- Checks to run before PRs: `pnpm run check`, `pnpm run typecheck`, `pnpm test`, `pnpm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`, `pnpm run notice:check`.
+- E2E: `pnpm run e2e:setup` then `pnpm run e2e` (Linux headless: `pnpm run e2e:xvfb`). By default e2e uses built frontend assets; set `MODUDOC_E2E_MODE=dev` to run against the Vite dev server.
+- Perf e2e: `pnpm run e2e:perf` runs the dedicated Milkdown/UI diagnostics spec and writes JSON output under `tmp/modudoc-e2e/run-*/perf/` by default. Sampling is controlled by `MODUDOC_E2E_PERF_ITERATIONS` and `MODUDOC_E2E_PERF_WARMUP`.
 
 ## Coding Style & Naming Conventions
 
-- Formatting/linting: Biome (`npm run check` / `npm run check:fix`); do not hand-format.
+- Formatting/linting: Biome (`pnpm run check` / `pnpm run check:fix`); do not hand-format.
 - Defaults: spaces, 100-col lines, double quotes, semicolons.
 - Tests: name as `*.test.ts` / `*.test.tsx` under `src/`. Prefer `@/…` imports (alias to `src/`).
 
@@ -36,7 +36,7 @@ This file provides shared repository guidance for AI coding assistants and autom
 
 - Prefer Conventional Commits (common patterns in this repo): `feat(scope): …`, `fix(scope): …`, `test(e2e): …`, `style(…): …`, `build(…): …`.
 - PRs: include a clear “what/why”, link related issues, and add screenshots/video for UI changes.
-- If dependencies change, regenerate notices with `npm run notice:write` and ensure `npm run notice:check` passes.
+- If dependencies change, regenerate notices with `pnpm run notice:write` and ensure `pnpm run notice:check` passes.
 
 ## Agent-Specific Instructions (for Codex/automation)
 

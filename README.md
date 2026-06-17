@@ -47,15 +47,10 @@ To run ModuDoc from source:
 ```bash
 git clone https://github.com/mizuikki/modu-doc.git
 cd modu-doc
-npm ci
-npm run tauri:dev
+corepack enable pnpm
+pnpm install
+pnpm run tauri:dev
 ```
-
-This repository includes a project-level `.npmrc` that sets
-`omit-lockfile-registry-resolved=true`, so npm will omit registry-specific
-`resolved` URLs from `package-lock.json` when dependencies are installed or
-updated. This keeps the lockfile portable across contributors using different
-registries or mirrors.
 
 ## Requirements
 
@@ -74,13 +69,13 @@ See the official Tauri prerequisites for platform-specific setup:
 Start the frontend-only Vite server:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Start the full Tauri desktop app:
 
 ```bash
-npm run tauri:dev
+pnpm run tauri:dev
 ```
 
 ## Localization (i18n)
@@ -98,13 +93,13 @@ ModuDoc uses `i18next` + `react-i18next` for UI localization.
 Build the frontend:
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 Build desktop bundles:
 
 ```bash
-npm run tauri:build
+pnpm run tauri:build
 ```
 
 ## Quality Checks
@@ -112,32 +107,32 @@ npm run tauri:build
 Run the main project checks before opening a pull request:
 
 ```bash
-npm run check
-npm run check:fix # applies safe auto-fixes
-npm run typecheck
-npm test # vitest run
+pnpm run check
+pnpm run check:fix # applies safe auto-fixes
+pnpm run typecheck
+pnpm test # vitest run
 cargo test --manifest-path src-tauri/Cargo.toml
-npm run notice:check
+pnpm run notice:check
 ```
 
 Formatting only (no linting). These commands may fail if formatting differs from Biome rules:
 
 ```bash
-npm run format:check
-npm run format
+pnpm run format:check
+pnpm run format
 ```
 
 End-to-end tests are available through WebdriverIO:
 
 ```bash
-npm run e2e:setup
-npm run e2e
+pnpm run e2e:setup
+pnpm run e2e
 ```
 
 For Milkdown and UI performance diagnostics, run the dedicated perf spec:
 
 ```bash
-npm run e2e:perf
+pnpm run e2e:perf
 ```
 
 By default, e2e runs the Tauri app against built frontend assets (`frontendDist`) and does not start a Vite dev server. To run e2e against the Vite dev server instead, set `MODUDOC_E2E_MODE=dev`.
@@ -145,10 +140,10 @@ By default, e2e runs the Tauri app against built frontend assets (`frontendDist`
 On Linux, you can also run e2e tests inside a virtual display to avoid bringing the app window to the foreground:
 
 ```bash
-npm run e2e:xvfb
+pnpm run e2e:xvfb
 ```
 
-If you're on Wayland, `npm run e2e:xvfb` forces the X11 backend (`GDK_BACKEND=x11`) and unsets `WAYLAND_DISPLAY` so the app attaches to the virtual X server instead of the real Wayland session.
+If you're on Wayland, `pnpm run e2e:xvfb` forces the X11 backend (`GDK_BACKEND=x11`) and unsets `WAYLAND_DISPLAY` so the app attaches to the virtual X server instead of the real Wayland session.
 
 By default, each e2e run writes runner logs under `tmp/modudoc-e2e/run-*/logs/` and automatically keeps only the most recent 3 runs.
 
@@ -161,7 +156,7 @@ On Windows, e2e requires `tauri-driver` and `msedgedriver.exe` (Edge WebDriver).
 - Use `TAURI_DRIVER_PATH` if set; otherwise it will try to locate `tauri-driver` on PATH, and finally fall back to building the vendored driver in `tools/tauri-driver`.
 - Use `MSEDGEDRIVER_PATH` if set; otherwise it will try to locate `msedgedriver.exe` on PATH, and finally fall back to downloading a matching driver into `tmp/modudoc-e2e/drivers/`.
 
-If you want to pre-warm these dependencies (recommended for fresh Windows environments or offline-friendly setup), run `npm run e2e:setup`.
+If you want to pre-warm these dependencies (recommended for fresh Windows environments or offline-friendly setup), run `pnpm run e2e:setup`.
 
 The i18n locale persistence check is covered by `e2e-tests/test/specs/i18n.locale-persistence.ts`.
 

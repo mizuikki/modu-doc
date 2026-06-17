@@ -28,11 +28,11 @@ Run the five mandatory gates locally before opening a PR. The
 | Gate                                    | What it checks                                            | Typical runtime |
 |-----------------------------------------|-----------------------------------------------------------|-----------------|
 | `cargo test --manifest-path src-tauri/Cargo.toml` | Rust unit + integration tests              | tens of seconds |
-| `npm run check`                         | Biome formatting + lint                                  | a few seconds   |
-| `npm run typecheck`                     | `tsc --noEmit` across the frontend                       | a few seconds   |
-| `npm test`                              | Vitest suite                                             | a few seconds   |
-| `npm run build`                         | Typecheck + Vite production build                        | tens of seconds |
-| `npm run notice:check` (optional)       | Third-party notices are up to date                        | a few seconds   |
+| `pnpm run check`                        | Biome formatting + lint                                  | a few seconds   |
+| `pnpm run typecheck`                    | `tsc --noEmit` across the frontend                       | a few seconds   |
+| `pnpm test`                             | Vitest suite                                             | a few seconds   |
+| `pnpm run build`                        | Typecheck + Vite production build                        | tens of seconds |
+| `pnpm run notice:check` (optional)      | Third-party notices are up to date                        | a few seconds   |
 
 The five mandatory gates are exactly what CI runs in the `frontend`
 and `backend` jobs of `.github/workflows/ci.yml`. If they pass
@@ -111,11 +111,11 @@ The default mode builds the Tauri app in release mode
 (`tauri build --no-bundle`) and drives that binary. The run
 sequence is:
 
-1. `npm run e2e:setup` once, to install WebdriverIO and the
+1. `pnpm run e2e:setup` once, to install WebdriverIO and the
    tauri-driver prerequisites.
-2. `npm run e2e` to build the app, start tauri-driver, and run
+2. `pnpm run e2e` to build the app, start tauri-driver, and run
    every spec under `e2e-tests/test/specs/`.
-3. `npm run e2e:xvfb` on a headless Linux runner; it wraps the
+3. `pnpm run e2e:xvfb` on a headless Linux runner; it wraps the
    runner in `xvfb-run` so WebView2 / wry can render.
 
 Two environment variables switch modes:
@@ -123,7 +123,7 @@ Two environment variables switch modes:
 | Variable                | Effect                                                     |
 |-------------------------|------------------------------------------------------------|
 | `MODUDOC_E2E_MODE=dev`  | Run against the Vite dev server on `127.0.0.1:5173`; Tauri uses the debug profile. |
-| `MODUDOC_E2E_XVFB=1`    | Force the headless X server wrapper. Already implied by `npm run e2e:xvfb`. |
+| `MODUDOC_E2E_XVFB=1`    | Force the headless X server wrapper. Already implied by `pnpm run e2e:xvfb`. |
 
 On Windows, the runner uses a per-worker WebView2 attach
 strategy; the WebView2 user-data folder is made deterministic
@@ -156,7 +156,7 @@ Specs are grouped by topic and live alongside each other in
 
 ### Performance Diagnostics
 
-`npm run e2e:perf` runs a single spec, `perf.milkdown-diagnostics.ts`,
+`pnpm run e2e:perf` runs a single spec, `perf.milkdown-diagnostics.ts`,
 which samples editor / UI timings across a warmup phase and a
 fixed iteration count. JSON output lands under
 `tmp/modudoc-e2e/run-*/perf/`. The sampling sizes are controlled
@@ -178,7 +178,7 @@ by `MODUDOC_E2E_PERF_ITERATIONS` and `MODUDOC_E2E_PERF_WARMUP`.
   then `zh.json`; the parity test in `src/i18n/locales.test.ts`
   enforces this.
 - When you add or upgrade a dependency, run
-  `npm run notice:write` and verify `npm run notice:check` is
+  `pnpm run notice:write` and verify `pnpm run notice:check` is
   clean.
 
 ## CI
@@ -187,11 +187,11 @@ by `MODUDOC_E2E_PERF_ITERATIONS` and `MODUDOC_E2E_PERF_WARMUP`.
 
 | Job            | What it runs                                                    |
 |----------------|-----------------------------------------------------------------|
-| `frontend`     | `npm ci`, `npm run check`, `npm run typecheck`, `npm test`, `npm run build` |
-| `backend`      | `npm ci`, `npm run notice:check`, `cargo check`, `cargo test`   |
-| `e2e-linux`    | `npm run e2e` on `ubuntu-latest` under Xvfb                     |
-| `e2e-windows`  | `npm run e2e` on `windows-latest` (WebView2 attach)             |
-| `tauri-build`  | `npm run tauri:build` on push to `main` (smoke check for the desktop bundle) |
+| `frontend`     | `pnpm install --frozen-lockfile`, `pnpm run check`, `pnpm run typecheck`, `pnpm test`, `pnpm run build` |
+| `backend`      | `pnpm install --frozen-lockfile`, `pnpm run notice:check`, `cargo check`, `cargo test`   |
+| `e2e-linux`    | `pnpm run e2e` on `ubuntu-latest` under Xvfb                     |
+| `e2e-windows`  | `pnpm run e2e` on `windows-latest` (WebView2 attach)             |
+| `tauri-build`  | `pnpm run tauri:build` on push to `main` (smoke check for the desktop bundle) |
 
 E2E jobs install `tauri-driver` via
 `cargo install --path tools/tauri-driver --locked` and set
@@ -203,10 +203,10 @@ discovery on Windows is handled automatically via the
 
 | Symptom                                         | Likely cause / fix                                                                 |
 |-------------------------------------------------|------------------------------------------------------------------------------------|
-| `npm test` fails on a key that exists in one locale but not the other | i18n parity. Add the missing key to the other locale file. |
+| `pnpm test` fails on a key that exists in one locale but not the other | i18n parity. Add the missing key to the other locale file. |
 | `cargo test` cannot open a database             | Make sure the test uses `test_pool()` (in-memory) and not a file-backed path.      |
-| `npm run e2e` cannot find tauri-driver          | Run `cargo install --path tools/tauri-driver --locked` or set `TAURI_DRIVER_PATH`.  |
-| E2E specs time out on Linux runners             | Use `npm run e2e:xvfb`, or set `MODUDOC_E2E_XVFB=1` and re-run.                    |
+| `pnpm run e2e` cannot find tauri-driver         | Run `cargo install --path tools/tauri-driver --locked` or set `TAURI_DRIVER_PATH`.  |
+| E2E specs time out on Linux runners             | Use `pnpm run e2e:xvfb`, or set `MODUDOC_E2E_XVFB=1` and re-run.                    |
 | WebView2 specs leak `localStorage` between runs | Ensure `MODUDOC_E2E_RUN_DIR` is set so the user-data folder is deterministic.      |
-| `npm run notice:check` fails                    | Run `npm run notice:write` to regenerate `THIRD_PARTY_NOTICES.md` and `licenses/`. |
-| Biome reports formatting drift                  | Run `npm run check:fix` and commit the result.                                     |
+| `pnpm run notice:check` fails                   | Run `pnpm run notice:write` to regenerate `THIRD_PARTY_NOTICES.md` and `licenses/`. |
+| Biome reports formatting drift                  | Run `pnpm run check:fix` and commit the result.                                     |

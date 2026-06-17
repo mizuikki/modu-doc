@@ -11,24 +11,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run typecheck
+      - run: pnpm test
+      - run: pnpm run build
 
   backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux dependencies
         run: |
@@ -37,8 +39,8 @@ jobs:
             curl build-essential libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file \
             pkg-config libglib2.0-dev
-      - run: npm ci
-      - run: npm run notice:check
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run notice:check
       - run: cargo check --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
@@ -62,44 +64,22 @@ jobs:
             exit 1
           fi
 
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install frontend dependencies
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          # Avoid flaky/locked global cache paths on Windows runners.
-          $env:npm_config_cache = Join-Path $env:RUNNER_TEMP "npm-cache"
-          New-Item -ItemType Directory -Force -Path $env:npm_config_cache | Out-Null
-
-          $maxAttempts = 3
-          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            Write-Host "npm ci (attempt $attempt/$maxAttempts)"
-            npm ci --no-audit --no-fund
-            if ($LASTEXITCODE -eq 0) {
-              break
-            }
-
-            if ($attempt -eq $maxAttempts) {
-              throw "npm ci failed after $maxAttempts attempts (exit=$LASTEXITCODE)"
-            }
-
-            Write-Host "npm ci failed (exit=$LASTEXITCODE); cleaning cache and retrying."
-            npm cache clean --force
-            Start-Sleep -Seconds 3
-          }
+        run: pnpm install --frozen-lockfile
 
       - name: Install tauri-driver
         run: cargo install --path tools/tauri-driver --locked
 
       - name: Run e2e
-        run: npm run e2e
+        run: pnpm run e2e
         env:
           MODUDOC_E2E_WINDOWS_STRATEGY: attach
 
@@ -108,10 +88,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
 
       - name: Install Edge WebDriver
         run: |
@@ -126,13 +107,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Install tauri-driver
         run: cargo install --path tools/tauri-driver --locked
 
       - name: Run e2e
-        run: npm run e2e
+        run: pnpm run e2e
 
   tauri-build:
     if: github.event_name == 'push'
@@ -145,10 +126,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends --no-install-suggests \
             curl build-essential libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
-      - run: npm ci
-      - run: npm run tauri:build
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run tauri:build
