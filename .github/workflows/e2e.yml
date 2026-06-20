@@ -8,6 +8,8 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    env:
+      CARGO_NET_RETRY: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -37,8 +39,11 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch tauri-driver dependencies
+        run: cargo fetch --manifest-path tools/tauri-driver/Cargo.toml --locked
+
       - name: Install tauri-driver
-        run: cargo install --path tools/tauri-driver --locked
+        run: cargo install --path tools/tauri-driver --locked --offline
 
       - name: Run e2e
         run: pnpm run e2e
